@@ -14,6 +14,8 @@ import argparse
 import glob
 import json
 import os
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -21,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import llm
+import apply as apply_mod
+import audit
 import evolve
 import evolve_structure
 
@@ -48,10 +52,15 @@ def list_docs(wiki_dir):
 
 
 def _run_job(job):
-    """워커 스레드: 백엔드 설정 후 evolve/evolve_structure 실행."""
+    """워커 스레드: 백엔드 설정 후 모드별 작업 실행."""
     with RUN_LOCK:
         job["status"] = "running"
         llm.BACKEND = job["backend"]
+
+        def flush_result(payload):
+            with open(os.path.join(job["dir"], "result.json"), "w") as f:
+                json.dump(payload, f, ensure_ascii=False)
+
         try:
             if job["mode"] == "summary":
                 for path in job["files"]:
@@ -60,11 +69,30 @@ def _run_job(job):
                         path, generations=job["generations"], n_qa=job["n_qa"],
                         out_dir=job["dir"],
                     )
-            else:
+            elif job["mode"] == "structure":
                 evolve_structure.evolve_structure(
                     generations=job["generations"], n_qa=job["n_qa"],
                     out_dir=job["dir"], files=job["files"],
                 )
+            elif job["mode"] == "audit":
+                def cb(done, total, docs):
+                    flush_result({"type": "audit", "done": done, "total": total,
+                                  "docs": docs})
+                res = audit.audit(job["base_dir"], n_qa=job["n_qa"], progress_cb=cb)
+                res["type"] = "audit"
+                res["done"] = res["total"] = res["n_docs"]
+                flush_result(res)
+            elif job["mode"] == "apply":
+                def cb(done, total, docs):
+                    flush_result({"type": "apply", "done": done, "total": total,
+                                  "docs": docs})
+                res = apply_mod.run_apply(
+                    job["base_dir"], strategy=job.get("strategy") or None,
+                    n_qa=job["n_qa"], progress_cb=cb,
+                )
+                res["type"] = "apply"
+                res["done"] = res["total"] = len(res["docs"])
+                flush_result(res)
             job["status"] = "done"
         except Exception as e:
             job["status"] = "error"
@@ -74,16 +102,25 @@ def _run_job(job):
 
 
 def start_job(params):
-    files = params.get("files") or []
-    files = [f for f in files if os.path.isfile(f) and f.endswith(".md")]
-    if not files:
-        return None, "선택된 md 파일이 없습니다"
     mode = params.get("mode", "summary")
-    if mode not in ("summary", "structure"):
+    if mode not in ("summary", "structure", "audit", "apply"):
         return None, f"알 수 없는 mode: {mode}"
     backend = params.get("backend", "claude")
     if backend not in ("claude", "codex"):
         return None, f"알 수 없는 backend: {backend}"
+
+    files, base_dir, doc_names = [], None, []
+    if mode in ("summary", "structure"):
+        files = params.get("files") or []
+        files = [f for f in files if os.path.isfile(f) and f.endswith(".md")]
+        if not files:
+            return None, "선택된 md 파일이 없습니다"
+        doc_names = [os.path.splitext(os.path.basename(f))[0] for f in files]
+    else:
+        base_dir = os.path.expanduser(params.get("dir") or "")
+        if not os.path.isdir(base_dir):
+            return None, f"폴더가 없습니다: {base_dir}"
+        doc_names = [os.path.basename(base_dir.rstrip("/"))]
 
     job_id = uuid.uuid4().hex[:8]
     job = {
@@ -91,7 +128,9 @@ def start_job(params):
         "mode": mode,
         "backend": backend,
         "files": files,
-        "doc_names": [os.path.splitext(os.path.basename(f))[0] for f in files],
+        "base_dir": base_dir,
+        "strategy": (params.get("strategy") or "").strip(),
+        "doc_names": doc_names,
         "generations": max(1, min(10, int(params.get("generations", 3)))),
         "n_qa": max(2, min(12, int(params.get("n_qa", 6)))),
         "dir": os.path.join(JOBS_DIR, job_id),
@@ -125,7 +164,32 @@ def job_detail(job):
         runs.append(entry)
     out = {k: v for k, v in job.items() if k != "dir"}
     out["runs"] = runs
+    # audit/apply 결과 (진행 중엔 부분 결과)
+    rp = os.path.join(job["dir"], "result.json")
+    if os.path.exists(rp):
+        try:
+            with open(rp) as f:
+                out["result"] = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            pass
     return out
+
+
+def pick_dir():
+    """macOS 네이티브 폴더 선택창을 띄워 선택된 경로를 반환한다."""
+    if sys.platform != "darwin":
+        return None, "폴더 선택창은 macOS에서만 지원됩니다. 경로를 직접 입력하세요."
+    script = 'POSIX path of (choose folder with prompt "wiki 폴더를 선택하세요")'
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        return None, "선택창 응답 시간 초과"
+    if proc.returncode != 0:  # 사용자가 취소
+        return None, None
+    return proc.stdout.strip(), None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -163,6 +227,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"폴더가 없습니다: {wiki_dir}"}, 404)
             else:
                 self._json({"docs": docs})
+            return
+        if url.path == "/api/pick-dir":
+            path, err = pick_dir()
+            if err:
+                self._json({"error": err}, 400)
+            elif path is None:
+                self._json({"cancelled": True})
+            else:
+                self._json({"dir": path})
             return
         if url.path == "/api/runs":
             with JOBS_LOCK:
