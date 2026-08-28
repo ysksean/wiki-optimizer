@@ -49,23 +49,20 @@ Two experimental safeguards on top:
 - Loop: organize documents into files → a router picks which files to read per
   question → score accuracy + chars read → reflect → improve the structure
 
-## Quick start
+## Run
 
 ```bash
-# Web dashboard: point it at a wiki folder, run experiments, watch results evolve
 python3 src/web.py            # → http://localhost:8765
+```
 
-# Stage A: evolve a summary strategy for one document
-python3 src/evolve.py data/raw/karpathy-llm-wiki-pattern.md --generations 3
+Everything happens in the dashboard: point it at a wiki folder, pick documents,
+choose Stage A or B and the backend (claude / codex), run, and watch scores,
+strategies, and structures evolve per generation.
 
-# Stage A batch with control arm + aggregation (CSV / summary report)
+The only CLI-exclusive feature is the statistical batch with a control arm:
+
+```bash
 python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
-
-# Stage B: evolve a folder structure over multiple documents
-python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4
-
-# Use the Codex CLI instead of Claude
-LLM_BACKEND=codex python3 src/evolve.py ...
 ```
 
 ## Requirements
