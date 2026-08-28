@@ -84,8 +84,8 @@
           <option value="summary">A — 요약 전략 진화 (문서별)</option>
           <option value="structure">B — 폴더 구조 진화 (선택 문서 전체)</option>
         </select></div>
-      <div><label>세대 수</label><input type="number" id="gens" value="3" min="1" max="10" style="width:70px"></div>
-      <div><label>질문 수</label><input type="number" id="nqa" value="6" min="2" max="12" style="width:70px"></div>
+      <div><label title="요약 → 채점 → 전략 개선을 반복하는 횟수. 많을수록 좋은 전략을 찾을 기회가 늘지만 세대당 1~2분씩 더 걸림" style="cursor:help;text-decoration:underline dotted">세대 수 ⓘ</label><input type="number" id="gens" value="3" min="1" max="10" style="width:70px"></div>
+      <div><label title="채점용 시험 문제 개수. 원본에서 '실제로 물어볼 법한 질문+정답'을 이만큼 뽑아 고정하고, 요약이 몇 개를 맞히는지로 점수를 냄" style="cursor:help;text-decoration:underline dotted">질문 수 ⓘ</label><input type="number" id="nqa" value="6" min="2" max="12" style="width:70px"></div>
       <div><label>백엔드</label>
         <select id="backend">
           <option value="claude">claude (Claude Code 구독)</option>
