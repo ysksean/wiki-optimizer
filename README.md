@@ -1,94 +1,97 @@
 # wiki-optimizer
 
-**self-evolving 지식베이스 최적화** 실험 도구.
+Self-evolving optimizer for markdown knowledge bases. It automatically discovers
+**how to summarize documents and how to organize them into folders** so that the
+wiki actually answers questions well — instead of a human hand-tuning prompts and
+structure, the system runs a generate → evaluate → reflect → improve loop.
 
-LLM 호출은 API 키가 아니라 **각자 로그인해둔 CLI 구독 세션**으로 돈다:
-`LLM_BACKEND=claude|codex|ollama` (기본 claude).
+No API keys. All LLM calls go through the CLI you are already logged into:
 
-- `claude` — Claude Code CLI (`claude -p`), Claude 구독 로그인
-- `codex` — Codex CLI (`codex exec`), ChatGPT 구독 로그인
-- `ollama` — 로컬 Qwen (`qwen38-local`), 오프라인/무과금용
+| Backend | CLI | Auth |
+|---|---|---|
+| `claude` (default) | `claude -p` | Claude Code subscription |
+| `codex` | `codex exec` | ChatGPT subscription |
 
-`llm_wiki` 패턴(raw 원본 → wiki 요약/구조)에서 "요약과 폴더 구조를 어떻게 하는 게
-효과적인가"를 자동으로 최적화한다. 사람이 프롬프트/구조를 손보는 대신, 시스템이 스스로
-**생성 → 검증 → 반성 → 개선** 루프를 돌며 진화시킨다.
+## Core principle — query-based evaluation
 
-## 핵심 원칙 — Query 기반 평가
+A summary or folder structure is never judged on its own. The real job of a wiki
+is *"ask a question, read the relevant part, get the answer"* — so that is exactly
+how quality is measured:
 
-요약/구조의 좋고 나쁨을 그 자체로 판단하지 않는다. llm_wiki의 실제 용도는
-**"질문하면 관련 내용을 읽어 답한다"**(Query)이므로, 그 실제 용도로 평가한다:
+> Ask questions against the summary/structure. Do correct answers come out?
 
-> **"이 요약/구조에 질문을 던졌을 때 제대로 답이 나오는가?"**
+- **Ground truth always comes from the raw source** — never from another summary
+  (avoids circular grading).
+- **Two axes at once** — accuracy (does it answer correctly?) × efficiency
+  (how little do you have to read?).
+- **Multiplicative scoring resists gaming** — dump-everything (high accuracy, low
+  efficiency) and over-compression (high efficiency, low accuracy) both score low.
 
-- **정답의 근거는 항상 원본(raw)** — 남의 요약본을 정답 삼지 않는다 (순환논리 회피).
-- **두 축을 동시에** — 정확도(질문에 맞게 답하나) × 효율(적게 읽고 답하나).
-- **곱셈 결합**으로 gaming 억제 — "다 때려넣기"(정확↑효율↓)도 "극단 압축"(효율↑정확↓)도
-  종합점수가 낮아진다.
+Two experimental safeguards on top:
 
-여기에 실험 설계 방어선 두 개를 더한다:
+- **Train / held-out question split** — the reflector only sees misses on train
+  questions; best-selection and reporting use held-out scores only. This separates
+  genuine improvement from memorizing a fixed question set.
+- **No-evolution control arm** — `batch.py --with-control` runs a
+  seed-strategy-resampling arm alongside. Since "best of N noisy runs" is biased
+  upward even with zero real improvement, the true effect is
+  `evolve gain − control gain`. Both arms share the same question set per document.
 
-- **train / held-out 질문 분리** — Reflector는 train 질문의 오답만 보고 전략을
-  고치고, best 판정·보고는 held-out 점수로만 한다. 고정 질문 세트에 대한
-  암기(과적합)와 일반화된 개선을 구분하기 위함.
-- **무진화 대조군(control arm)** — best는 노이즈 N개의 최댓값이라 진화가 없어도
-  best-gen0이 양수로 치우친다. `batch.py --with-control`이 seed 전략 재샘플링
-  arm을 함께 돌려, 진화의 진짜 효과 = evolve 향상폭 - control 향상폭으로 본다.
+## Two stages
 
-## 두 단계
+**Stage A — summary strategy** (`evolve.py`, `scoring.py`)
+- Evolution knob: the summarization prompt
+- Loop: summarize → answer the question set from the summary alone → score
+  accuracy + efficiency → reflect → improve the strategy
 
-**A단계 — 요약 전략 최적화** (`evolve.py`, `scoring.py`)
-- 진화 손잡이 = 요약 프롬프트
-- 문서 하나를 요약 → 요약만으로 질문 세트를 풀어 정확도 + 효율 채점 → 전략 진화
+**Stage B — folder structure** (`evolve_structure.py`, `structure.py`)
+- Evolution knob: the splitting strategy (how many files, along which axis)
+- Loop: organize documents into files → a router picks which files to read per
+  question → score accuracy + chars read → reflect → improve the structure
 
-**B단계 — 폴더 구조 최적화** (`evolve_structure.py`, `structure.py`)
-- 진화 손잡이 = 분할 전략(몇 개 파일로, 어떤 축으로)
-- 여러 문서를 구조화 → 질문마다 읽을 파일 선택(Router) → 정확도 + 효율(읽은 글자수) 채점 → 구조 진화
+## Quick start
 
-## 구조
+```bash
+# Web dashboard: point it at a wiki folder, run experiments, watch results evolve
+python3 src/web.py            # → http://localhost:8765
+
+# Stage A: evolve a summary strategy for one document
+python3 src/evolve.py data/raw/karpathy-llm-wiki-pattern.md --generations 3
+
+# Stage A batch with control arm + aggregation (CSV / summary report)
+python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
+
+# Stage B: evolve a folder structure over multiple documents
+python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4
+
+# Use the Codex CLI instead of Claude
+LLM_BACKEND=codex python3 src/evolve.py ...
+```
+
+## Requirements
+
+- Python 3 — standard library only, nothing to install
+- One logged-in CLI:
+  - `claude` (default): Claude Code CLI. Override the model with `CLAUDE_MODEL`
+    (defaults to Haiku 4.5)
+  - `codex`: Codex CLI. Override the model with `CODEX_MODEL`
+    (defaults to your codex config)
+
+## Layout
 
 ```
 src/
-  llm.py               LLM 클라이언트 (claude/codex CLI 구독 세션, Ollama 폴백, stdlib만)
-  scoring.py           A단계: query 기반 요약 채점 (정확도 x 효율)
-  evolve.py            A단계: self-evolving 요약 루프
-  structure.py         B단계: Organizer + Router + 구조 채점
-  evolve_structure.py  B단계: self-evolving 구조 루프
-  batch.py             여러 문서 x 여러 run 배치 실행 + 집계(CSV/리포트)
-data/raw/              샘플 raw 문서 (실제 llm_wiki에서 복사, 원본은 안 건드림)
-data/questions/        (선택) 수동 질문 세트 <docname>.json
-runs/                  세대별/배치 실행 결과 (git 제외)
+  llm.py               LLM client (claude / codex CLI sessions, stdlib only)
+  scoring.py           Stage A: query-based summary scoring (accuracy x efficiency)
+  evolve.py            Stage A: self-evolving summary loop
+  structure.py         Stage B: organizer + router + structure scoring
+  evolve_structure.py  Stage B: self-evolving structure loop
+  batch.py             batch runner (evolve vs control arms) + aggregation
+  web.py               local web dashboard (run experiments, inspect results)
+data/raw/              sample raw documents (copied from a real wiki; originals untouched)
+data/questions/        optional manual question sets: <docname>.json
+runs/                  per-generation / batch outputs (gitignored)
 ```
 
-## 실행
-
-```bash
-# A단계: 단일 문서 요약 진화 (--control이면 무진화 대조군)
-python3 src/evolve.py data/raw/karpathy-llm-wiki-pattern.md --generations 3
-
-# A단계 배치 + 집계 (evolve vs control 두 arm)
-python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
-
-# B단계: 폴더 구조 진화
-python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4
-
-# 웹 대시보드: 폴더 지정해 실험 실행 + 세대별 변화 확인 (localhost:8765)
-python3 src/web.py
-
-# 백엔드 바꿔 돌리기
-LLM_BACKEND=codex  python3 src/evolve.py ...   # Codex CLI (ChatGPT 구독)
-LLM_BACKEND=ollama python3 src/evolve.py ...   # 로컬 Qwen
-```
-
-## 요구사항
-
-- Python 3 (표준 라이브러리만 사용, 추가 설치 없음)
-- 백엔드 중 하나:
-  - `claude` (기본): Claude Code CLI 로그인 상태. 모델은 `CLAUDE_MODEL`로 변경 (기본 Haiku 4.5)
-  - `codex`: Codex CLI 로그인 상태. 모델은 `CODEX_MODEL`로 변경 (기본은 codex 설정값)
-  - `ollama`: `qwen38-local` 모델 (localhost:11434)
-
-## 참고
-
-같은 문제 공간의 오픈소스: llm_wiki 생성 도구(Karpathy 패턴 구현체들, WeKnora 등)와
-RAG 자가개선 도구(Self-Improving-Agentic-RAG 등)는 많으나, "마크다운 wiki의 구조·요약을
-query 성능으로 self-evolving 최적화"하는 조합은 이 둘 사이의 빈틈을 노린다.
+The dashboard binds to localhost and has no auth — it is a personal, local tool.
+Source documents are never modified; all outputs go to `runs/`.
