@@ -87,7 +87,9 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs"):
         return
 
     strategy = SEED_STRATEGY
-    best = {"total": -1.0, "generation": -1, "strategy": None, "struct": None}
+    # reflect에 넘길 채점 결과는 반드시 best 전략과 짝이어야 한다 → 함께 저장
+    best = {"total": -1.0, "generation": -1, "strategy": None, "struct": None,
+            "result": None}
     history = []
 
     for g in range(generations):
@@ -114,11 +116,11 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs"):
         })
 
         if improved:
-            best = {"total": result["total"], "generation": g, "strategy": strategy, "struct": struct}
+            best = {"total": result["total"], "generation": g, "strategy": strategy,
+                    "struct": struct, "result": result}
 
         if g < generations - 1:
-            base = strategy if improved else best["strategy"]
-            strategy = reflect(base, result)
+            strategy = reflect(best["strategy"], best["result"])
 
     print(f"\n[done] best gen={best['generation']} total={best['total']}")
     print(f"[done] best 구조 파일: {[f['title'] for f in best['struct']['files']]}")

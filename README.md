@@ -1,6 +1,13 @@
 # wiki-optimizer
 
-로컬 Qwen(Ollama)으로 도는 **self-evolving 지식베이스 최적화** 실험 도구.
+**self-evolving 지식베이스 최적화** 실험 도구.
+
+LLM 호출은 API 키가 아니라 **각자 로그인해둔 CLI 구독 세션**으로 돈다:
+`LLM_BACKEND=claude|codex|ollama` (기본 claude).
+
+- `claude` — Claude Code CLI (`claude -p`), Claude 구독 로그인
+- `codex` — Codex CLI (`codex exec`), ChatGPT 구독 로그인
+- `ollama` — 로컬 Qwen (`qwen38-local`), 오프라인/무과금용
 
 `llm_wiki` 패턴(raw 원본 → wiki 요약/구조)에서 "요약과 폴더 구조를 어떻게 하는 게
 효과적인가"를 자동으로 최적화한다. 사람이 프롬프트/구조를 손보는 대신, 시스템이 스스로
@@ -18,6 +25,15 @@
 - **곱셈 결합**으로 gaming 억제 — "다 때려넣기"(정확↑효율↓)도 "극단 압축"(효율↑정확↓)도
   종합점수가 낮아진다.
 
+여기에 실험 설계 방어선 두 개를 더한다:
+
+- **train / held-out 질문 분리** — Reflector는 train 질문의 오답만 보고 전략을
+  고치고, best 판정·보고는 held-out 점수로만 한다. 고정 질문 세트에 대한
+  암기(과적합)와 일반화된 개선을 구분하기 위함.
+- **무진화 대조군(control arm)** — best는 노이즈 N개의 최댓값이라 진화가 없어도
+  best-gen0이 양수로 치우친다. `batch.py --with-control`이 seed 전략 재샘플링
+  arm을 함께 돌려, 진화의 진짜 효과 = evolve 향상폭 - control 향상폭으로 본다.
+
 ## 두 단계
 
 **A단계 — 요약 전략 최적화** (`evolve.py`, `scoring.py`)
@@ -32,7 +48,7 @@
 
 ```
 src/
-  llm.py               로컬 Qwen 클라이언트 (Ollama HTTP API, thinking off, stdlib만)
+  llm.py               LLM 클라이언트 (claude/codex CLI 구독 세션, Ollama 폴백, stdlib만)
   scoring.py           A단계: query 기반 요약 채점 (정확도 x 효율)
   evolve.py            A단계: self-evolving 요약 루프
   structure.py         B단계: Organizer + Router + 구조 채점
@@ -46,20 +62,27 @@ runs/                  세대별/배치 실행 결과 (git 제외)
 ## 실행
 
 ```bash
-# A단계: 단일 문서 요약 진화
+# A단계: 단일 문서 요약 진화 (--control이면 무진화 대조군)
 python3 src/evolve.py data/raw/karpathy-llm-wiki-pattern.md --generations 3
 
-# A단계 배치 + 집계
-python3 src/batch.py --docs 5 --runs 2 --generations 3
+# A단계 배치 + 집계 (evolve vs control 두 arm)
+python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
 
 # B단계: 폴더 구조 진화
 python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4
+
+# 백엔드 바꿔 돌리기
+LLM_BACKEND=codex  python3 src/evolve.py ...   # Codex CLI (ChatGPT 구독)
+LLM_BACKEND=ollama python3 src/evolve.py ...   # 로컬 Qwen
 ```
 
 ## 요구사항
 
-- Ollama + `qwen38-local` 모델 (localhost:11434)
 - Python 3 (표준 라이브러리만 사용, 추가 설치 없음)
+- 백엔드 중 하나:
+  - `claude` (기본): Claude Code CLI 로그인 상태. 모델은 `CLAUDE_MODEL`로 변경 (기본 Haiku 4.5)
+  - `codex`: Codex CLI 로그인 상태. 모델은 `CODEX_MODEL`로 변경 (기본은 codex 설정값)
+  - `ollama`: `qwen38-local` 모델 (localhost:11434)
 
 ## 참고
 
