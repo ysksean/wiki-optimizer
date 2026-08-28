@@ -91,6 +91,12 @@
           <option value="claude">claude (Claude Code 구독)</option>
           <option value="codex">codex (ChatGPT 구독)</option>
         </select></div>
+      <div><label title="요약·질문·답변 등 LLM 출력 언어">Language</label>
+        <select id="lang">
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+        </select></div>
       <button id="go" onclick="startRun()">실험 실행</button>
       <span id="msg" class="err"></span>
     </div>
@@ -154,14 +160,15 @@ async function startJobRequest(body, msgEl) {
 function startAudit() {
   const dir = $("dir").value.trim();
   if (!dir) { $("msg2").textContent = "위에서 폴더를 먼저 지정하세요"; return; }
-  startJobRequest({ mode:"audit", dir, n_qa:6, backend:$("backend").value }, "msg2");
+  startJobRequest({ mode:"audit", dir, n_qa:6, backend:$("backend").value,
+    language:$("lang").value }, "msg2");
 }
 
 function startApply() {
   const dir = $("dir").value.trim();
   if (!dir) { $("msg2").textContent = "위에서 폴더를 먼저 지정하세요"; return; }
   startJobRequest({ mode:"apply", dir, n_qa:6, backend:$("backend").value,
-    strategy: $("strategy").value.trim() }, "msg2");
+    language:$("lang").value, strategy: $("strategy").value.trim() }, "msg2");
 }
 
 // 단어 단위 unified diff (LCS). 너무 길면 하이라이트 생략.
@@ -243,7 +250,7 @@ async function startRun() {
     headers: {"Content-Type":"application/json"},
     body: JSON.stringify({ files, mode: $("mode").value,
       generations: +$("gens").value, n_qa: +$("nqa").value,
-      backend: $("backend").value }) });
+      backend: $("backend").value, language: $("lang").value }) });
   const j = await r.json();
   $("go").disabled = false;
   if (j.error) { $("msg").textContent = j.error; return; }
