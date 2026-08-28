@@ -1,16 +1,18 @@
-"""self-evolving 요약 최적화 루프.
+"""self-evolving 요약 최적화 루프 (Query 기반).
 
-진화 대상은 '요약 전략(프롬프트)'이다. 사람이 프롬프트를 튜닝하는 대신,
-시스템이 스스로 세대를 거치며 전략을 개선한다:
+진화 대상(손잡이) = 요약 전략(프롬프트).
+채점 = Query 응답 정확도 x 컨텍스트 효율 (scoring.py).
 
   세대 g:
     1. 현재 전략으로 요약 생성 (Summarizer)
-    2. Verifier로 채점 (요약만으로 Q&A 재구성 정확도 + 압축 효율)
-    3. 지금까지 최고 점수면 best 갱신
-    4. Reflector: 채점 세부(틀린 Q&A, 길이 비율)를 보고 전략을 수정
+    2. 질문 세트로 채점 (요약만 보고 답 -> 원본근거 정답과 대조) + 효율
+    3. 최고 점수면 best 갱신
+    4. Reflector: 틀린 질문 + 효율을 근거로 요약 전략을 개선
     5. 개선된 전략으로 다음 세대
 
-Q&A 벤치마크는 문서당 한 번 생성해 전 세대에서 고정 사용(공정 비교).
+질문 세트는 문서당 한 번 만들어 고정(공정 비교).
+- 수동: data/questions/<docname>.json 이 있으면 그걸 사용 [{"q","a"}, ...]
+- 자동: 없으면 원본에서 자동 생성 (raw 근거)
 
 사용법:
   python3 src/evolve.py data/raw/karpathy-llm-wiki-pattern.md --generations 4
@@ -23,7 +25,7 @@ import time
 from datetime import datetime
 
 import llm
-import verifier
+import scoring
 
 
 SEED_STRATEGY = (
@@ -31,54 +33,64 @@ SEED_STRATEGY = (
 )
 
 
+def load_question_set(raw_path, raw_text, n_qa):
+    """수동 질문 파일이 있으면 로드, 없으면 자동 생성."""
+    doc = os.path.splitext(os.path.basename(raw_path))[0]
+    manual = os.path.join("data", "questions", f"{doc}.json")
+    if os.path.exists(manual):
+        with open(manual) as f:
+            qs = json.load(f)
+        qs = [x for x in qs if "q" in x and "a" in x]
+        if qs:
+            print(f"[setup] 수동 질문 세트 사용: {manual} ({len(qs)}개)")
+            return qs
+    print("[setup] 자동 질문 세트 생성 중...")
+    return scoring.build_question_set(raw_text, n=n_qa)
+
+
 def summarize(raw_text, strategy):
-    """현재 전략(프롬프트)으로 요약을 생성한다."""
     prompt = f"{strategy}\n\n문서:\n{raw_text}\n\n요약:"
     return llm.generate(prompt, num_predict=400, temperature=0.3)
 
 
-def reflect(strategy, score_result):
-    """채점 결과를 보고 요약 전략을 개선한다 (Reflector).
-
-    틀린 Q&A와 길이 비율을 근거로 '무엇을 고칠지'를 LLM이 스스로 판단해
-    새 전략 프롬프트를 만든다.
-    """
-    missed = [d["q"] for d in score_result["qa_details"] if d["score"] < 1]
+def reflect(strategy, result):
+    """채점 결과(틀린 질문 + 효율)를 근거로 요약 전략을 개선."""
+    missed = [d["q"] for d in result["qa_details"] if d["score"] < 1]
     missed_str = "\n".join(f"- {q}" for q in missed) if missed else "(없음)"
-    ratio = score_result["length_ratio"]
+    ratio = result["length_ratio"]
 
-    length_hint = ""
-    if ratio > 0.35:
-        length_hint = "요약이 너무 길다. 더 압축해라."
-    elif ratio < 0.15:
-        length_hint = "요약이 너무 짧아 정보가 누락됐다. 핵심을 더 담아라."
+    hint = ""
+    if result["accuracy"] < 1.0:
+        hint += "요약이 일부 질문에 답할 정보를 누락했다. 그 정보를 담아라. "
+    if ratio > 0.5:
+        hint += "요약이 너무 길어 효율이 낮다. 더 압축하라. "
 
     prompt = (
         "너는 요약 '전략 프롬프트'를 개선하는 최적화기다.\n"
-        "아래는 현재 전략과 그 성적이다. 요약만 보고도 다음 질문들에 답할 수 있도록 "
-        "전략을 개선하라. 개선된 '전략 프롬프트' 한 문단만 출력하라(설명 금지).\n\n"
+        "목표: 요약만 보고도 아래 질문들에 답할 수 있으면서(정확도), "
+        "동시에 최대한 짧게(효율). 둘 다 만족하도록 전략을 개선하라.\n"
+        "개선된 '전략 프롬프트' 한 문단만 출력(설명 금지).\n\n"
         f"[현재 전략]\n{strategy}\n\n"
         f"[요약만으로 답 못한 질문들]\n{missed_str}\n\n"
-        f"[길이 비율] {ratio} (목표 0.15~0.35). {length_hint}\n\n"
+        f"[길이 비율] {ratio} (작을수록 효율↑). {hint}\n\n"
         "[개선된 전략 프롬프트]:"
     )
     new_strategy = llm.generate(prompt, num_predict=300, temperature=0.5)
     return new_strategy.strip() or strategy
 
 
-def evolve(raw_path, generations=4, n_qa=4, out_dir="runs"):
+def evolve(raw_path, generations=4, n_qa=6, out_dir="runs"):
     raw_text = open(raw_path).read()
-    doc_name = os.path.splitext(os.path.basename(raw_path))[0]
+    doc = os.path.splitext(os.path.basename(raw_path))[0]
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_dir = os.path.join(out_dir, f"{doc_name}-{stamp}")
+    run_dir = os.path.join(out_dir, f"{doc}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
-    print(f"[setup] 문서: {doc_name} ({len(raw_text)} chars)")
-    print(f"[setup] Q&A 벤치마크 생성 중...")
-    qa_set = verifier.build_qa_set(raw_text, n=n_qa)
-    print(f"[setup] Q&A {len(qa_set)}개 고정 완료\n")
-    if not qa_set:
-        print("[error] Q&A 추출 실패. 중단.")
+    print(f"[setup] 문서: {doc} ({len(raw_text)} chars)")
+    question_set = load_question_set(raw_path, raw_text, n_qa)
+    print(f"[setup] 질문 {len(question_set)}개 고정\n")
+    if not question_set:
+        print("[error] 질문 세트 확보 실패. 중단.")
         return
 
     strategy = SEED_STRATEGY
@@ -88,14 +100,14 @@ def evolve(raw_path, generations=4, n_qa=4, out_dir="runs"):
     for g in range(generations):
         t = time.time()
         summary = summarize(raw_text, strategy)
-        result = verifier.score_summary(raw_text, summary, qa_set)
+        result = scoring.score(raw_text, summary, question_set)
         dt = time.time() - t
 
         improved = result["total"] > best["total"]
         marker = "  <- best" if improved else ""
         print(
             f"[gen {g}] total={result['total']} "
-            f"faith={result['faithfulness']} comp={result['compression']} "
+            f"acc={result['accuracy']} eff={result['efficiency']} "
             f"ratio={result['length_ratio']}  ({dt:.0f}s){marker}"
         )
 
@@ -117,39 +129,35 @@ def evolve(raw_path, generations=4, n_qa=4, out_dir="runs"):
                 "summary": summary,
             }
 
-        # 마지막 세대가 아니면 반성해서 전략 개선.
-        # 퇴화 방지: 개선 실패 시 지금까지 최고 전략에서 다시 반성.
         if g < generations - 1:
-            base_strategy = strategy if improved else best["strategy"]
-            base_result = result
-            strategy = reflect(base_strategy, base_result)
+            base = strategy if improved else best["strategy"]
+            strategy = reflect(base, result)
 
     print(f"\n[done] best gen={best['generation']} total={best['total']}")
-    print(f"[done] best summary:\n{best['summary']}\n")
+    print(f"[done] best summary ({len(best['summary'] or '')} chars):\n{best['summary']}\n")
 
-    summary_report = {
-        "doc": doc_name,
+    report = {
+        "doc": doc,
         "generations": generations,
-        "qa_set": qa_set,
+        "question_set": question_set,
         "best": best,
         "history": history,
     }
     with open(os.path.join(run_dir, "report.json"), "w") as f:
-        json.dump(summary_report, f, ensure_ascii=False, indent=2)
+        json.dump(report, f, ensure_ascii=False, indent=2)
     with open(os.path.join(run_dir, "best_summary.md"), "w") as f:
         f.write(best["summary"] or "")
-    print(f"[done] 결과 저장: {run_dir}/")
 
-    # 점수 추이 한 줄 요약
     trail = " -> ".join(str(h["score"]["total"]) for h in history)
     print(f"[done] 점수 추이: {trail}")
-    return summary_report
+    print(f"[done] 결과 저장: {run_dir}/")
+    return report
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("raw_path", help="요약할 raw 문서 경로")
+    ap.add_argument("raw_path")
     ap.add_argument("--generations", type=int, default=4)
-    ap.add_argument("--n-qa", type=int, default=4)
+    ap.add_argument("--n-qa", type=int, default=6)
     args = ap.parse_args()
     evolve(args.raw_path, generations=args.generations, n_qa=args.n_qa)
