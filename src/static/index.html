@@ -57,6 +57,12 @@
             vertical-align:middle; }
   .lenbar i { display:block; height:100%; background:var(--warn); }
   svg text { fill:var(--dim); font-size:10px; }
+  .diff { white-space:pre-wrap; background:#0d0f13; border:1px solid var(--line);
+          border-radius:6px; padding:10px; font-size:12px; max-height:340px; overflow:auto; }
+  .diff del { background:#3a1a1a; color:#f0a0a0; text-decoration:line-through; }
+  .diff ins { background:#15301f; color:#8ee0b0; text-decoration:none; }
+  .arrow { color:var(--dim); margin:0 6px; }
+  .up { color:var(--ok); } .down { color:var(--bad); }
 </style>
 </head>
 <body>
@@ -68,6 +74,7 @@
     <label>wiki 폴더 경로 (.md 모음 — raw/ 하위 폴더가 있으면 그쪽을 읽음)</label>
     <div style="display:flex; gap:8px">
       <input type="text" id="dir" placeholder="~/dev/llm_wiki  또는  data/raw">
+      <button class="ghost" onclick="pickDir()">📁 폴더 선택</button>
       <button class="ghost" onclick="loadDocs()">문서 불러오기</button>
     </div>
     <div id="docs" class="docs"></div>
@@ -89,6 +96,21 @@
     </div>
   </div>
 
+  <div class="card">
+    <b>내 위키 진단 · 최적화</b>
+    <div class="sub" style="margin:4px 0 0">위 폴더(raw/ + wiki/)를 기준으로 현재 요약을 채점(Before)하고,
+      best 전략으로 다시 요약해(After) 무엇이 바뀌는지 비교합니다. 원본과 기존 wiki는 수정하지 않습니다.</div>
+    <div class="row">
+      <button onclick="startAudit()">현재 위키 진단 (Before)</button>
+      <button onclick="startApply()">최적화 생성 (After)</button>
+      <span id="msg2" class="err"></span>
+    </div>
+    <details><summary>전략 직접 지정 (비우면 실험 결과의 best 전략 사용)</summary>
+      <textarea id="strategy" rows="3" style="width:100%;margin-top:6px;background:#0d0f13;
+        color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:8px"></textarea>
+    </details>
+  </div>
+
   <div id="jobs"></div>
 </div>
 
@@ -107,6 +129,109 @@ async function loadDocs() {
   $("docs").innerHTML = j.docs.map(d => `
     <label><input type="checkbox" value="${d.path}">${d.name}
       <span class="sz">${(d.size/1000).toFixed(1)}k</span></label>`).join("");
+}
+
+async function pickDir() {
+  $("msg").textContent = "";
+  const r = await fetch("/api/pick-dir");
+  const j = await r.json();
+  if (j.error) { $("msg").textContent = j.error; return; }
+  if (j.cancelled) return;
+  $("dir").value = j.dir;
+  loadDocs();
+}
+
+async function startJobRequest(body, msgEl) {
+  $(msgEl).textContent = "";
+  const r = await fetch("/api/runs", { method:"POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (j.error) { $(msgEl).textContent = j.error; return; }
+  open_.add(j.id);
+  poll();
+}
+
+function startAudit() {
+  const dir = $("dir").value.trim();
+  if (!dir) { $("msg2").textContent = "위에서 폴더를 먼저 지정하세요"; return; }
+  startJobRequest({ mode:"audit", dir, n_qa:6, backend:$("backend").value }, "msg2");
+}
+
+function startApply() {
+  const dir = $("dir").value.trim();
+  if (!dir) { $("msg2").textContent = "위에서 폴더를 먼저 지정하세요"; return; }
+  startJobRequest({ mode:"apply", dir, n_qa:6, backend:$("backend").value,
+    strategy: $("strategy").value.trim() }, "msg2");
+}
+
+// 단어 단위 unified diff (LCS). 너무 길면 하이라이트 생략.
+function wordDiff(a, b) {
+  const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+  if (A.length * B.length > 500000)
+    return `<div class="diff">${esc(b)}</div>`;
+  const n = A.length, m = B.length;
+  const dp = Array.from({length: n+1}, () => new Uint16Array(m+1));
+  for (let i = n-1; i >= 0; i--)
+    for (let j = m-1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+  let i = 0, j = 0, out = "";
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out += esc(A[i]); i++; j++; }
+    else if (dp[i+1][j] >= dp[i][j+1]) { if (A[i].trim()) out += `<del>${esc(A[i])}</del>`; i++; }
+    else { if (B[j].trim()) out += `<ins>${esc(B[j])}</ins>`; else out += esc(B[j]); j++; }
+  }
+  while (i < n) { if (A[i].trim()) out += `<del>${esc(A[i])}</del>`; i++; }
+  while (j < m) { out += B[j].trim() ? `<ins>${esc(B[j])}</ins>` : esc(B[j]); j++; }
+  return `<div class="diff">${out}</div>`;
+}
+
+function fmtScore(s) {
+  return s ? `${s.total} <span style="color:var(--dim)">(acc ${s.accuracy} · eff ${s.efficiency})</span>` : "-";
+}
+
+function auditView(res, status) {
+  const prog = res.done < res.total ? ` — ${res.done}/${res.total} 문서 채점 중…` : "";
+  let html = `<div class="runbox"><h3>🩺 현재 위키 진단${prog}</h3>`;
+  if (res.avg_total != null)
+    html += `<div class="kpis"><div class="kpi"><b>${res.avg_total}</b><span>평균 점수 (${res.n_scored}개 채점)</span></div></div>`;
+  html += `<table><tr><th>문서</th><th>raw</th><th>요약</th><th>점수 (total · acc · eff)</th></tr>` +
+    (res.docs||[]).map(d => `<tr><td>${esc(d.name)}</td>
+      <td>${(d.raw_chars/1000).toFixed(1)}k</td>
+      <td>${d.has_summary ? `${((d.wiki_chars||0)/1000).toFixed(1)}k` : '<span class="err">없음</span>'}</td>
+      <td>${fmtScore(d.score)}</td></tr>`).join("") + "</table></div>";
+  return html;
+}
+
+function applyView(res, status) {
+  const prog = res.done < res.total || status === "running" ? ` — ${res.done||0}/${res.total||"?"} 생성 중…` : "";
+  let html = `<div class="runbox"><h3>✨ 최적화 Before → After${prog}</h3>`;
+  if (res.avg_after != null) {
+    const b = res.avg_before, a = res.avg_after;
+    const dir_ = b == null ? "" : a > b ? "up" : a < b ? "down" : "";
+    html += `<div class="kpis">
+      <div class="kpi"><b>${b ?? "-"}</b><span>Before 평균</span></div>
+      <div class="kpi"><b class="${dir_}">${a}</b><span>After 평균</span></div></div>`;
+  }
+  if (res.strategy)
+    html += `<details><summary>사용한 전략 (${esc(res.strategy_source||"")})</summary>
+      <pre>${esc(res.strategy)}</pre></details>`;
+  if (res.out_dir)
+    html += `<div style="color:var(--dim);font-size:12px;margin-top:6px">After 파일: ${esc(res.out_dir)}/ (원본·기존 wiki는 그대로)</div>`;
+  html += (res.docs||[]).map(d => {
+    const bs = d.before?.score, as_ = d.after?.score;
+    const head = `${esc(d.name)} &nbsp; ${fmtScore(bs)}<span class="arrow">→</span>${fmtScore(as_)}`;
+    let body = "";
+    if (d.before?.content && d.after?.content)
+      body = `<div style="color:var(--dim);font-size:11px;margin:6px 0 4px">
+          기존 요약 대비 변경 (<del>삭제</del> / <ins>추가</ins>) ·
+          ${d.before.content.length} → ${d.after.content.length}자</div>` +
+        wordDiff(d.before.content, d.after.content);
+    else if (d.after?.content)
+      body = `<div style="color:var(--dim);font-size:11px;margin:6px 0 4px">기존 요약 없음 — 신규 생성</div>
+        <pre>${esc(d.after.content)}</pre>`;
+    return `<details><summary>${head}</summary>${body}</details>`;
+  }).join("");
+  return html + "</div>";
 }
 
 async function startRun() {
@@ -222,17 +347,24 @@ async function renderJob(j) {
   if (open_.has(j.id)) {
     const r = await fetch(`/api/runs/${j.id}`);
     const d = await r.json();
-    if (d.error) inner = `<div class="err">${esc(d.error)}</div>`;
+    if (d.error && !d.result && !d.runs?.length) inner = `<div class="err">${esc(d.error)}</div>`;
     else {
       if (d.status === "error") inner += `<div class="err runbox">실패: ${esc(d.error)}</div>`;
-      inner += d.runs.map(run =>
-        (run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
-        || `<div class="runbox" style="color:var(--dim)">아직 첫 세대 결과 대기 중…</div>`;
+      if (j.mode === "audit" || j.mode === "apply") {
+        inner += d.result
+          ? (j.mode === "audit" ? auditView(d.result, d.status) : applyView(d.result, d.status))
+          : `<div class="runbox" style="color:var(--dim)">질문 세트 준비 중…</div>`;
+      } else {
+        inner += d.runs.map(run =>
+          (run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
+          || `<div class="runbox" style="color:var(--dim)">아직 첫 세대 결과 대기 중…</div>`;
+      }
     }
   }
+  const MODE_LABEL = { summary:"A 요약", structure:"B 구조", audit:"진단", apply:"최적화" };
   return `<div class="card">
     <div class="job-head" onclick="toggle('${j.id}')">
-      ${badge} <b>${j.mode === "summary" ? "A 요약" : "B 구조"}</b>
+      ${badge} <b>${MODE_LABEL[j.mode] || j.mode}</b>
       <span>${j.doc_names.map(esc).join(", ")}</span>
       <span class="meta">${j.backend} · gen ${j.generations} · ${when}</span>
     </div>${inner}</div>`;
