@@ -71,6 +71,9 @@ python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
 # B단계: 폴더 구조 진화
 python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4
 
+# 웹 대시보드: 폴더 지정해 실험 실행 + 세대별 변화 확인 (localhost:8765)
+python3 src/web.py
+
 # 백엔드 바꿔 돌리기
 LLM_BACKEND=codex  python3 src/evolve.py ...   # Codex CLI (ChatGPT 구독)
 LLM_BACKEND=ollama python3 src/evolve.py ...   # 로컬 Qwen
