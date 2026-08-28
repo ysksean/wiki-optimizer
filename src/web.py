@@ -1,0 +1,215 @@
+"""웹 대시보드 서버 (stdlib만).
+
+각자 wiki 폴더(.md 모음)를 지정해 A단계(요약 진화) / B단계(구조 진화)를
+백그라운드로 실행하고, 진행 상황과 결과를 브라우저에서 본다.
+
+  python3 src/web.py            # http://localhost:8765
+  python3 src/web.py --port 9000
+
+개인 로컬 도구다: 인증 없음, localhost 바인딩. 외부에 열지 말 것.
+동시 실행은 1개로 제한한다 (llm.BACKEND 전역을 run마다 바꾸므로).
+"""
+
+import argparse
+import glob
+import json
+import os
+import threading
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+import llm
+import evolve
+import evolve_structure
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+JOBS_DIR = "runs/web"
+
+JOBS = {}          # job_id -> job dict
+JOBS_LOCK = threading.Lock()
+RUN_LOCK = threading.Lock()  # 동시 실행 1개 제한
+
+
+def list_docs(wiki_dir):
+    """지정 폴더의 md 파일 목록. raw/ 하위 폴더가 있으면 그쪽 우선."""
+    base = os.path.expanduser(wiki_dir)
+    if not os.path.isdir(base):
+        return None
+    search = os.path.join(base, "raw") if os.path.isdir(os.path.join(base, "raw")) else base
+    files = sorted(
+        (f for f in glob.glob(os.path.join(search, "**", "*.md"), recursive=True)
+         if os.path.basename(f).lower() != "readme.md"),
+        key=os.path.getsize,
+    )
+    return [{"path": f, "name": os.path.splitext(os.path.basename(f))[0],
+             "size": os.path.getsize(f)} for f in files]
+
+
+def _run_job(job):
+    """워커 스레드: 백엔드 설정 후 evolve/evolve_structure 실행."""
+    with RUN_LOCK:
+        job["status"] = "running"
+        llm.BACKEND = job["backend"]
+        try:
+            if job["mode"] == "summary":
+                for path in job["files"]:
+                    job["current_doc"] = os.path.basename(path)
+                    evolve.evolve(
+                        path, generations=job["generations"], n_qa=job["n_qa"],
+                        out_dir=job["dir"],
+                    )
+            else:
+                evolve_structure.evolve_structure(
+                    generations=job["generations"], n_qa=job["n_qa"],
+                    out_dir=job["dir"], files=job["files"],
+                )
+            job["status"] = "done"
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+        finally:
+            job["finished_at"] = time.time()
+
+
+def start_job(params):
+    files = params.get("files") or []
+    files = [f for f in files if os.path.isfile(f) and f.endswith(".md")]
+    if not files:
+        return None, "선택된 md 파일이 없습니다"
+    mode = params.get("mode", "summary")
+    if mode not in ("summary", "structure"):
+        return None, f"알 수 없는 mode: {mode}"
+    backend = params.get("backend", "claude")
+    if backend not in ("claude", "codex", "ollama"):
+        return None, f"알 수 없는 backend: {backend}"
+
+    job_id = uuid.uuid4().hex[:8]
+    job = {
+        "id": job_id,
+        "mode": mode,
+        "backend": backend,
+        "files": files,
+        "doc_names": [os.path.splitext(os.path.basename(f))[0] for f in files],
+        "generations": max(1, min(10, int(params.get("generations", 3)))),
+        "n_qa": max(2, min(12, int(params.get("n_qa", 6)))),
+        "dir": os.path.join(JOBS_DIR, job_id),
+        "status": "queued",
+        "error": None,
+        "created_at": time.time(),
+        "finished_at": None,
+    }
+    os.makedirs(job["dir"], exist_ok=True)
+    with JOBS_LOCK:
+        JOBS[job_id] = job
+    threading.Thread(target=_run_job, args=(job,), daemon=True).start()
+    return job, None
+
+
+def job_detail(job):
+    """job 메타 + 하위 run 디렉터리들의 progress/report를 모아 반환."""
+    runs = []
+    for run_dir in sorted(glob.glob(os.path.join(job["dir"], "*"))):
+        if not os.path.isdir(run_dir):
+            continue
+        entry = {"run_dir": os.path.basename(run_dir)}
+        for name in ("progress", "report"):
+            p = os.path.join(run_dir, f"{name}.json")
+            if os.path.exists(p):
+                try:
+                    with open(p) as f:
+                        entry[name] = json.load(f)
+                except (OSError, json.JSONDecodeError):
+                    pass
+        runs.append(entry)
+    out = {k: v for k, v in job.items() if k != "dir"}
+    out["runs"] = runs
+    return out
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):  # 조용히
+        pass
+
+    def _json(self, obj, code=200):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if url.path in ("/", "/index.html"):
+            try:
+                with open(os.path.join(STATIC_DIR, "index.html"), "rb") as f:
+                    body = f.read()
+            except OSError:
+                self.send_error(500, "index.html missing")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if url.path == "/api/docs":
+            q = parse_qs(url.query)
+            wiki_dir = (q.get("dir") or [""])[0]
+            docs = list_docs(wiki_dir)
+            if docs is None:
+                self._json({"error": f"폴더가 없습니다: {wiki_dir}"}, 404)
+            else:
+                self._json({"docs": docs})
+            return
+        if url.path == "/api/runs":
+            with JOBS_LOCK:
+                jobs = [
+                    {k: v for k, v in j.items() if k not in ("dir", "files")}
+                    for j in sorted(JOBS.values(), key=lambda j: j["created_at"], reverse=True)
+                ]
+            self._json({"jobs": jobs})
+            return
+        if url.path.startswith("/api/runs/"):
+            job_id = url.path.rsplit("/", 1)[-1]
+            with JOBS_LOCK:
+                job = JOBS.get(job_id)
+            if not job:
+                self._json({"error": "없는 job"}, 404)
+            else:
+                self._json(job_detail(job))
+            return
+        self.send_error(404)
+
+    def do_POST(self):
+        url = urlparse(self.path)
+        if url.path != "/api/runs":
+            self.send_error(404)
+            return
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            params = json.loads(self.rfile.read(n) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._json({"error": "잘못된 JSON"}, 400)
+            return
+        job, err = start_job(params)
+        if err:
+            self._json({"error": err}, 400)
+        else:
+            self._json({"id": job["id"], "status": job["status"]}, 201)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=8765)
+    args = ap.parse_args()
+    os.makedirs(JOBS_DIR, exist_ok=True)
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    print(f"wiki-optimizer 대시보드: http://localhost:{args.port}  (백엔드 기본: {llm.BACKEND})")
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
