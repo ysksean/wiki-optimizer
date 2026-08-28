@@ -82,7 +82,7 @@ def start_job(params):
     if mode not in ("summary", "structure"):
         return None, f"알 수 없는 mode: {mode}"
     backend = params.get("backend", "claude")
-    if backend not in ("claude", "codex", "ollama"):
+    if backend not in ("claude", "codex"):
         return None, f"알 수 없는 backend: {backend}"
 
     job_id = uuid.uuid4().hex[:8]
