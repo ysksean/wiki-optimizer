@@ -31,13 +31,15 @@ SEED_STRATEGY = (
 )
 
 
-def load_docs(n, raw_dir="data/raw"):
-    files = [
-        f for f in glob.glob(os.path.join(raw_dir, "*.md"))
-        if os.path.basename(f).lower() != "readme.md"
-    ]
-    files.sort(key=lambda f: os.path.getsize(f))
-    files = files[:n]
+def load_docs(n, raw_dir="data/raw", files=None):
+    """files를 직접 주면 그걸 쓰고, 없으면 raw_dir에서 작은 순으로 n개."""
+    if files is None:
+        files = [
+            f for f in glob.glob(os.path.join(raw_dir, "*.md"))
+            if os.path.basename(f).lower() != "readme.md"
+        ]
+        files.sort(key=lambda f: os.path.getsize(f))
+        files = files[:n]
     return {os.path.splitext(os.path.basename(f))[0]: open(f).read() for f in files}
 
 
@@ -68,8 +70,8 @@ def reflect(strategy, result):
     return new_strategy.strip() or strategy
 
 
-def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs"):
-    docs = load_docs(n_docs)
+def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None):
+    docs = load_docs(n_docs, files=files)
     total_raw = sum(len(t) for t in docs.values())
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = os.path.join(out_dir, f"structure-{stamp}")
@@ -118,6 +120,14 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs"):
         if improved:
             best = {"total": result["total"], "generation": g, "strategy": strategy,
                     "struct": struct, "result": result}
+
+        with open(os.path.join(run_dir, "progress.json"), "w") as pf:
+            json.dump({
+                "mode": "structure", "docs": list(docs.keys()),
+                "generations": generations, "done_generations": g + 1,
+                "best_gen": best["generation"], "best_total": best["total"],
+                "history": history,
+            }, pf, ensure_ascii=False)
 
         if g < generations - 1:
             strategy = reflect(best["strategy"], best["result"])

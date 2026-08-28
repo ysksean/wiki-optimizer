@@ -107,6 +107,12 @@ def reflect(strategy, train_result):
     return new_strategy.strip() or strategy
 
 
+def _flush_progress(run_dir, payload):
+    """세대마다 진행 상태를 남긴다 (웹 대시보드 폴링용)."""
+    with open(os.path.join(run_dir, "progress.json"), "w") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+
 def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
            question_set=None):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장)."""
@@ -166,6 +172,16 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
                 "summary": summary,
                 "train_result": r_train,
             }
+
+        _flush_progress(run_dir, {
+            "mode": "summary", "doc": doc, "arm": arm,
+            "generations": generations, "done_generations": g + 1,
+            "best_gen": best["generation"], "best_total": best["total"],
+            "history": [
+                {k: h[k] for k in ("generation", "strategy", "score", "train_score", "elapsed_sec")}
+                for h in history
+            ],
+        })
 
         if not no_evolve and g < generations - 1:
             # 점수가 안 올랐으면 best 전략으로 되돌리되, 피드백도

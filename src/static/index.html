@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wiki-optimizer</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --tx:#e6e9ef; --dim:#9aa3b2;
+          --acc:#5b9dff; --ok:#4cc38a; --warn:#f0b429; --bad:#ef6a6a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--tx);
+         font:14px/1.5 -apple-system, "Pretendard", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:24px 16px 80px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--dim); margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:16px; margin-bottom:14px; }
+  label { color:var(--dim); font-size:12px; display:block; margin-bottom:4px; }
+  input[type=text], select, input[type=number] {
+    background:#0d0f13; color:var(--tx); border:1px solid var(--line);
+    border-radius:6px; padding:7px 10px; font-size:14px; }
+  input[type=text] { width:100%; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:12px; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:6px;
+           padding:8px 16px; font-size:14px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--acc); border:1px solid var(--acc); }
+  button:disabled { opacity:.45; cursor:default; }
+  .docs { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+          gap:6px; margin-top:12px; }
+  .docs label { display:flex; gap:8px; align-items:center; font-size:13px;
+                color:var(--tx); background:#0d0f13; border:1px solid var(--line);
+                border-radius:6px; padding:7px 10px; margin:0; cursor:pointer; }
+  .docs .sz { color:var(--dim); margin-left:auto; font-size:11px; }
+  .badge { display:inline-block; font-size:11px; border-radius:99px; padding:2px 9px; }
+  .b-running { background:#1c2b45; color:var(--acc); }
+  .b-done { background:#15301f; color:var(--ok); }
+  .b-error { background:#3a1a1a; color:var(--bad); }
+  .b-queued { background:#2a2f3a; color:var(--dim); }
+  .job-head { display:flex; gap:10px; align-items:center; cursor:pointer; }
+  .job-head .meta { color:var(--dim); font-size:12px; margin-left:auto; }
+  .runbox { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
+  .runbox h3 { font-size:14px; margin:0 0 8px; }
+  .kpis { display:flex; gap:16px; flex-wrap:wrap; margin:6px 0 10px; }
+  .kpi b { font-size:16px; }
+  .kpi span { color:var(--dim); font-size:11px; display:block; }
+  table { border-collapse:collapse; width:100%; font-size:12px; margin-top:8px; }
+  th, td { border:1px solid var(--line); padding:5px 8px; text-align:left;
+           vertical-align:top; }
+  th { color:var(--dim); font-weight:500; }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--acc); font-size:13px; }
+  pre { white-space:pre-wrap; background:#0d0f13; border:1px solid var(--line);
+        border-radius:6px; padding:10px; font-size:12px; max-height:260px; overflow:auto; }
+  .err { color:var(--bad); font-size:13px; }
+  .lenbar { height:8px; background:#0d0f13; border:1px solid var(--line);
+            border-radius:99px; overflow:hidden; width:180px; display:inline-block;
+            vertical-align:middle; }
+  .lenbar i { display:block; height:100%; background:var(--warn); }
+  svg text { fill:var(--dim); font-size:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>wiki-optimizer</h1>
+  <div class="sub">wiki 폴더를 지정하고 요약(A) / 구조(B) 최적화를 돌려 결과 변화를 확인합니다</div>
+
+  <div class="card">
+    <label>wiki 폴더 경로 (.md 모음 — raw/ 하위 폴더가 있으면 그쪽을 읽음)</label>
+    <div style="display:flex; gap:8px">
+      <input type="text" id="dir" placeholder="~/dev/llm_wiki  또는  data/raw">
+      <button class="ghost" onclick="loadDocs()">문서 불러오기</button>
+    </div>
+    <div id="docs" class="docs"></div>
+    <div class="row">
+      <div><label>모드</label>
+        <select id="mode">
+          <option value="summary">A — 요약 전략 진화 (문서별)</option>
+          <option value="structure">B — 폴더 구조 진화 (선택 문서 전체)</option>
+        </select></div>
+      <div><label>세대 수</label><input type="number" id="gens" value="3" min="1" max="10" style="width:70px"></div>
+      <div><label>질문 수</label><input type="number" id="nqa" value="6" min="2" max="12" style="width:70px"></div>
+      <div><label>백엔드</label>
+        <select id="backend">
+          <option value="claude">claude (Claude Code 구독)</option>
+          <option value="codex">codex (ChatGPT 구독)</option>
+          <option value="ollama">ollama (로컬 Qwen)</option>
+        </select></div>
+      <button id="go" onclick="startRun()">실험 실행</button>
+      <span id="msg" class="err"></span>
+    </div>
+  </div>
+
+  <div id="jobs"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const open_ = new Set();   // 펼쳐둔 job id
+
+async function loadDocs() {
+  $("msg").textContent = "";
+  const dir = $("dir").value.trim();
+  if (!dir) { $("msg").textContent = "폴더 경로를 입력하세요"; return; }
+  const r = await fetch(`/api/docs?dir=${encodeURIComponent(dir)}`);
+  const j = await r.json();
+  if (j.error) { $("msg").textContent = j.error; return; }
+  if (!j.docs.length) { $("msg").textContent = "md 파일이 없습니다"; return; }
+  $("docs").innerHTML = j.docs.map(d => `
+    <label><input type="checkbox" value="${d.path}">${d.name}
+      <span class="sz">${(d.size/1000).toFixed(1)}k</span></label>`).join("");
+}
+
+async function startRun() {
+  $("msg").textContent = "";
+  const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
+  if (!files.length) { $("msg").textContent = "문서를 하나 이상 선택하세요"; return; }
+  $("go").disabled = true;
+  const r = await fetch("/api/runs", { method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ files, mode: $("mode").value,
+      generations: +$("gens").value, n_qa: +$("nqa").value,
+      backend: $("backend").value }) });
+  const j = await r.json();
+  $("go").disabled = false;
+  if (j.error) { $("msg").textContent = j.error; return; }
+  open_.add(j.id);
+  poll();
+}
+
+function chart(hist, key) {
+  // 세대별 total 라인 차트 (held-out + train)
+  const W = 320, H = 110, P = 24;
+  const xs = hist.map(h => h.generation);
+  const line = (get, color) => {
+    const pts = hist.map((h, i) => {
+      const x = P + (W - 2*P) * (xs.length === 1 ? 0.5 : i / (xs.length - 1));
+      const y = H - P - (H - 2*P) * Math.max(0, Math.min(1, get(h)));
+      return `${x},${y}`;
+    });
+    return `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2"/>` +
+      pts.map(p => `<circle cx="${p.split(",")[0]}" cy="${p.split(",")[1]}" r="2.5" fill="${color}"/>`).join("");
+  };
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const v of [0, .5, 1]) {
+    const y = H - P - (H - 2*P) * v;
+    svg += `<line x1="${P}" y1="${y}" x2="${W-P}" y2="${y}" stroke="#2a2f3a"/>
+            <text x="2" y="${y+3}">${v}</text>`;
+  }
+  svg += line(h => h.score.total, "#5b9dff");
+  if (hist[0][key]) svg += line(h => (h[key]||{}).total ?? 0, "#6b7280");
+  xs.forEach((g, i) => {
+    const x = P + (W - 2*P) * (xs.length === 1 ? 0.5 : i / (xs.length - 1));
+    svg += `<text x="${x-8}" y="${H-6}">gen${g}</text>`;
+  });
+  svg += `</svg><div style="font-size:11px;color:var(--dim)">
+    <span style="color:#5b9dff">● held-out</span>&nbsp;
+    ${hist[0][key] ? '<span style="color:#6b7280">● train</span>' : ''}</div>`;
+  return svg;
+}
+
+function summaryRun(run) {
+  const p = run.progress, rep = run.report;
+  if (!p) return "";
+  const best = p.history[p.best_gen >= 0 ? p.best_gen : 0] || {};
+  let html = `<div class="runbox"><h3>📄 ${p.doc}
+      <span style="color:var(--dim);font-weight:400">(${p.done_generations}/${p.generations}세대)</span></h3>
+    <div class="kpis">
+      <div class="kpi"><b>${p.best_total}</b><span>best (gen ${p.best_gen})</span></div>
+      <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>정확도</span></div>
+      <div class="kpi"><b>${(best.score||{}).efficiency ?? "-"}</b><span>효율</span></div>
+    </div>
+    ${chart(p.history, "train_score")}
+    <details><summary>세대별 전략 프롬프트</summary><table>
+      <tr><th>gen</th><th>held-out</th><th>ratio</th><th>전략</th></tr>
+      ${p.history.map(h => `<tr ${h.generation===p.best_gen?'style="background:#15301f22"':''}>
+        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+        <td>${h.score.total}</td><td>${h.score.length_ratio}</td>
+        <td>${esc(h.strategy)}</td></tr>`).join("")}
+    </table></details>`;
+  if (rep && rep.best && rep.best.summary) {
+    const ratio = (rep.history[rep.best.generation]||{}).score?.length_ratio;
+    html += `<details><summary>best 요약 보기</summary>
+      <div style="margin:6px 0">원본 대비 길이
+        <span class="lenbar"><i style="width:${Math.min(100,(ratio||0)*100)}%"></i></span>
+        ${ratio!=null ? (ratio*100).toFixed(0)+"%" : ""}</div>
+      <pre>${esc(rep.best.summary)}</pre></details>`;
+  }
+  return html + "</div>";
+}
+
+function structureRun(run) {
+  const p = run.progress, rep = run.report;
+  if (!p) return "";
+  let html = `<div class="runbox"><h3>🗂 구조 진화 — ${p.docs.join(", ")}
+      <span style="color:var(--dim);font-weight:400">(${p.done_generations}/${p.generations}세대)</span></h3>
+    <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>best (gen ${p.best_gen})</span></div></div>
+    ${chart(p.history, "")}
+    <details><summary>세대별 파일 구성</summary><table>
+      <tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>파일</th></tr>
+      ${p.history.map(h => `<tr ${h.generation===p.best_gen?'style="background:#15301f22"':''}>
+        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+        <td>${h.score.total}</td><td>${h.score.accuracy}</td><td>${h.score.efficiency}</td>
+        <td>${(h.file_titles||[]).map(esc).join("<br>")}</td></tr>`).join("")}
+    </table></details>`;
+  const det = rep?.best?.result?.details;
+  if (det) {
+    html += `<details><summary>best 구조의 질문별 라우팅</summary><table>
+      <tr><th>질문</th><th>읽은 파일</th><th>글자</th><th>정답</th></tr>
+      ${det.map(d => `<tr><td>${esc(d.q)}</td><td>${(d.picked||[]).map(esc).join(", ")}</td>
+        <td>${d.read_chars}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join("")}
+    </table></details>`;
+  }
+  return html + "</div>";
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function renderJob(j) {
+  const badge = `<span class="badge b-${j.status}">${j.status}</span>`;
+  const when = new Date(j.created_at*1000).toLocaleTimeString();
+  let inner = "";
+  if (open_.has(j.id)) {
+    const r = await fetch(`/api/runs/${j.id}`);
+    const d = await r.json();
+    if (d.error) inner = `<div class="err">${esc(d.error)}</div>`;
+    else {
+      if (d.status === "error") inner += `<div class="err runbox">실패: ${esc(d.error)}</div>`;
+      inner += d.runs.map(run =>
+        (run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
+        || `<div class="runbox" style="color:var(--dim)">아직 첫 세대 결과 대기 중…</div>`;
+    }
+  }
+  return `<div class="card">
+    <div class="job-head" onclick="toggle('${j.id}')">
+      ${badge} <b>${j.mode === "summary" ? "A 요약" : "B 구조"}</b>
+      <span>${j.doc_names.map(esc).join(", ")}</span>
+      <span class="meta">${j.backend} · gen ${j.generations} · ${when}</span>
+    </div>${inner}</div>`;
+}
+
+function toggle(id) { open_.has(id) ? open_.delete(id) : open_.add(id); poll(); }
+
+let timer = null, lastHtml = "";
+async function poll() {
+  clearTimeout(timer);
+  const r = await fetch("/api/runs");
+  const { jobs } = await r.json();
+  const parts = await Promise.all(jobs.map(renderJob));
+  const html = parts.join("") ||
+    `<div class="card" style="color:var(--dim)">아직 실행한 실험이 없습니다</div>`;
+  // 내용이 같으면 다시 그리지 않는다 (펼쳐둔 details 유지)
+  if (html !== lastHtml) { $("jobs").innerHTML = html; lastHtml = html; }
+  if (jobs.some(j => j.status === "running" || j.status === "queued"))
+    timer = setTimeout(poll, 2000);
+  else
+    timer = setTimeout(poll, 10000);
+}
+poll();
+</script>
+</body>
+</html>
