@@ -114,7 +114,8 @@ post_review() { # $1=stage — verdict.md + irc.log를 PR 코멘트로
     echo '```irc'; head -c "$IRC_MAX_CHARS" "$WORK/irc.log"; echo '```'; echo "</details>"
   } > "$WORK/comment.md"
   gh pr comment "$PR" --repo "$GH_REPO" --body-file "$WORK/comment.md" >/dev/null
-  gh pr edit "$PR" --repo "$GH_REPO" --add-label "grokbot:$1-done" >/dev/null 2>&1 || true
+  # -done 부착 실패를 삼키면 다음 tick마다 중복 리뷰가 돈다 (PR#13 재심사 지적) — 실패 시 fail 경로로
+  gh pr edit "$PR" --repo "$GH_REPO" --add-label "grokbot:$1-done" >/dev/null
   local gl; gl="$(tr '[:upper:]' '[:lower:]' <<<"$grade")"
   if [ "$1" = "s1" ]; then
     for old in p0 p1 p2 p3 p4; do  # 재심사 시 이전 등급 라벨 제거 (P1·P3 동거 방지)

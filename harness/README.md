@@ -63,6 +63,8 @@ open PR (grokbot:s1* 라벨 없음)
 - 리뷰 실패 시 `grokbot:s1-error`/`s2-error` 라벨 — 사람이 라벨을 떼기 전까지 재시도하지 않음 (폭주 방지)
 - 재리뷰 트리거: 수정 push 후 `grokbot:s1-done`(및 `needs-changes`) 라벨 제거
 - `/stage2`는 `needs-changes`·`grokbot:p0`/`p1` 라벨이 있으면 무시됨 (s1 재통과가 선행 조건)
+- **알려진 한계**: Executor가 재작업 push 후 라벨 제거에 실패하면 PR이 In Review에서 조용히 멈춘다
+  (워치독 없음 — 1인 repo라 육안 감지로 수용). 회귀 테스트도 아직 없음 (다음 수정 때 갚을 빚).
 - **알려진 잔여 위험**: hermes `-t file` 토올셋은 write_file/patch를 포함한다. 건네주는 worktree·자료는
   chmod로 쓰기를 잠그지만, 절대경로로 다른 위치에 쓰는 것까지는 못 막는다 (PR diff에 섞인 프롬프트
   인젝션이 이론상 경로). 프로세스 샌드박스(sandbox-exec)는 MVP-3 과제.
