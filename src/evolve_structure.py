@@ -78,7 +78,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     os.makedirs(run_dir, exist_ok=True)
 
     print(f"[setup] 문서 {len(docs)}개, 총 {total_raw} chars: {list(docs.keys())}")
-    print(f"[setup] 문서 전체에 걸친 질문 세트 생성 중...")
+    print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
     question_set = structure.build_cross_question_set(docs, n=n_qa)
     print(f"[setup] 질문 {len(question_set)}개 고정")
     for qa in question_set:
