@@ -47,13 +47,18 @@ def select_docs(n, raw_dir="data/raw"):
     return [files[int(i * step)] for i in range(n)]
 
 
-def run_batch(files, runs, generations, n_qa, with_control=False, out_dir="runs"):
+def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
+              out_dir="runs"):
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     batch_dir = os.path.join(out_dir, f"batch-{stamp}")
     os.makedirs(batch_dir, exist_ok=True)
     state_path = os.path.join(batch_dir, "batch_state.json")
 
-    arms = ["evolve", "control"] if with_control else ["evolve"]
+    if ablation:
+        # 영속 이력 ablation: 둘 다 진화하되 이력 참조만 켜고/끈다
+        arms = ["evolve", "evolve-nohist"]
+    else:
+        arms = ["evolve", "control"] if with_control else ["evolve"]
     records = []
     total = len(files) * runs * len(arms)
     done = 0
@@ -80,6 +85,7 @@ def run_batch(files, runs, generations, n_qa, with_control=False, out_dir="runs"
                     report = evolve.evolve(
                         f, generations=generations, n_qa=n_qa, out_dir=batch_dir,
                         no_evolve=(arm == "control"), question_set=question_set,
+                        use_history=(arm != "evolve-nohist"),
                     )
                 except Exception as e:  # 한 run 실패해도 배치는 계속
                     print(f"[batch] run 실패: {e}")
@@ -175,7 +181,20 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
 
     lines.append("\n## 해석")
     ev = _arm_stats(by_arm.get("evolve", []))
-    if "control" in by_arm:
+    if "evolve-nohist" in by_arm:
+        nh = _arm_stats(by_arm["evolve-nohist"])
+        net = ev["mean_imp"] - nh["mean_imp"]
+        lines.append(
+            f"- 영속 이력 효과(net) = 이력 있음 {ev['mean_imp']:+.3f} - 이력 없음 "
+            f"{nh['mean_imp']:+.3f} = **{net:+.3f}**"
+        )
+        if net > 0.02:
+            lines.append("- 이력 없는 진화 대비 **영속 이력이 실제로 개선**하는 경향.")
+        elif net > 0:
+            lines.append("- 이력 우위가 미미. run/세대 수를 늘려 재확인 필요.")
+        else:
+            lines.append("- 이력 유무 차이 없음 — 관측된 효과는 노이즈로 설명 가능.")
+    elif "control" in by_arm:
         ct = _arm_stats(by_arm["control"])
         net = ev["mean_imp"] - ct["mean_imp"]
         lines.append(
@@ -212,6 +231,8 @@ if __name__ == "__main__":
     ap.add_argument("--generations", type=int, default=3)
     ap.add_argument("--n-qa", type=int, default=8)
     ap.add_argument("--with-control", action="store_true", help="무진화 대조군 arm 추가")
+    ap.add_argument("--ablation", action="store_true",
+                    help="영속 이력 ablation: evolve vs evolve-nohist 두 arm")
     args = ap.parse_args()
 
     files = args.files if args.files else select_docs(args.docs)
@@ -219,4 +240,4 @@ if __name__ == "__main__":
     for f in files:
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)}B)")
     run_batch(files, args.runs, args.generations, args.n_qa,
-              with_control=args.with_control)
+              with_control=args.with_control, ablation=args.ablation)

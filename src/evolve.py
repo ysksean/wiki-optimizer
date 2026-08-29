@@ -182,12 +182,17 @@ def _flush_progress(run_dir, payload):
 
 
 def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
-           question_set=None):
-    """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장)."""
+           question_set=None, use_history=True):
+    """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
+
+    use_history=False면 reflect가 영속 이력을 읽지 않고, 기록도
+    'evolve-nohist' arm으로 남겨 이력을 쓰는 run을 오염시키지 않는다
+    (ablation 용도).
+    """
     raw_text = open(raw_path).read()
     doc = os.path.splitext(os.path.basename(raw_path))[0]
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    arm = "control" if no_evolve else "evolve"
+    arm = "control" if no_evolve else ("evolve" if use_history else "evolve-nohist")
     run_dir = os.path.join(out_dir, f"{doc}-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
@@ -256,7 +261,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         if not no_evolve and g < generations - 1:
             # 점수가 안 올랐으면 best 전략으로 되돌리되, 피드백도
             # *그 best 전략의* train 채점 결과를 쓴다 (전략-결과 짝 유지).
-            strategy = reflect(best["strategy"], best["train_result"], doc=doc)
+            strategy = reflect(best["strategy"], best["train_result"],
+                               doc=doc if use_history else None)
 
     print(f"\n[done] best gen={best['generation']} held-out total={best['total']}")
     print(f"[done] best summary ({len(best['summary'] or '')} chars):\n{best['summary']}\n")
