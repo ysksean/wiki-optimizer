@@ -43,6 +43,71 @@ SEED_STRATEGY = (
 
 HOLDOUT_RATIO = 0.4  # 질문 중 held-out 비율 (최소 2개 보장)
 
+# 영속 지식층 (WikiSkill 스타일): 전략 채택/기각 이력을 run 경계를 넘어 축적한다.
+# 전략(산출물)은 세대마다 교체되지만 이 이력은 절대 지우지 않는다 — reflect가
+# 과거에 기각된 방향을 다시 제안하지 않도록 근거를 제공한다.
+WIKI_DIR = os.path.join("runs", "wiki")
+IMPACT_PATH = os.path.join(WIKI_DIR, "strategy-impact.jsonl")
+
+
+def record_strategy_impact(doc, arm, generation, strategy, r_test, accepted):
+    """세대 하나의 전략과 결과를 영속 이력에 append한다."""
+    os.makedirs(WIKI_DIR, exist_ok=True)
+    rec = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "doc": doc,
+        "arm": arm,
+        "generation": generation,
+        "strategy": strategy,
+        "held_out_total": r_test["total"],
+        "length_ratio": r_test["length_ratio"],
+        "accepted": accepted,
+    }
+    with open(IMPACT_PATH, "a") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def load_strategy_history(doc, n_rejected=5, n_accepted=3):
+    """이 문서의 과거 전략 이력 (evolve arm만). 반환: (accepted, rejected) 최근순."""
+    if not os.path.exists(IMPACT_PATH):
+        return [], []
+    entries = []
+    with open(IMPACT_PATH) as f:
+        for line in f:
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if e.get("doc") == doc and e.get("arm") == "evolve":
+                entries.append(e)
+    accepted = [e for e in entries if e.get("accepted")][-n_accepted:]
+    rejected = [e for e in entries if not e.get("accepted")][-n_rejected:]
+    return accepted, rejected
+
+
+def _history_block(doc):
+    """reflect 프롬프트에 넣을 과거 이력 요약. 이력이 없으면 빈 문자열."""
+    accepted, rejected = load_strategy_history(doc)
+    if not accepted and not rejected:
+        return ""
+    fmt = lambda e: (
+        f"- (held-out {e['held_out_total']}, ratio {e['length_ratio']}) "
+        f"{e['strategy'][:200]}"
+    )
+    lines = []
+    if accepted:
+        lines.append("[과거 채택된 전략들 — 이 방향이 효과가 있었다]")
+        lines += [fmt(e) for e in accepted]
+    if rejected:
+        lines.append("[과거 기각된 전략들 — 같은 방향을 다시 제안하지 마라]")
+        lines += [fmt(e) for e in rejected]
+        if any(e["length_ratio"] >= 1.0 for e in rejected):
+            lines.append(
+                "(주의: ratio ≥ 1.0은 요약이 원본보다 길어진 폭주다. "
+                "길이를 늘리는 방향은 금지.)"
+            )
+    return "\n".join(lines) + "\n\n"
+
 
 def load_question_set(raw_path, raw_text, n_qa):
     """수동 질문 파일이 있으면 로드, 없으면 자동 생성."""
@@ -75,11 +140,13 @@ def summarize(raw_text, strategy):
     return llm.generate(prompt, num_predict=400, temperature=0.3)
 
 
-def reflect(strategy, train_result):
+def reflect(strategy, train_result, doc=None):
     """train 채점 결과(틀린 질문 + 효율)를 근거로 요약 전략을 개선.
 
     train_result는 반드시 *strategy로 만든 요약*의 채점 결과여야 한다.
     (held-out 질문은 여기 절대 노출하지 않는다.)
+    doc을 주면 영속 이력(채택/기각 전략)을 함께 제공해 실패 방향의
+    재제안을 막는다.
     """
     missed = [d["q"] for d in train_result["qa_details"] if d["score"] < 1]
     missed_str = "\n".join(f"- {q}" for q in missed) if missed else "(없음)"
@@ -98,7 +165,8 @@ def reflect(strategy, train_result):
         "주의: 아래 질문들은 예시일 뿐이다. 그 질문들만 노리는 전략이 아니라, "
         "문서의 어떤 질문에도 통할 일반적인 요약 전략을 써라.\n"
         "개선된 '전략 프롬프트' 한 문단만 출력(설명 금지).\n\n"
-        f"[현재 전략]\n{strategy}\n\n"
+        + (_history_block(doc) if doc else "")
+        + f"[현재 전략]\n{strategy}\n\n"
         f"[요약만으로 답 못한 질문들]\n{missed_str}\n\n"
         f"[길이 비율] {ratio} (작을수록 효율↑). {hint}\n\n"
         "[개선된 전략 프롬프트]:"
@@ -173,6 +241,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
                 "train_result": r_train,
             }
 
+        record_strategy_impact(doc, arm, g, strategy, r_test, improved)
+
         _flush_progress(run_dir, {
             "mode": "summary", "doc": doc, "arm": arm,
             "generations": generations, "done_generations": g + 1,
@@ -186,7 +256,7 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         if not no_evolve and g < generations - 1:
             # 점수가 안 올랐으면 best 전략으로 되돌리되, 피드백도
             # *그 best 전략의* train 채점 결과를 쓴다 (전략-결과 짝 유지).
-            strategy = reflect(best["strategy"], best["train_result"])
+            strategy = reflect(best["strategy"], best["train_result"], doc=doc)
 
     print(f"\n[done] best gen={best['generation']} held-out total={best['total']}")
     print(f"[done] best summary ({len(best['summary'] or '')} chars):\n{best['summary']}\n")

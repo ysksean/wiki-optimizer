@@ -115,3 +115,53 @@ def test_best_strategy_excludes_structure_reports(tmp_path):
 
 def test_best_strategy_none_when_empty(tmp_path):
     assert apply_mod.best_strategy_from_runs(runs_dir=str(tmp_path)) is None
+
+
+# ---------- evolve: 영속 전략 이력 (WikiSkill 스타일) ----------
+
+def _fake_result(total, ratio):
+    return {"total": total, "length_ratio": ratio}
+
+
+def test_strategy_impact_roundtrip_filters_doc_and_arm(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path))
+    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "strategy-impact.jsonl"))
+    evolve.record_strategy_impact("docA", "evolve", 0, "s-accepted", _fake_result(0.3, 0.5), True)
+    evolve.record_strategy_impact("docA", "evolve", 1, "s-rejected", _fake_result(0.0, 1.1), False)
+    evolve.record_strategy_impact("docA", "control", 0, "s-control", _fake_result(0.2, 0.5), True)
+    evolve.record_strategy_impact("docB", "evolve", 0, "s-other-doc", _fake_result(0.4, 0.5), True)
+
+    accepted, rejected = evolve.load_strategy_history("docA")
+    assert [e["strategy"] for e in accepted] == ["s-accepted"]  # control/타문서 제외
+    assert [e["strategy"] for e in rejected] == ["s-rejected"]
+
+
+def test_history_block_warns_runaway_ratio(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path))
+    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "strategy-impact.jsonl"))
+    evolve.record_strategy_impact("doc", "evolve", 1, "길게 쓰는 전략", _fake_result(0.0, 1.1), False)
+    block = evolve._history_block("doc")
+    assert "기각된 전략" in block and "길게 쓰는 전략" in block
+    assert "ratio ≥ 1.0" in block  # 폭주 경고
+    # 이력이 없으면 빈 문자열
+    assert evolve._history_block("unknown-doc") == ""
+
+
+def test_reflect_prompt_includes_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path))
+    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "strategy-impact.jsonl"))
+    evolve.record_strategy_impact("doc", "evolve", 1, "REJECTED-DIRECTION", _fake_result(0.0, 1.2), False)
+
+    captured = {}
+    def fake_generate(prompt, **kw):
+        captured["prompt"] = prompt
+        return "새 전략"
+    monkeypatch.setattr(evolve.llm, "generate", fake_generate)
+
+    train_result = {"qa_details": [], "accuracy": 1.0, "length_ratio": 0.4}
+    out = evolve.reflect("현재 전략", train_result, doc="doc")
+    assert out == "새 전략"
+    assert "REJECTED-DIRECTION" in captured["prompt"]
+    # doc 없이 부르면 이력 미포함 (하위 호환)
+    evolve.reflect("현재 전략", train_result)
+    assert "REJECTED-DIRECTION" not in captured["prompt"]
