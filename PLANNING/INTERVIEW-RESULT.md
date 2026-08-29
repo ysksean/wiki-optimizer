@@ -65,8 +65,8 @@ critic 생략. 근거: 아키텍처가 "로컬 스크립트 + Linear를 상태 �
 
 | # | 반박 | 처리 |
 |---|------|------|
-| hermes 쓰기 권한 통제 없음 (HIGH) | 수용 — `-t file` 토올셋 제한 + 일회용 detached worktree에서 실행, 종료 후 폐기 |
-| headless 승인 프롬프트 vs --yolo (HIGH) | 수용 — --yolo 안 씀. read-only 구성으로 승인 프롬프트 자체가 안 뜨는 조합. VALIDATE로 실측 통과 |
+| hermes 쓰기 권한 통제 없음 (HIGH) | 수용 — 1차 처리(`-t file`+일회용 worktree)는 PR#13 Grokbot 리뷰에서 반증됨(`-t file`에 write_file/patch 포함). 재처리: 건네주는 경로 chmod a-w 잠금 + 잔여 위험(절대경로 쓰기) README에 명시, 샌드박스는 MVP-3 |
+| headless 승인 프롬프트 vs --yolo (HIGH) | 수용 — --yolo 안 씀. file 토올셋 조합에서 승인 프롬프트 없이 완주함을 실측 (PR#12·#13 라이브 리뷰) |
 | MOA 실제 비활성 (MEDIUM) | 수용 — 사용자 결정 #9로 명시적 연기 |
 | 등급이 아무것도 안 막음 (MEDIUM) | 수용 — 사용자 결정 #10 |
 | 실패 시 재시도 폭주 (HIGH) | 수용 — grokbot:s1-error/s2-error 라벨로 차단, 사람이 라벨 제거 시 재시도 |

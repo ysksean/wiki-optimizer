@@ -22,8 +22,9 @@ PRS="$(gh pr list --repo "$GH_REPO" --state open --json number,labels,title)"
 
 S1_PR="$(jq -r '[.[] | select([.labels[].name] | any(startswith("grokbot:s1")) | not)][0].number // empty' <<<"$PRS")"
 
+# S2 자격: s1-done이고, s2 이력·needs-changes·P0/P1 판정이 없어야 한다 (P1 상태로 /stage2 치는 구멍 차단)
 S2_PR=""
-for n in $(jq -r '.[] | select(([.labels[].name] | index("grokbot:s1-done")) and (([.labels[].name] | any(startswith("grokbot:s2"))) | not)) | .number' <<<"$PRS"); do
+for n in $(jq -r '.[] | select(([.labels[].name] | index("grokbot:s1-done")) and (([.labels[].name] | any(startswith("grokbot:s2") or . == "needs-changes" or . == "grokbot:p0" or . == "grokbot:p1")) | not)) | .number' <<<"$PRS"); do
   if gh pr view "$n" --repo "$GH_REPO" --json comments -q '.comments[].body' | grep -q '^/stage2'; then
     S2_PR="$n"; break
   fi
@@ -42,9 +43,14 @@ prepare_pr() { # $1=pr번호 → $WORK/$WT 세팅
   git -C "$REPO" fetch -q origin "$HEAD_REF"
   git -C "$REPO" worktree add -q --detach "$WT" FETCH_HEAD
   : > "$WORK/irc.log"
+  # hermes `-t file` 토올셋에는 write_file/patch가 포함된다 (PR#13 Grokbot 지적) —
+  # 건네주는 경로는 파일시스템 레벨로 쓰기를 막는다. 절대경로로 다른 곳에 쓰는 것까지는
+  # 못 막으므로 잔여 위험은 README에 기록, 프로세스 샌드박스는 MVP-3.
+  chmod -R a-w "$WT" "$WORK/diff.patch" "$WORK/meta.json" 2>/dev/null || true
 }
 
 cleanup_pr() {
+  chmod -R u+w "$WT" "$WORK" 2>/dev/null || true
   git -C "$REPO" worktree remove --force "$WT" 2>/dev/null || true
   [ "${KEEP_WORK:-0}" = 1 ] || rm -rf "$WORK"
 }
@@ -110,8 +116,13 @@ post_review() { # $1=stage — verdict.md + irc.log를 PR 코멘트로
   gh pr comment "$PR" --repo "$GH_REPO" --body-file "$WORK/comment.md" >/dev/null
   gh pr edit "$PR" --repo "$GH_REPO" --add-label "grokbot:$1-done" >/dev/null 2>&1 || true
   local gl; gl="$(tr '[:upper:]' '[:lower:]' <<<"$grade")"
-  [ "$1" = "s1" ] && { gh label create "grokbot:$gl" --repo "$GH_REPO" --color 8B5CF6 >/dev/null 2>&1 || true
-    gh pr edit "$PR" --repo "$GH_REPO" --add-label "grokbot:$gl" >/dev/null 2>&1 || true; }
+  if [ "$1" = "s1" ]; then
+    for old in p0 p1 p2 p3 p4; do  # 재심사 시 이전 등급 라벨 제거 (P1·P3 동거 방지)
+      [ "$old" = "$gl" ] || gh pr edit "$PR" --repo "$GH_REPO" --remove-label "grokbot:$old" >/dev/null 2>&1 || true
+    done
+    gh label create "grokbot:$gl" --repo "$GH_REPO" --color 8B5CF6 >/dev/null 2>&1 || true
+    gh pr edit "$PR" --repo "$GH_REPO" --add-label "grokbot:$gl" >/dev/null 2>&1 || true
+  fi
   echo "$grade"
 }
 
