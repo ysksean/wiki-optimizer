@@ -56,6 +56,7 @@ def _run_job(job):
     with RUN_LOCK:
         job["status"] = "running"
         llm.BACKEND = job["backend"]
+        llm.LANGUAGE = job.get("language", "ko")
 
         def flush_result(payload):
             with open(os.path.join(job["dir"], "result.json"), "w") as f:
@@ -108,6 +109,9 @@ def start_job(params):
     backend = params.get("backend", "claude")
     if backend not in ("claude", "codex"):
         return None, f"알 수 없는 backend: {backend}"
+    language = params.get("language", "ko")
+    if language not in ("ko", "en", "zh"):
+        return None, f"알 수 없는 language: {language}"
 
     files, base_dir, doc_names = [], None, []
     if mode in ("summary", "structure"):
@@ -127,6 +131,7 @@ def start_job(params):
         "id": job_id,
         "mode": mode,
         "backend": backend,
+        "language": language,
         "files": files,
         "base_dir": base_dir,
         "strategy": (params.get("strategy") or "").strip(),

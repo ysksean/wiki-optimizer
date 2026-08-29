@@ -1,1 +1,2 @@
-// 수동 질문 세트를 여기 <docname>.json 으로 두면 자동생성 대신 사용됩니다.
+// Put a manual question set here as <docname>.json to use it instead of auto-generation.
+// Format: [{"q": "...", "a": "..."}]

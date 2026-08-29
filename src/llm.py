@@ -20,6 +20,14 @@ BACKEND = os.environ.get("LLM_BACKEND", "claude")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 CODEX_MODEL = os.environ.get("CODEX_MODEL", "")  # 비우면 codex 기본 모델
 
+# 출력 언어. 모든 프롬프트 앞에 지시문을 중앙 주입한다 (ko|en|zh).
+LANGUAGE = os.environ.get("LLM_LANG", "ko")
+_LANG_DIRECTIVES = {
+    "ko": "모든 출력(요약·질문·답변·전략)은 한국어로 작성하라. JSON 형식 지시는 그대로 따르라.",
+    "en": "Write all output (summaries, questions, answers, strategies) in English. Still follow any JSON format instructions exactly.",
+    "zh": "所有输出（摘要、问题、答案、策略）请使用中文。JSON 格式要求仍需严格遵守。",
+}
+
 
 class LLMError(RuntimeError):
     pass
@@ -41,6 +49,9 @@ def generate(
     """
     if BACKEND not in ("claude", "codex"):
         raise LLMError(f"지원하지 않는 백엔드: {BACKEND} (claude|codex)")
+    directive = _LANG_DIRECTIVES.get(LANGUAGE)
+    if directive:
+        prompt = f"[언어 지시] {directive}\n\n{prompt}"
     last_err = None
     for attempt in range(retries + 1):
         try:

@@ -11,12 +11,14 @@
   body { margin:0; background:var(--bg); color:var(--tx);
          font:14px/1.5 -apple-system, "Pretendard", "Apple SD Gothic Neo", sans-serif; }
   .wrap { max-width:980px; margin:0 auto; padding:24px 16px 80px; }
-  h1 { font-size:20px; margin:0 0 4px; }
+  .topbar { display:flex; align-items:flex-start; gap:12px; }
+  .topbar h1 { font-size:20px; margin:0 0 4px; }
+  .topbar .spacer { flex:1; }
   .sub { color:var(--dim); margin-bottom:20px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
           padding:16px; margin-bottom:14px; }
   label { color:var(--dim); font-size:12px; display:block; margin-bottom:4px; }
-  input[type=text], select, input[type=number] {
+  input[type=text], select, input[type=number], textarea {
     background:#0d0f13; color:var(--tx); border:1px solid var(--line);
     border-radius:6px; padding:7px 10px; font-size:14px; }
   input[type=text] { width:100%; }
@@ -25,6 +27,7 @@
            padding:8px 16px; font-size:14px; cursor:pointer; }
   button.ghost { background:transparent; color:var(--acc); border:1px solid var(--acc); }
   button:disabled { opacity:.45; cursor:default; }
+  .hint { cursor:help; text-decoration:underline dotted; }
   .docs { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
           gap:6px; margin-top:12px; }
   .docs label { display:flex; gap:8px; align-items:center; font-size:13px;
@@ -67,47 +70,58 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>wiki-optimizer</h1>
-  <div class="sub">wiki 폴더를 지정하고 요약(A) / 구조(B) 최적화를 돌려 결과 변화를 확인합니다</div>
+  <div class="topbar">
+    <div>
+      <h1>wiki-optimizer</h1>
+      <div class="sub" data-i18n="subtitle"></div>
+    </div>
+    <div class="spacer"></div>
+    <div><label data-i18n="language" data-i18n-title="language_tip"></label>
+      <select id="lang" onchange="setLang(this.value)">
+        <option value="ko">한국어</option>
+        <option value="en">English</option>
+        <option value="zh">中文</option>
+      </select></div>
+  </div>
 
   <div class="card">
-    <label>wiki 폴더 경로 (.md 모음 — raw/ 하위 폴더가 있으면 그쪽을 읽음)</label>
+    <label data-i18n="folder_label"></label>
     <div style="display:flex; gap:8px">
-      <input type="text" id="dir" placeholder="~/dev/llm_wiki  또는  data/raw">
-      <button class="ghost" onclick="pickDir()">📁 폴더 선택</button>
-      <button class="ghost" onclick="loadDocs()">문서 불러오기</button>
+      <input type="text" id="dir" data-i18n-placeholder="folder_ph">
+      <button class="ghost" onclick="pickDir()" data-i18n="pick_dir"></button>
+      <button class="ghost" onclick="loadDocs()" data-i18n="load_docs"></button>
     </div>
     <div id="docs" class="docs"></div>
     <div class="row">
-      <div><label>모드</label>
+      <div><label data-i18n="mode"></label>
         <select id="mode">
-          <option value="summary">A — 요약 전략 진화 (문서별)</option>
-          <option value="structure">B — 폴더 구조 진화 (선택 문서 전체)</option>
+          <option value="summary" data-i18n="mode_a"></option>
+          <option value="structure" data-i18n="mode_b"></option>
         </select></div>
-      <div><label title="요약 → 채점 → 전략 개선을 반복하는 횟수. 많을수록 좋은 전략을 찾을 기회가 늘지만 세대당 1~2분씩 더 걸림" style="cursor:help;text-decoration:underline dotted">세대 수 ⓘ</label><input type="number" id="gens" value="3" min="1" max="10" style="width:70px"></div>
-      <div><label title="채점용 시험 문제 개수. 원본에서 '실제로 물어볼 법한 질문+정답'을 이만큼 뽑아 고정하고, 요약이 몇 개를 맞히는지로 점수를 냄" style="cursor:help;text-decoration:underline dotted">질문 수 ⓘ</label><input type="number" id="nqa" value="6" min="2" max="12" style="width:70px"></div>
-      <div><label>백엔드</label>
+      <div><label class="hint" data-i18n="gens" data-i18n-title="gens_tip"></label>
+        <input type="number" id="gens" value="3" min="1" max="10" style="width:70px"></div>
+      <div><label class="hint" data-i18n="nqa" data-i18n-title="nqa_tip"></label>
+        <input type="number" id="nqa" value="6" min="2" max="12" style="width:70px"></div>
+      <div><label data-i18n="backend"></label>
         <select id="backend">
-          <option value="claude">claude (Claude Code 구독)</option>
-          <option value="codex">codex (ChatGPT 구독)</option>
+          <option value="claude" data-i18n="backend_claude"></option>
+          <option value="codex" data-i18n="backend_codex"></option>
         </select></div>
-      <button id="go" onclick="startRun()">실험 실행</button>
+      <button id="go" onclick="startRun()" data-i18n="run_exp"></button>
       <span id="msg" class="err"></span>
     </div>
   </div>
 
   <div class="card">
-    <b>내 위키 진단 · 최적화</b>
-    <div class="sub" style="margin:4px 0 0">위 폴더(raw/ + wiki/)를 기준으로 현재 요약을 채점(Before)하고,
-      best 전략으로 다시 요약해(After) 무엇이 바뀌는지 비교합니다. 원본과 기존 wiki는 수정하지 않습니다.</div>
+    <b data-i18n="wiki_title"></b>
+    <div class="sub" style="margin:4px 0 0" data-i18n="wiki_desc"></div>
     <div class="row">
-      <button onclick="startAudit()">현재 위키 진단 (Before)</button>
-      <button onclick="startApply()">최적화 생성 (After)</button>
+      <button onclick="startAudit()" data-i18n="btn_audit"></button>
+      <button onclick="startApply()" data-i18n="btn_apply"></button>
       <span id="msg2" class="err"></span>
     </div>
-    <details><summary>전략 직접 지정 (비우면 실험 결과의 best 전략 사용)</summary>
-      <textarea id="strategy" rows="3" style="width:100%;margin-top:6px;background:#0d0f13;
-        color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:8px"></textarea>
+    <details><summary data-i18n="strategy_custom"></summary>
+      <textarea id="strategy" rows="3" style="width:100%;margin-top:6px"></textarea>
     </details>
   </div>
 
@@ -118,14 +132,152 @@
 const $ = id => document.getElementById(id);
 const open_ = new Set();   // 펼쳐둔 job id
 
+// ---------- i18n ----------
+const I18N = {
+  ko: {
+    subtitle: "wiki 폴더를 지정하고 요약(A) / 구조(B) 최적화를 돌려 결과 변화를 확인합니다",
+    language: "Language", language_tip: "화면과 LLM 출력(요약·질문·답변) 언어를 함께 바꿉니다",
+    folder_label: "wiki 폴더 경로 (.md 모음 — raw/ 하위 폴더가 있으면 그쪽을 읽음)",
+    folder_ph: "~/dev/llm_wiki  또는  data/raw",
+    pick_dir: "📁 폴더 선택", load_docs: "문서 불러오기",
+    mode: "모드", mode_a: "A — 요약 전략 진화 (문서별)", mode_b: "B — 폴더 구조 진화 (선택 문서 전체)",
+    gens: "세대 수 ⓘ", gens_tip: "요약 → 채점 → 전략 개선을 반복하는 횟수. 많을수록 좋은 전략을 찾을 기회가 늘지만 세대당 1~2분씩 더 걸림",
+    nqa: "질문 수 ⓘ", nqa_tip: "채점용 시험 문제 개수. 원본에서 '실제로 물어볼 법한 질문+정답'을 이만큼 뽑아 고정하고, 요약이 몇 개를 맞히는지로 점수를 냄",
+    backend: "백엔드", backend_claude: "claude (Claude Code 구독)", backend_codex: "codex (ChatGPT 구독)",
+    run_exp: "실험 실행",
+    wiki_title: "내 위키 진단 · 최적화",
+    wiki_desc: "위 폴더(raw/ + wiki/)를 기준으로 현재 요약을 채점(Before)하고, best 전략으로 다시 요약해(After) 무엇이 바뀌는지 비교합니다. 원본과 기존 wiki는 수정하지 않습니다.",
+    btn_audit: "현재 위키 진단 (Before)", btn_apply: "최적화 생성 (After)",
+    strategy_custom: "전략 직접 지정 (비우면 실험 결과의 best 전략 사용)",
+    need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
+    no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요",
+    no_jobs: "아직 실행한 실험이 없습니다", waiting_gen: "아직 첫 세대 결과 대기 중…",
+    preparing_q: "질문 세트 준비 중…", failed: "실패",
+    mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
+    audit_title: "🩺 현재 위키 진단", scoring_docs: (d,t) => ` — ${d}/${t} 문서 채점 중…`,
+    avg_score: n => `평균 점수 (${n}개 채점)`,
+    th_doc: "문서", th_raw: "raw", th_summary: "요약", th_score: "점수 (total · acc · eff)", none: "없음",
+    apply_title: "✨ 최적화 Before → After", generating: (d,t) => ` — ${d}/${t} 생성 중…`,
+    before_avg: "Before 평균", after_avg: "After 평균",
+    used_strategy: s => `사용한 전략 (${s})`,
+    after_files: p => `After 파일: ${p}/ (원본·기존 wiki는 그대로)`,
+    diff_legend: (b,a) => `기존 요약 대비 변경 (<del>삭제</del> / <ins>추가</ins>) · ${b} → ${a}자`,
+    new_summary: "기존 요약 없음 — 신규 생성",
+    gen_progress: (d,t) => `(${d}/${t}세대)`, accuracy: "정확도", efficiency: "효율",
+    strategy_per_gen: "세대별 전략 프롬프트", th_strategy: "전략",
+    best_summary: "best 요약 보기", len_vs_raw: "원본 대비 길이",
+    structure_title: d => `🗂 구조 진화 — ${d}`,
+    files_per_gen: "세대별 파일 구성", th_files: "파일",
+    routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
+  },
+  en: {
+    subtitle: "Point at a wiki folder, run summary (A) / structure (B) optimization, and watch results evolve",
+    language: "Language", language_tip: "Switches both the UI and LLM outputs (summaries, questions, answers)",
+    folder_label: "Wiki folder path (.md files — raw/ subfolder is used if present)",
+    folder_ph: "~/dev/llm_wiki  or  data/raw",
+    pick_dir: "📁 Choose folder", load_docs: "Load documents",
+    mode: "Mode", mode_a: "A — evolve summary strategy (per document)", mode_b: "B — evolve folder structure (all selected)",
+    gens: "Generations ⓘ", gens_tip: "How many summarize → score → improve iterations to run. More generations mean more chances to find a good strategy, but each adds 1–2 min per document",
+    nqa: "Questions ⓘ", nqa_tip: "Number of exam questions. Realistic Q&A pairs are extracted from the raw source and fixed; the summary is scored by how many it answers correctly",
+    backend: "Backend", backend_claude: "claude (Claude Code subscription)", backend_codex: "codex (ChatGPT subscription)",
+    run_exp: "Run experiment",
+    wiki_title: "Audit & optimize my wiki",
+    wiki_desc: "Scores your current summaries (Before) against the folder above (raw/ + wiki/), then re-summarizes with the best strategy (After) so you can compare. Originals and existing wiki files are never modified.",
+    btn_audit: "Audit current wiki (Before)", btn_apply: "Generate optimized (After)",
+    strategy_custom: "Custom strategy (leave empty to use the best strategy from experiments)",
+    need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
+    no_md: "No md files found", need_docs: "Select at least one document",
+    no_jobs: "No experiments yet", waiting_gen: "Waiting for the first generation…",
+    preparing_q: "Preparing question set…", failed: "Failed",
+    mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
+    audit_title: "🩺 Current wiki audit", scoring_docs: (d,t) => ` — scoring ${d}/${t} documents…`,
+    avg_score: n => `average score (${n} scored)`,
+    th_doc: "document", th_raw: "raw", th_summary: "summary", th_score: "score (total · acc · eff)", none: "none",
+    apply_title: "✨ Optimization Before → After", generating: (d,t) => ` — generating ${d}/${t}…`,
+    before_avg: "Before avg", after_avg: "After avg",
+    used_strategy: s => `strategy used (${s})`,
+    after_files: p => `After files: ${p}/ (originals & existing wiki untouched)`,
+    diff_legend: (b,a) => `changes vs existing summary (<del>removed</del> / <ins>added</ins>) · ${b} → ${a} chars`,
+    new_summary: "no existing summary — newly generated",
+    gen_progress: (d,t) => `(gen ${d}/${t})`, accuracy: "accuracy", efficiency: "efficiency",
+    strategy_per_gen: "strategy prompt per generation", th_strategy: "strategy",
+    best_summary: "view best summary", len_vs_raw: "length vs raw",
+    structure_title: d => `🗂 Structure evolution — ${d}`,
+    files_per_gen: "files per generation", th_files: "files",
+    routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
+  },
+  zh: {
+    subtitle: "指定 wiki 文件夹，运行摘要（A）/ 结构（B）优化，查看结果如何演化",
+    language: "Language", language_tip: "同时切换界面语言和 LLM 输出（摘要、问题、答案）",
+    folder_label: "wiki 文件夹路径（.md 文件 — 如有 raw/ 子文件夹则读取该目录）",
+    folder_ph: "~/dev/llm_wiki  或  data/raw",
+    pick_dir: "📁 选择文件夹", load_docs: "加载文档",
+    mode: "模式", mode_a: "A — 摘要策略进化（按文档）", mode_b: "B — 文件夹结构进化（所选全部文档）",
+    gens: "代数 ⓘ", gens_tip: "摘要 → 评分 → 策略改进的迭代次数。代数越多，找到好策略的机会越大，但每代每篇文档多花 1–2 分钟",
+    nqa: "问题数 ⓘ", nqa_tip: "评分用试题数量。从原文中提取'实际会问的问题+答案'并固定，按摘要能答对多少题来打分",
+    backend: "后端", backend_claude: "claude（Claude Code 订阅）", backend_codex: "codex（ChatGPT 订阅）",
+    run_exp: "运行实验",
+    wiki_title: "诊断并优化我的 wiki",
+    wiki_desc: "以上方文件夹（raw/ + wiki/）为基准给当前摘要评分（Before），再用最佳策略重新摘要（After）进行对比。原文和现有 wiki 文件不会被修改。",
+    btn_audit: "诊断当前 wiki（Before）", btn_apply: "生成优化版（After）",
+    strategy_custom: "自定义策略（留空则使用实验得出的最佳策略）",
+    need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
+    no_md: "未找到 md 文件", need_docs: "请至少选择一个文档",
+    no_jobs: "还没有运行过实验", waiting_gen: "等待第一代结果…",
+    preparing_q: "正在准备问题集…", failed: "失败",
+    mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
+    audit_title: "🩺 当前 wiki 诊断", scoring_docs: (d,t) => ` — 正在评分 ${d}/${t} 篇文档…`,
+    avg_score: n => `平均分（已评 ${n} 篇）`,
+    th_doc: "文档", th_raw: "raw", th_summary: "摘要", th_score: "分数 (total · acc · eff)", none: "无",
+    apply_title: "✨ 优化 Before → After", generating: (d,t) => ` — 正在生成 ${d}/${t}…`,
+    before_avg: "Before 平均", after_avg: "After 平均",
+    used_strategy: s => `所用策略（${s}）`,
+    after_files: p => `After 文件：${p}/（原文与现有 wiki 保持不变）`,
+    diff_legend: (b,a) => `相对现有摘要的变化（<del>删除</del> / <ins>新增</ins>）· ${b} → ${a} 字`,
+    new_summary: "无现有摘要 — 新生成",
+    gen_progress: (d,t) => `（第 ${d}/${t} 代）`, accuracy: "准确率", efficiency: "效率",
+    strategy_per_gen: "各代策略提示词", th_strategy: "策略",
+    best_summary: "查看最佳摘要", len_vs_raw: "相对原文长度",
+    structure_title: d => `🗂 结构进化 — ${d}`,
+    files_per_gen: "各代文件构成", th_files: "文件",
+    routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
+  },
+};
+
+let LANG = "ko";
+try { LANG = localStorage.getItem("wikiopt_lang") || "ko"; } catch (e) {}
+if (!I18N[LANG]) LANG = "ko";
+
+function t(key, ...args) {
+  const v = (I18N[LANG] || I18N.ko)[key] ?? I18N.ko[key] ?? key;
+  return typeof v === "function" ? v(...args) : v;
+}
+
+function applyLang() {
+  document.documentElement.lang = LANG;
+  $("lang").value = LANG;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+}
+
+function setLang(lang) {
+  LANG = I18N[lang] ? lang : "ko";
+  try { localStorage.setItem("wikiopt_lang", LANG); } catch (e) {}
+  applyLang();
+  lastHtml = "";   // job 카드도 새 언어로 다시 그린다
+  poll();
+}
+
+// ---------- 데이터 로드/실행 ----------
 async function loadDocs() {
   $("msg").textContent = "";
   const dir = $("dir").value.trim();
-  if (!dir) { $("msg").textContent = "폴더 경로를 입력하세요"; return; }
+  if (!dir) { $("msg").textContent = t("need_dir"); return; }
   const r = await fetch(`/api/docs?dir=${encodeURIComponent(dir)}`);
   const j = await r.json();
   if (j.error) { $("msg").textContent = j.error; return; }
-  if (!j.docs.length) { $("msg").textContent = "md 파일이 없습니다"; return; }
+  if (!j.docs.length) { $("msg").textContent = t("no_md"); return; }
   $("docs").innerHTML = j.docs.map(d => `
     <label><input type="checkbox" value="${d.path}">${d.name}
       <span class="sz">${(d.size/1000).toFixed(1)}k</span></label>`).join("");
@@ -153,17 +305,36 @@ async function startJobRequest(body, msgEl) {
 
 function startAudit() {
   const dir = $("dir").value.trim();
-  if (!dir) { $("msg2").textContent = "위에서 폴더를 먼저 지정하세요"; return; }
-  startJobRequest({ mode:"audit", dir, n_qa:6, backend:$("backend").value }, "msg2");
+  if (!dir) { $("msg2").textContent = t("need_dir_first"); return; }
+  startJobRequest({ mode:"audit", dir, n_qa:6, backend:$("backend").value,
+    language:LANG }, "msg2");
 }
 
 function startApply() {
   const dir = $("dir").value.trim();
-  if (!dir) { $("msg2").textContent = "위에서 폴더를 먼저 지정하세요"; return; }
+  if (!dir) { $("msg2").textContent = t("need_dir_first"); return; }
   startJobRequest({ mode:"apply", dir, n_qa:6, backend:$("backend").value,
-    strategy: $("strategy").value.trim() }, "msg2");
+    language:LANG, strategy: $("strategy").value.trim() }, "msg2");
 }
 
+async function startRun() {
+  $("msg").textContent = "";
+  const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
+  if (!files.length) { $("msg").textContent = t("need_docs"); return; }
+  $("go").disabled = true;
+  const r = await fetch("/api/runs", { method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ files, mode: $("mode").value,
+      generations: +$("gens").value, n_qa: +$("nqa").value,
+      backend: $("backend").value, language: LANG }) });
+  const j = await r.json();
+  $("go").disabled = false;
+  if (j.error) { $("msg").textContent = j.error; return; }
+  open_.add(j.id);
+  poll();
+}
+
+// ---------- 뷰 ----------
 // 단어 단위 unified diff (LCS). 너무 길면 하이라이트 생략.
 function wordDiff(a, b) {
   const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
@@ -190,69 +361,50 @@ function fmtScore(s) {
 }
 
 function auditView(res, status) {
-  const prog = res.done < res.total ? ` — ${res.done}/${res.total} 문서 채점 중…` : "";
-  let html = `<div class="runbox"><h3>🩺 현재 위키 진단${prog}</h3>`;
+  const prog = res.done < res.total ? t("scoring_docs", res.done, res.total) : "";
+  let html = `<div class="runbox"><h3>${t("audit_title")}${prog}</h3>`;
   if (res.avg_total != null)
-    html += `<div class="kpis"><div class="kpi"><b>${res.avg_total}</b><span>평균 점수 (${res.n_scored}개 채점)</span></div></div>`;
-  html += `<table><tr><th>문서</th><th>raw</th><th>요약</th><th>점수 (total · acc · eff)</th></tr>` +
+    html += `<div class="kpis"><div class="kpi"><b>${res.avg_total}</b><span>${t("avg_score", res.n_scored)}</span></div></div>`;
+  html += `<table><tr><th>${t("th_doc")}</th><th>${t("th_raw")}</th><th>${t("th_summary")}</th><th>${t("th_score")}</th></tr>` +
     (res.docs||[]).map(d => `<tr><td>${esc(d.name)}</td>
       <td>${(d.raw_chars/1000).toFixed(1)}k</td>
-      <td>${d.has_summary ? `${((d.wiki_chars||0)/1000).toFixed(1)}k` : '<span class="err">없음</span>'}</td>
+      <td>${d.has_summary ? `${((d.wiki_chars||0)/1000).toFixed(1)}k` : `<span class="err">${t("none")}</span>`}</td>
       <td>${fmtScore(d.score)}</td></tr>`).join("") + "</table></div>";
   return html;
 }
 
 function applyView(res, status) {
-  const prog = res.done < res.total || status === "running" ? ` — ${res.done||0}/${res.total||"?"} 생성 중…` : "";
-  let html = `<div class="runbox"><h3>✨ 최적화 Before → After${prog}</h3>`;
+  const prog = res.done < res.total || status === "running" ? t("generating", res.done||0, res.total||"?") : "";
+  let html = `<div class="runbox"><h3>${t("apply_title")}${prog}</h3>`;
   if (res.avg_after != null) {
     const b = res.avg_before, a = res.avg_after;
     const dir_ = b == null ? "" : a > b ? "up" : a < b ? "down" : "";
     html += `<div class="kpis">
-      <div class="kpi"><b>${b ?? "-"}</b><span>Before 평균</span></div>
-      <div class="kpi"><b class="${dir_}">${a}</b><span>After 평균</span></div></div>`;
+      <div class="kpi"><b>${b ?? "-"}</b><span>${t("before_avg")}</span></div>
+      <div class="kpi"><b class="${dir_}">${a}</b><span>${t("after_avg")}</span></div></div>`;
   }
   if (res.strategy)
-    html += `<details><summary>사용한 전략 (${esc(res.strategy_source||"")})</summary>
+    html += `<details><summary>${t("used_strategy", esc(res.strategy_source||""))}</summary>
       <pre>${esc(res.strategy)}</pre></details>`;
   if (res.out_dir)
-    html += `<div style="color:var(--dim);font-size:12px;margin-top:6px">After 파일: ${esc(res.out_dir)}/ (원본·기존 wiki는 그대로)</div>`;
+    html += `<div style="color:var(--dim);font-size:12px;margin-top:6px">${t("after_files", esc(res.out_dir))}</div>`;
   html += (res.docs||[]).map(d => {
     const bs = d.before?.score, as_ = d.after?.score;
     const head = `${esc(d.name)} &nbsp; ${fmtScore(bs)}<span class="arrow">→</span>${fmtScore(as_)}`;
     let body = "";
     if (d.before?.content && d.after?.content)
       body = `<div style="color:var(--dim);font-size:11px;margin:6px 0 4px">
-          기존 요약 대비 변경 (<del>삭제</del> / <ins>추가</ins>) ·
-          ${d.before.content.length} → ${d.after.content.length}자</div>` +
+          ${t("diff_legend", d.before.content.length, d.after.content.length)}</div>` +
         wordDiff(d.before.content, d.after.content);
     else if (d.after?.content)
-      body = `<div style="color:var(--dim);font-size:11px;margin:6px 0 4px">기존 요약 없음 — 신규 생성</div>
+      body = `<div style="color:var(--dim);font-size:11px;margin:6px 0 4px">${t("new_summary")}</div>
         <pre>${esc(d.after.content)}</pre>`;
     return `<details><summary>${head}</summary>${body}</details>`;
   }).join("");
   return html + "</div>";
 }
 
-async function startRun() {
-  $("msg").textContent = "";
-  const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
-  if (!files.length) { $("msg").textContent = "문서를 하나 이상 선택하세요"; return; }
-  $("go").disabled = true;
-  const r = await fetch("/api/runs", { method:"POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ files, mode: $("mode").value,
-      generations: +$("gens").value, n_qa: +$("nqa").value,
-      backend: $("backend").value }) });
-  const j = await r.json();
-  $("go").disabled = false;
-  if (j.error) { $("msg").textContent = j.error; return; }
-  open_.add(j.id);
-  poll();
-}
-
 function chart(hist, key) {
-  // 세대별 total 라인 차트 (held-out + train)
   const W = 320, H = 110, P = 24;
   const xs = hist.map(h => h.generation);
   const line = (get, color) => {
@@ -287,15 +439,15 @@ function summaryRun(run) {
   if (!p) return "";
   const best = p.history[p.best_gen >= 0 ? p.best_gen : 0] || {};
   let html = `<div class="runbox"><h3>📄 ${p.doc}
-      <span style="color:var(--dim);font-weight:400">(${p.done_generations}/${p.generations}세대)</span></h3>
+      <span style="color:var(--dim);font-weight:400">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
     <div class="kpis">
       <div class="kpi"><b>${p.best_total}</b><span>best (gen ${p.best_gen})</span></div>
-      <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>정확도</span></div>
-      <div class="kpi"><b>${(best.score||{}).efficiency ?? "-"}</b><span>효율</span></div>
+      <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>${t("accuracy")}</span></div>
+      <div class="kpi"><b>${(best.score||{}).efficiency ?? "-"}</b><span>${t("efficiency")}</span></div>
     </div>
     ${chart(p.history, "train_score")}
-    <details><summary>세대별 전략 프롬프트</summary><table>
-      <tr><th>gen</th><th>held-out</th><th>ratio</th><th>전략</th></tr>
+    <details><summary>${t("strategy_per_gen")}</summary><table>
+      <tr><th>gen</th><th>held-out</th><th>ratio</th><th>${t("th_strategy")}</th></tr>
       ${p.history.map(h => `<tr ${h.generation===p.best_gen?'style="background:#15301f22"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
         <td>${h.score.total}</td><td>${h.score.length_ratio}</td>
@@ -303,8 +455,8 @@ function summaryRun(run) {
     </table></details>`;
   if (rep && rep.best && rep.best.summary) {
     const ratio = (rep.history[rep.best.generation]||{}).score?.length_ratio;
-    html += `<details><summary>best 요약 보기</summary>
-      <div style="margin:6px 0">원본 대비 길이
+    html += `<details><summary>${t("best_summary")}</summary>
+      <div style="margin:6px 0">${t("len_vs_raw")}
         <span class="lenbar"><i style="width:${Math.min(100,(ratio||0)*100)}%"></i></span>
         ${ratio!=null ? (ratio*100).toFixed(0)+"%" : ""}</div>
       <pre>${esc(rep.best.summary)}</pre></details>`;
@@ -315,12 +467,12 @@ function summaryRun(run) {
 function structureRun(run) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
-  let html = `<div class="runbox"><h3>🗂 구조 진화 — ${p.docs.join(", ")}
-      <span style="color:var(--dim);font-weight:400">(${p.done_generations}/${p.generations}세대)</span></h3>
+  let html = `<div class="runbox"><h3>${t("structure_title", p.docs.map(esc).join(", "))}
+      <span style="color:var(--dim);font-weight:400">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
     <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>best (gen ${p.best_gen})</span></div></div>
     ${chart(p.history, "")}
-    <details><summary>세대별 파일 구성</summary><table>
-      <tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>파일</th></tr>
+    <details><summary>${t("files_per_gen")}</summary><table>
+      <tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>${t("th_files")}</th></tr>
       ${p.history.map(h => `<tr ${h.generation===p.best_gen?'style="background:#15301f22"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
         <td>${h.score.total}</td><td>${h.score.accuracy}</td><td>${h.score.efficiency}</td>
@@ -328,8 +480,8 @@ function structureRun(run) {
     </table></details>`;
   const det = rep?.best?.result?.details;
   if (det) {
-    html += `<details><summary>best 구조의 질문별 라우팅</summary><table>
-      <tr><th>질문</th><th>읽은 파일</th><th>글자</th><th>정답</th></tr>
+    html += `<details><summary>${t("routing")}</summary><table>
+      <tr><th>${t("th_q")}</th><th>${t("th_picked")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>
       ${det.map(d => `<tr><td>${esc(d.q)}</td><td>${(d.picked||[]).map(esc).join(", ")}</td>
         <td>${d.read_chars}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join("")}
     </table></details>`;
@@ -349,22 +501,21 @@ async function renderJob(j) {
     const d = await r.json();
     if (d.error && !d.result && !d.runs?.length) inner = `<div class="err">${esc(d.error)}</div>`;
     else {
-      if (d.status === "error") inner += `<div class="err runbox">실패: ${esc(d.error)}</div>`;
+      if (d.status === "error") inner += `<div class="err runbox">${t("failed")}: ${esc(d.error)}</div>`;
       if (j.mode === "audit" || j.mode === "apply") {
         inner += d.result
           ? (j.mode === "audit" ? auditView(d.result, d.status) : applyView(d.result, d.status))
-          : `<div class="runbox" style="color:var(--dim)">질문 세트 준비 중…</div>`;
+          : `<div class="runbox" style="color:var(--dim)">${t("preparing_q")}</div>`;
       } else {
         inner += d.runs.map(run =>
           (run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
-          || `<div class="runbox" style="color:var(--dim)">아직 첫 세대 결과 대기 중…</div>`;
+          || `<div class="runbox" style="color:var(--dim)">${t("waiting_gen")}</div>`;
       }
     }
   }
-  const MODE_LABEL = { summary:"A 요약", structure:"B 구조", audit:"진단", apply:"최적화" };
   return `<div class="card">
     <div class="job-head" onclick="toggle('${j.id}')">
-      ${badge} <b>${MODE_LABEL[j.mode] || j.mode}</b>
+      ${badge} <b>${t("mode_" + j.mode)}</b>
       <span>${j.doc_names.map(esc).join(", ")}</span>
       <span class="meta">${j.backend} · gen ${j.generations} · ${when}</span>
     </div>${inner}</div>`;
@@ -379,7 +530,7 @@ async function poll() {
   const { jobs } = await r.json();
   const parts = await Promise.all(jobs.map(renderJob));
   const html = parts.join("") ||
-    `<div class="card" style="color:var(--dim)">아직 실행한 실험이 없습니다</div>`;
+    `<div class="card" style="color:var(--dim)">${t("no_jobs")}</div>`;
   // 내용이 같으면 다시 그리지 않는다 (펼쳐둔 details 유지)
   if (html !== lastHtml) { $("jobs").innerHTML = html; lastHtml = html; }
   if (jobs.some(j => j.status === "running" || j.status === "queued"))
@@ -387,6 +538,8 @@ async function poll() {
   else
     timer = setTimeout(poll, 10000);
 }
+
+applyLang();
 poll();
 </script>
 </body>
