@@ -74,6 +74,25 @@ python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
   - `codex`: Codex CLI. Override the model with `CODEX_MODEL`
     (defaults to your codex config)
 
+## Development / Tests
+
+Runtime needs nothing installed, but the checks do. Install the two tools once:
+
+```bash
+pip install ruff pytest
+```
+
+Then run exactly what CI runs (`.github/workflows/ci.yml`, Python 3.12):
+
+```bash
+ruff check --select E9,F src tests   # lint — syntax errors + pyflakes only
+python -m py_compile src/*.py        # compile every module
+pytest tests -q                      # unit tests (pure logic, no LLM calls)
+```
+
+Tests live in `tests/` (`conftest.py` puts `src/` on `sys.path`, so no package
+install is needed). None of them call `claude` / `codex` — they run offline.
+
 ## Layout
 
 ```
