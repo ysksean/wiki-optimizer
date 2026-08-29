@@ -147,6 +147,14 @@ def test_history_block_warns_runaway_ratio(tmp_path, monkeypatch):
     assert evolve._history_block("unknown-doc") == ""
 
 
+def test_nohist_arm_does_not_pollute_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path))
+    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "strategy-impact.jsonl"))
+    evolve.record_strategy_impact("doc", "evolve-nohist", 0, "s-nohist", _fake_result(0.5, 0.5), True)
+    accepted, rejected = evolve.load_strategy_history("doc")
+    assert accepted == [] and rejected == []  # nohist 기록은 이력 조회에서 제외
+
+
 def test_reflect_prompt_includes_history(tmp_path, monkeypatch):
     monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path))
     monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "strategy-impact.jsonl"))
