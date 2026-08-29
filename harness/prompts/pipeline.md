@@ -34,6 +34,8 @@
 
 2단계에서 지시된 그 이슈 1건을 끝까지 처리한다.
 
+**재작업 분기**: 이슈 코멘트에 "🧿 Grokbot 재작업 지시"가 있고 열린 PR이 연결돼 있으면, 새 worktree/브랜치를 만들지 말고 — 기존 PR 브랜치를 worktree로 체크아웃해서 PR의 Grokbot 리뷰 코멘트가 지적한 것만 고쳐라. 수정 push 후 `gh pr edit <PR> --remove-label grokbot:s1-done --remove-label needs-changes`로 라벨을 떼서 Grokbot이 재심사하게 하고, 리포트 코멘트를 남기고 상태를 In Review로. (아래 1~6단계 중 worktree 생성·PR 생성만 건너뛰고 나머지 규칙은 동일.)
+
 1. 작업 공간 준비 (현재 cwd는 wiki-optimizer repo다):
    - `git worktree add ../wo-<이슈식별자-소문자> -b sea/<이슈식별자-소문자> origin/master` (origin/master가 없으면 master)
    - 이후 모든 작업은 그 worktree 디렉터리에서 한다.

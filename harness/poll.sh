@@ -26,28 +26,32 @@ trap 'rmdir "$LOCK_DIR"' EXIT
 # ── 게이트: GraphQL로 처리 대상 유무만 확인 ──────────────────────────
 QUERY='{"query":"{ issues(filter: { team: { key: { eq: \"'"$TEAM_KEY"'\" } }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }, first: 50) { nodes { identifier title priority labels { nodes { name } } } } }"}'
 
+# Linear 불통이어도 리뷰 단계(GitHub 기반)는 독립적으로 돌아야 한다 — 이슈 파이프라인만 건너뛴다
 RESP="$(curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
   -H "Content-Type: application/json" \
   -H "Authorization: $(cat "$KEY_FILE")" \
-  -d "$QUERY")" || { log "linear api unreachable"; exit 1; }
+  -d "$QUERY")" || { log "linear api unreachable — 이슈 파이프라인 건너뜀"; RESP=""; }
 
-TRIAGE_COUNT="$(jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | any(. == "triaged" or . == "needs-info")) | not)] | length' <<<"$RESP")"
-EXEC_COUNT="$(jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | index("triaged")) != null and .priority > 0)] | length' <<<"$RESP")"
+TRIAGE_COUNT=0; EXEC_COUNT=0
+if [ -n "$RESP" ]; then
+  TRIAGE_COUNT="$(jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | any(. == "triaged" or . == "needs-info")) | not)] | length' <<<"$RESP")"
+  EXEC_COUNT="$(jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | index("triaged")) != null and .priority > 0)] | length' <<<"$RESP")"
+fi
 
 if [ "$TRIAGE_COUNT" -eq 0 ] && [ "$EXEC_COUNT" -eq 0 ]; then
   log "quiet tick — triage:0 exec:0 (no LLM call)"
-  exit 0
+else
+  log "dispatch — triage:$TRIAGE_COUNT exec:$EXEC_COUNT"
+  # ── 디스패치: claude headless 1회 호출로 Triage → PM → Executor ─────
+  RUN_LOG="$LOG_DIR/run-$(date +%Y%m%d-%H%M%S).log"
+  cd "$REPO"
+  claude -p "$(cat "$REPO/harness/prompts/pipeline.md")" \
+    --allowedTools "mcp__linear-personal,Read,Glob,Grep,Edit,Write,TodoWrite,Bash(git:*),Bash(gh:*),Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(printf:*),Bash(uv:*),Bash(pnpm:*),Bash(python:*),Bash(python3:*),Bash(pytest:*)" \
+    --permission-mode acceptEdits \
+    --max-turns "$MAX_TURNS" \
+    >> "$RUN_LOG" 2>&1 || log "claude run exited non-zero (see $RUN_LOG)"
+  log "tick done — $RUN_LOG"
 fi
 
-log "dispatch — triage:$TRIAGE_COUNT exec:$EXEC_COUNT"
-
-# ── 디스패치: claude headless 1회 호출로 Triage → PM → Executor ─────
-RUN_LOG="$LOG_DIR/run-$(date +%Y%m%d-%H%M%S).log"
-cd "$REPO"
-claude -p "$(cat "$REPO/harness/prompts/pipeline.md")" \
-  --allowedTools "mcp__linear-personal,Read,Glob,Grep,Edit,Write,TodoWrite,Bash(git:*),Bash(gh:*),Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(printf:*),Bash(uv:*),Bash(pnpm:*),Bash(python:*),Bash(python3:*),Bash(pytest:*)" \
-  --permission-mode acceptEdits \
-  --max-turns "$MAX_TURNS" \
-  >> "$RUN_LOG" 2>&1 || log "claude run exited non-zero (see $RUN_LOG)"
-
-log "tick done — $RUN_LOG"
+# ── Grokbot/Hermes 리뷰 단계 (자체 게이트 내장 — 후보 PR 없으면 즉시 종료) ──
+bash "$REPO/harness/review.sh" || log "review.sh exited non-zero"
