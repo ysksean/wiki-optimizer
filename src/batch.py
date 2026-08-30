@@ -65,61 +65,78 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
     t_batch = time.time()
 
     print(f"[batch] 문서 {len(files)}개 x run {runs} x arm {arms} x gen {generations} = {total} runs")
-    for f in files:
-        doc = os.path.splitext(os.path.basename(f))[0]
-        size = os.path.getsize(f)
-        # 질문 세트는 문서당 1회 생성해 모든 arm/run이 공유 (공정 비교)
-        raw_text = open(f).read()
-        question_set = evolve.load_question_set(f, raw_text, n_qa)
-        if not question_set:
-            print(f"[batch] {doc}: 질문 세트 실패, 건너뜀")
-            done += runs * len(arms)
-            continue
-
-        for r in range(runs):
-            for arm in arms:
-                done += 1
-                print(f"\n[batch {done}/{total}] {doc} (size={size}) run={r} arm={arm}")
-                t = time.time()
-                try:
-                    report = evolve.evolve(
-                        f, generations=generations, n_qa=n_qa, out_dir=batch_dir,
-                        no_evolve=(arm == "control"), question_set=question_set,
-                        use_history=(arm != "evolve-nohist"),
-                    )
-                except Exception as e:  # 한 run 실패해도 배치는 계속
-                    print(f"[batch] run 실패: {e}")
-                    continue
-                dt = time.time() - t
-                if not report:
-                    continue
-
-                hist = report["history"]
-                gen0 = hist[0]["score"]["total"]
-                best = report["best"]["total"]
-                rec = {
-                    "doc": doc,
-                    "size": size,
-                    "run": r,
-                    "arm": arm,
-                    "gen0_total": gen0,
-                    "best_total": best,
-                    "best_gen": report["best"]["generation"],
-                    "improvement": round(best - gen0, 3),
-                    "improved": best > gen0,
-                    "gen0_acc": hist[0]["score"]["accuracy"],
-                    "best_acc": hist[report["best"]["generation"]]["score"]["accuracy"],
-                    "elapsed_sec": round(dt, 1),
-                }
-                records.append(rec)
-                # 크래시 대비 중간저장
-                with open(state_path, "w") as sf:
-                    json.dump(records, sf, ensure_ascii=False, indent=2)
-                print(f"[batch] gen0={gen0} best={best} improvement={rec['improvement']} ({dt:.0f}s)")
-
-    batch_elapsed = time.time() - t_batch
-    aggregate(records, batch_dir, generations, runs, batch_elapsed)
+    try:
+        for f in files:
+            done = _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path,
+                            records, done, total)
+    finally:
+        # 어떤 이유로 중단돼도(예외, Ctrl-C) 지금까지의 records로 집계는 남긴다
+        batch_elapsed = time.time() - t_batch
+        aggregate(records, batch_dir, generations, runs, batch_elapsed)
     return records, batch_dir
+
+
+def _prepare_question_set(f, n_qa):
+    """문서 읽기 + 질문 세트 확보. 실패(예외/빈 결과)는 None으로 돌려 배치를 살린다."""
+    try:
+        raw_text = open(f).read()
+        return evolve.load_question_set(f, raw_text, n_qa) or None
+    except Exception as e:  # LLMError, 타임아웃, 인코딩 오류 등 — 문서 1개 때문에 배치를 죽이지 않는다
+        print(f"[batch] 질문 세트 생성 중 예외: {e}")
+        return None
+
+
+def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, done, total):
+    """문서 하나에 대해 run x arm을 돌리고 갱신된 done 카운트를 돌려준다."""
+    doc = os.path.splitext(os.path.basename(f))[0]
+    size = os.path.getsize(f)
+    # 질문 세트는 문서당 1회 생성해 모든 arm/run이 공유 (공정 비교)
+    question_set = _prepare_question_set(f, n_qa)
+    if not question_set:
+        print(f"[batch] {doc}: 질문 세트 실패, 건너뜀")
+        return done + runs * len(arms)
+
+    for r in range(runs):
+        for arm in arms:
+            done += 1
+            print(f"\n[batch {done}/{total}] {doc} (size={size}) run={r} arm={arm}")
+            t = time.time()
+            try:
+                report = evolve.evolve(
+                    f, generations=generations, n_qa=n_qa, out_dir=batch_dir,
+                    no_evolve=(arm == "control"), question_set=question_set,
+                    use_history=(arm != "evolve-nohist"),
+                )
+            except Exception as e:  # 한 run 실패해도 배치는 계속
+                print(f"[batch] run 실패: {e}")
+                continue
+            dt = time.time() - t
+            if not report:
+                continue
+
+            hist = report["history"]
+            gen0 = hist[0]["score"]["total"]
+            best = report["best"]["total"]
+            rec = {
+                "doc": doc,
+                "size": size,
+                "run": r,
+                "arm": arm,
+                "gen0_total": gen0,
+                "best_total": best,
+                "best_gen": report["best"]["generation"],
+                "improvement": round(best - gen0, 3),
+                "improved": best > gen0,
+                "gen0_acc": hist[0]["score"]["accuracy"],
+                "best_acc": hist[report["best"]["generation"]]["score"]["accuracy"],
+                "elapsed_sec": round(dt, 1),
+            }
+            records.append(rec)
+            # 크래시 대비 중간저장
+            with open(state_path, "w") as sf:
+                json.dump(records, sf, ensure_ascii=False, indent=2)
+            print(f"[batch] gen0={gen0} best={best} improvement={rec['improvement']} ({dt:.0f}s)")
+    return done
 
 
 def _arm_stats(rs):
