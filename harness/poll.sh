@@ -4,6 +4,8 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib.sh
+source "$REPO/harness/lib.sh"
 KEY_FILE="${LINEAR_API_KEY_FILE:-$HOME/.config/linear/api_key}"
 LOG_DIR="${LINEAR_HARNESS_LOG_DIR:-$HOME/.local/state/linear-harness}"
 LOCK_DIR="${TMPDIR:-/tmp}/linear-harness.lock"
@@ -34,8 +36,8 @@ RESP="$(curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
 
 TRIAGE_COUNT=0; EXEC_COUNT=0
 if [ -n "$RESP" ]; then
-  TRIAGE_COUNT="$(jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | any(. == "triaged" or . == "needs-info")) | not)] | length' <<<"$RESP")"
-  EXEC_COUNT="$(jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | index("triaged")) != null and .priority > 0)] | length' <<<"$RESP")"
+  TRIAGE_COUNT="$(gate_triage_count "$RESP")"
+  EXEC_COUNT="$(gate_exec_count "$RESP")"
 fi
 
 if [ "$TRIAGE_COUNT" -eq 0 ] && [ "$EXEC_COUNT" -eq 0 ]; then

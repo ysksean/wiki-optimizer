@@ -5,6 +5,8 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib.sh
+source "$REPO/harness/lib.sh"
 GH_REPO="ysksean/wiki-optimizer"
 TEAM_KEY="SEA"
 KEY_FILE="${LINEAR_API_KEY_FILE:-$HOME/.config/linear/api_key}"
@@ -20,11 +22,11 @@ now() { date '+%H:%M'; }
 # ── 게이트 (LLM 호출 없음) ──────────────────────────────────────────
 PRS="$(gh pr list --repo "$GH_REPO" --state open --json number,labels,title)"
 
-S1_PR="$(jq -r '[.[] | select([.labels[].name] | any(startswith("grokbot:s1")) | not)][0].number // empty' <<<"$PRS")"
+S1_PR="$(s1_candidate "$PRS")"
 
 # S2 자격: s1-done이고, s2 이력·needs-changes·P0/P1 판정이 없어야 한다 (P1 상태로 /stage2 치는 구멍 차단)
 S2_PR=""
-for n in $(jq -r '.[] | select(([.labels[].name] | index("grokbot:s1-done")) and (([.labels[].name] | any(startswith("grokbot:s2") or . == "needs-changes" or . == "grokbot:p0" or . == "grokbot:p1")) | not)) | .number' <<<"$PRS"); do
+for n in $(s2_eligible "$PRS"); do
   if gh pr view "$n" --repo "$GH_REPO" --json comments -q '.comments[].body' | grep -q '^/stage2'; then
     S2_PR="$n"; break
   fi
@@ -84,7 +86,7 @@ fail_label() { # $1=pr $2=stage — 실패 시 라벨 박아 재시도 폭주 �
 
 linear_issue_id() { # PR 제목/본문에서 SEA-N 찾아 UUID 반환 (없으면 빈값)
   local ident num
-  ident="$(jq -r '.title + " " + (.body // "")' "$WORK/meta.json" | grep -oE "${TEAM_KEY}-[0-9]+" | head -1)" || true
+  ident="$(extract_issue_ident "$TEAM_KEY" "$(jq -r '.title + " " + (.body // "")' "$WORK/meta.json")")"
   [ -z "$ident" ] && return 0
   num="${ident#${TEAM_KEY}-}"
   curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
@@ -105,7 +107,7 @@ linear_rollback() { # $1=issue-uuid $2=코멘트 본문 — 이슈를 Todo로 �
 post_review() { # $1=stage — verdict.md + irc.log를 PR 코멘트로
   # GRADE 줄은 위치와 무관하게 찾는다 — LLM이 서두를 붙여도 파싱되게 (2026-08-29 PR#12 실패 교훈)
   local grade
-  grade="$(grep -oE '^GRADE: P[0-4]' "$WORK/verdict.md" | head -1 | grep -oE 'P[0-4]')" || true
+  grade="$(parse_grade "$WORK/verdict.md")"
   [ -z "$grade" ] && return 1
   if [ "$1" = "s1" ]; then irc "grokbot" "판정: $grade. 끝."; else irc "grokbot" "Stage 2 판정: $grade. 머지는 사람이 눌러라."; fi
   {
