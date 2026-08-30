@@ -93,6 +93,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     best = {"total": -1.0, "generation": -1, "strategy": None, "struct": None,
             "result": None}
     history = []
+    parse_failed_gens = []
 
     for g in range(generations):
         t = time.time()
@@ -100,8 +101,12 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         result = structure.score_structure(struct, question_set, total_raw)
         dt = time.time() - t
 
-        improved = result["total"] > best["total"]
-        marker = "  <- best" if improved else ""
+        # 판정 파싱 실패 세대는 점수가 자리만 채운 0이다 — best 후보에서 제외
+        parse_failed = bool(result.get("parse_failed"))
+        if parse_failed:
+            parse_failed_gens.append(g)
+        improved = (not parse_failed) and result["total"] > best["total"]
+        marker = "  <- best" if improved else ("  (judge 파싱 실패 — 제외)" if parse_failed else "")
         print(
             f"[gen {g}] total={result['total']} acc={result['accuracy']} "
             f"eff={result['efficiency']} files={result['n_files']} "
@@ -129,17 +134,23 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
                 "history": history,
             }, pf, ensure_ascii=False)
 
-        if g < generations - 1:
+        if g < generations - 1 and best["strategy"] is not None:
+            # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도
             strategy = reflect(best["strategy"], best["result"])
 
     print(f"\n[done] best gen={best['generation']} total={best['total']}")
-    print(f"[done] best 구조 파일: {[f['title'] for f in best['struct']['files']]}")
+    best_files = best["struct"]["files"] if best["struct"] else []
+    print(f"[done] best 구조 파일: {[f['title'] for f in best_files]}")
+    if parse_failed_gens:
+        print(f"[warn] judge 파싱 실패 세대: {parse_failed_gens} — 이 run의 점수는 신뢰 불가")
 
     report = {
         "docs": list(docs.keys()),
         "total_raw_chars": total_raw,
         "generations": generations,
         "question_set": question_set,
+        "parse_failed": bool(parse_failed_gens),
+        "parse_failed_generations": parse_failed_gens,
         "best": best,
         "history": history,
     }

@@ -73,25 +73,75 @@ def _answer_all(summary, question_set):
     return _parse_str_list(out, len(question_set))
 
 
-def _judge_all(question_set, predictions):
-    """모든 (정답 vs 예측)을 한 번의 호출로 판정한다 (배치)."""
+JUDGE_RETRIES = 1  # 판정 파싱 실패 시 재요청 횟수
+
+
+def parse_judgement(text, n):
+    """판정 응답에서 0/1 점수 n개를 뽑는다. 실패면 None (0으로 메우지 않는다).
+
+    "LLM이 오답 판정했다"(0)와 "판정 응답을 읽지 못했다"(None)는 다른 신호다.
+    후자를 0으로 채우면 파싱 실패율이 arm 간 다를 때 net 효과 자체가 오염된다.
+
+    - 대괄호 블록을 앞에서부터 하나씩 본다 (greedy `\\[.*\\]`로 뒤 설명문까지 삼키지 않음)
+    - JSON 배열이면 원소가 전부 0/1(1.0 허용)이고 개수가 n일 때만 인정
+    - JSON이 아니면 독립된 0/1 토큰만 센다 — `10`, `0.5` 안의 문자는 제외
+    """
+    for m in re.finditer(r"\[[^\[\]]*\]", text):
+        block = m.group(0)
+        scores = _json_binary_list(block, n)
+        if scores is None:
+            tokens = re.findall(r"(?<![\d.])[01](?![\d.])", block)
+            scores = [float(t) for t in tokens] if len(tokens) == n else None
+        if scores is not None:
+            return scores
+    return None
+
+
+def _json_binary_list(block, n):
+    try:
+        data = json.loads(block)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list) or len(data) != n:
+        return None
+    out = []
+    for x in data:
+        if isinstance(x, bool) or not isinstance(x, (int, float)) or x not in (0, 1):
+            return None
+        out.append(float(x))
+    return out
+
+
+def _judge_prompt(question_set, predictions):
     lines = []
     for i, (qa, pred) in enumerate(zip(question_set, predictions)):
         lines.append(f"{i+1}. 질문:{qa['q']} | 정답:{qa['a']} | 예측:{pred}")
     block = "\n".join(lines)
-    prompt = (
+    return (
         "각 항목에서 '예측'이 '정답'과 사실상 같은 내용이면 1, 틀리거나 '모름'이면 0. "
-        "질문 순서대로 0/1 값을 JSON 배열로만 출력.\n"
+        f"질문 순서대로 0/1 값 {len(question_set)}개를 JSON 배열로만 출력.\n"
         '예: [1,0,1,1,0]  (다른 텍스트 금지)\n\n'
         f"{block}\n\n판정 배열:"
     )
-    out = llm.generate(prompt, num_predict=60, temperature=0.0)
-    nums = re.findall(r"[01]", re.search(r"\[.*\]", out, re.DOTALL).group(0)) if re.search(r"\[.*\]", out, re.DOTALL) else []
-    scores = [float(x) for x in nums[: len(question_set)]]
-    # 파싱 실패분은 0으로 채움
-    while len(scores) < len(question_set):
-        scores.append(0.0)
-    return scores
+
+
+def judge_all(question_set, predictions, retries=JUDGE_RETRIES):
+    """모든 (정답 vs 예측)을 한 번의 호출로 판정한다 (배치).
+
+    반환: (scores, parse_failed).
+    파싱 실패면 같은 프롬프트로 retries회 재요청하고, 그래도 실패면
+    scores는 0으로 채우되 parse_failed=True를 함께 돌려준다 — 호출자가
+    이 결과를 정상 채점과 섞지 않도록.
+    """
+    n = len(question_set)
+    prompt = _judge_prompt(question_set, predictions)
+    for attempt in range(retries + 1):
+        out = llm.generate(prompt, num_predict=60, temperature=0.0)
+        scores = parse_judgement(out, n)
+        if scores is not None:
+            return scores, False
+        print(f"[judge] 판정 파싱 실패 ({attempt + 1}/{retries + 1}): {out[:80]!r}")
+    return [0.0] * n, True
 
 
 def _parse_str_list(text, n):
@@ -113,16 +163,17 @@ def accuracy(summary, question_set):
     """요약으로 질문 세트를 풀어 정답률을 낸다. (0~1) + 세부내역.
 
     배치 처리: 질문 N개를 답변 1회 + 판정 1회, 총 2호출로 채점한다.
+    반환: (accuracy, details, parse_failed). parse_failed면 accuracy는 신뢰 불가.
     """
     if not question_set:
-        return 0.0, []
+        return 0.0, [], False
     preds = _answer_all(summary, question_set)
-    scores = _judge_all(question_set, preds)
+    scores, parse_failed = judge_all(question_set, preds)
     details = [
         {"q": qa["q"], "gold": qa["a"], "pred": p, "score": s}
         for qa, p, s in zip(question_set, preds, scores)
     ]
-    return sum(scores) / len(question_set), details
+    return sum(scores) / len(question_set), details, parse_failed
 
 
 def efficiency(raw_text, summary, floor=0.10):
@@ -139,8 +190,12 @@ def efficiency(raw_text, summary, floor=0.10):
 
 
 def score(raw_text, summary, question_set):
-    """종합 점수 = accuracy * efficiency (곱셈 결합, gaming 억제)."""
-    acc, details = accuracy(summary, question_set)
+    """종합 점수 = accuracy * efficiency (곱셈 결합, gaming 억제).
+
+    parse_failed=True면 판정 응답을 끝내 읽지 못한 것이다. accuracy/total은
+    자리만 채운 0이므로 best 판정·집계에 쓰면 안 된다.
+    """
+    acc, details, parse_failed = accuracy(summary, question_set)
     eff, ratio = efficiency(raw_text, summary)
     total = acc * eff
     return {
@@ -148,5 +203,6 @@ def score(raw_text, summary, question_set):
         "accuracy": round(acc, 3),
         "efficiency": round(eff, 3),
         "length_ratio": round(ratio, 3),
+        "parse_failed": parse_failed,
         "qa_details": details,
     }
