@@ -23,6 +23,12 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK_DIR"' EXIT
 
+# ── 자가 갱신: 메인 체크아웃을 origin/master로 ff-only pull (SEA-7) ─────
+# 사람이 pull을 잊어도 머지된 하네스 개선이 다음 tick부터 실전에 실리게 한다.
+# dirty·타 브랜치·충돌 시엔 건너뛰고 로그만 남긴다 — 이 스크립트 자체가 갈려도
+# bash는 이미 연 파일 핸들로 계속 읽으므로 현재 tick은 옛 코드로 안전하게 끝난다.
+log "$(bash "$REPO/harness/self_update.sh" "$REPO" master)"
+
 # ── 게이트: GraphQL로 처리 대상 유무만 확인 ──────────────────────────
 QUERY='{"query":"{ issues(filter: { team: { key: { eq: \"'"$TEAM_KEY"'\" } }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }, first: 50) { nodes { identifier title priority labels { nodes { name } } } } }"}'
 
