@@ -71,6 +71,16 @@ The only CLI-exclusive feature is the statistical batch with a control arm:
 python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
 ```
 
+`--arms` picks arms explicitly. The `evolve-wiki` arm (WikiSkill-style,
+arxiv 2608.27454) feeds the reflector a structured pattern wiki
+(`runs/wiki/patterns/*.md` + `index.md`, maintained by one extra LLM call per
+generation) instead of the flat strategy history, testing whether the
+*structure* of accumulated history matters — not just its presence:
+
+```bash
+python3 src/batch.py --arms evolve,evolve-wiki,control --docs 5 --runs 2
+```
+
 ## Requirements
 
 - Python 3 — standard library only, nothing to install
