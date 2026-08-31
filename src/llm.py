@@ -11,6 +11,7 @@ temperature/num_predict 등은 CLI가 지원하지 않아 무시된다
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -49,6 +50,9 @@ def generate(
     """
     if BACKEND not in ("claude", "codex"):
         raise LLMError(f"지원하지 않는 백엔드: {BACKEND} (claude|codex)")
+    if shutil.which(BACKEND) is None:
+        # 미설치는 재시도해도 소용없다 — 즉시 실패
+        raise LLMError(f"{BACKEND} CLI를 찾을 수 없음 (미설치 또는 PATH 누락)")
     directive = _LANG_DIRECTIVES.get(LANGUAGE)
     if directive:
         prompt = f"[언어 지시] {directive}\n\n{prompt}"
@@ -58,7 +62,7 @@ def generate(
             if BACKEND == "codex":
                 return _generate_codex(prompt, timeout=timeout)
             return _generate_claude(prompt, timeout=timeout)
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, OSError) as e:
             last_err = e
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
@@ -78,7 +82,11 @@ def _generate_claude(prompt, timeout=300):
         raise subprocess.SubprocessError(
             f"claude CLI 실패 (rc={proc.returncode}): {proc.stderr.strip()[:200]}"
         )
-    return proc.stdout.strip()
+    out = proc.stdout.strip()
+    if not out:
+        # rc=0이어도 빈 출력(사용량 한도, 세션 만료 등)은 실패다 — 재시도 경로로
+        raise subprocess.SubprocessError("claude CLI 빈 응답 (rc=0)")
+    return out
 
 
 def _generate_codex(prompt, timeout=300):
@@ -104,7 +112,10 @@ def _generate_codex(prompt, timeout=300):
                 f"codex CLI 실패 (rc={proc.returncode}): {proc.stderr.strip()[:200]}"
             )
         with open(out_path) as f:
-            return f.read().strip()
+            out = f.read().strip()
+        if not out:
+            raise subprocess.SubprocessError("codex CLI 빈 응답 (rc=0)")
+        return out
     finally:
         try:
             os.unlink(out_path)
@@ -117,7 +128,8 @@ def health_check():
     try:
         out = generate("Reply with the single word: ready", timeout=120)
         return "ready" in out.lower()
-    except LLMError:
+    except Exception:
+        # 진단 함수는 어떤 상황에서도 크래시 대신 False를 반환한다
         return False
 
 
