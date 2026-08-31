@@ -16,6 +16,7 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
   (자동 resume은 없음 — 재실행하면 새 배치 디렉터리가 생긴다)
 - 결과: CSV(runs/batch-<stamp>/results.csv) + 요약 리포트(summary.md)
 - judge 파싱 실패(report.parse_failed) run은 CSV에는 남기되 arm 통계/net에서 제외
+- net에는 문서 단위 paired bootstrap으로 95% CI와 p값을 붙인다 (LLM 호출 없음)
 
 --stage structure면 A단계(evolve.evolve, 문서별 요약) 대신 B단계
 (evolve_structure, 문서 묶음 전체의 폴더 구조)를 같은 arm 체계로 돌린다.
@@ -36,6 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 import glob
 import json
 import os
+import random
 import statistics
 import time
 from datetime import datetime
@@ -252,6 +254,76 @@ def _record(report, doc, size, r, arm, dt):
     }
 
 
+BOOTSTRAP_ITERS = 1000
+BOOTSTRAP_SEED = 20260831  # 고정 — 같은 입력이면 항상 같은 CI/p가 나와야 한다
+ALPHA = 0.05
+
+
+def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTRAP_SEED):
+    """문서 단위 paired bootstrap으로 net 효과의 신뢰구간과 양측 p값을 낸다.
+
+    표본 단위는 run이 아니라 **문서**다. 같은 문서의 run들은 질문 세트
+    (train/held-out 분할 포함)를 공유하므로 독립 표본이 아니다 — run을 단위로
+    잡으면 표본 수가 부풀려져 p값이 실제보다 작게 나온다.
+
+    두 arm이 모두 있는 문서만 짝으로 쓰고, 문서별 (treat 평균 - base 평균)을
+    복원추출해 net 분포를 만든다. p는 percentile 방식의 양측 근사다.
+
+    반환: {"net", "n_docs", "ci_low", "ci_high", "p"}
+          짝지을 문서가 2개 미만이면 None (판정 불가 — 호출부가 명시해야 한다)
+    """
+    per_doc = {}
+    for r in valid:
+        per_doc.setdefault(r["doc"], {}).setdefault(r["arm"], []).append(r["improvement"])
+    deltas = [
+        statistics.mean(arms[treat]) - statistics.mean(arms[base])
+        for arms in per_doc.values()
+        if arms.get(treat) and arms.get(base)
+    ]
+    if len(deltas) < 2:
+        return None
+
+    n = len(deltas)
+    rng = random.Random(seed)
+    boot = sorted(
+        statistics.mean([deltas[rng.randrange(n)] for _ in range(n)])
+        for _ in range(iters)
+    )
+    lo = boot[int(0.025 * iters)]
+    hi = boot[min(int(0.975 * iters), iters - 1)]
+    le = sum(1 for b in boot if b <= 0) / iters
+    ge = sum(1 for b in boot if b >= 0) / iters
+    return {
+        "net": statistics.mean(deltas),
+        "n_docs": n,
+        "ci_low": lo,
+        "ci_high": hi,
+        "p": min(1.0, 2 * min(le, ge)),
+    }
+
+
+def _significance_lines(valid, treat, base, positive_msg, null_msg):
+    """net 유의성 판정 줄들. bootstrap이 불가능하면 그 사실을 명시한다."""
+    b = paired_bootstrap_net(valid, treat, base)
+    if b is None:
+        return [
+            "- 유의성 **판정 불가** — 두 arm이 모두 있는 문서가 2개 미만이다. "
+            "위 net은 점 추정일 뿐이며, 노이즈와 구분되는지 알 수 없다.",
+        ]
+    out = [
+        f"- 유의성 (문서 단위 paired bootstrap {BOOTSTRAP_ITERS}회, 문서 {b['n_docs']}개): "
+        f"net(문서짝) {b['net']:+.3f}, 95% CI [{b['ci_low']:+.3f}, {b['ci_high']:+.3f}], "
+        f"p={b['p']:.3f}"
+    ]
+    if b["p"] < ALPHA and b["net"] > 0:
+        out.append(f"- {positive_msg} (p<{ALPHA})")
+    elif b["p"] < ALPHA and b["net"] < 0:
+        out.append("- 유의하게 **더 나쁘다**. 방향이 반대다 — 설계를 의심할 것.")
+    else:
+        out.append(f"- {null_msg} (p={b['p']:.3f}, 유의수준 {ALPHA} 미달)")
+    return out
+
+
 def _arm_stats(rs):
     imps = [r["improvement"] for r in rs]
     return {
@@ -332,12 +404,11 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             f"- 영속 이력 효과(net) = 이력 있음 {ev['mean_imp']:+.3f} - 이력 없음 "
             f"{nh['mean_imp']:+.3f} = **{net:+.3f}**"
         )
-        if net > 0.02:
-            lines.append("- 이력 없는 진화 대비 **영속 이력이 실제로 개선**하는 경향.")
-        elif net > 0:
-            lines.append("- 이력 우위가 미미. run/세대 수를 늘려 재확인 필요.")
-        else:
-            lines.append("- 이력 유무 차이 없음 — 관측된 효과는 노이즈로 설명 가능.")
+        lines += _significance_lines(
+            valid, "evolve", "evolve-nohist",
+            "이력 없는 진화 대비 **영속 이력이 실제로 개선**한다.",
+            "이력 유무가 통계적으로 **구분되지 않는다** — 관측된 차이는 노이즈로 설명 가능.",
+        )
     elif "control" in by_arm:
         ct = _arm_stats(by_arm["control"])
         net = ev["mean_imp"] - ct["mean_imp"]
@@ -345,12 +416,11 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             f"- 진화 효과(net) = evolve {ev['mean_imp']:+.3f} - control {ct['mean_imp']:+.3f} "
             f"= **{net:+.3f}**"
         )
-        if net > 0.02:
-            lines.append("- 노이즈 기준선(control) 대비 **진화가 실제로 개선**하는 경향.")
-        elif net > 0:
-            lines.append("- control 대비 우위가 미미. run/세대 수를 늘려 재확인 필요.")
-        else:
-            lines.append("- control과 구분 안 됨 — 관측된 향상폭은 **선택 노이즈**로 설명 가능.")
+        lines += _significance_lines(
+            valid, "evolve", "control",
+            "노이즈 기준선(control) 대비 **진화가 실제로 개선**한다.",
+            "control과 통계적으로 **구분되지 않는다** — 관측된 향상폭은 **선택 노이즈**로 설명 가능.",
+        )
     else:
         lines.append(
             f"- evolve 평균 향상폭 {ev['mean_imp']:+.3f}. "
