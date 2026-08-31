@@ -34,6 +34,7 @@ import time
 from datetime import datetime
 
 import llm
+import provenance
 import scoring
 
 
@@ -279,6 +280,11 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     report = {
         "doc": doc,
         "arm": arm,
+        "provenance": provenance.collect(
+            doc_text=raw_text, question_set=question_set,
+            params={"generations": generations, "n_qa": n_qa,
+                    "use_history": use_history, "no_evolve": no_evolve},
+        ),
         "generations": generations,
         "train_questions": train_qs,
         "holdout_questions": test_qs,

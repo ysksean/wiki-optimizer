@@ -154,6 +154,11 @@ def _record(report, doc, size, r, arm, dt):
         "best_acc": hist[best_gen]["score"]["accuracy"],
         "parse_failed": parse_failed,
         "elapsed_sec": round(dt, 1),
+        # 재현성: 이 점수가 어떤 백엔드/모델/코드로 나왔는지 행 단위로 남긴다
+        "backend": (report.get("provenance") or {}).get("backend", ""),
+        "model": (report.get("provenance") or {}).get("model", ""),
+        "code_sha": (report.get("provenance") or {}).get("code_sha", ""),
+        "question_set_sha": (report.get("provenance") or {}).get("question_set_sha", ""),
     }
 
 

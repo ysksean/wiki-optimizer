@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 
 import llm
+import provenance
 import structure
 
 
@@ -146,6 +147,10 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
 
     report = {
         "docs": list(docs.keys()),
+        "provenance": provenance.collect(
+            question_set=question_set,
+            params={"generations": generations, "n_qa": n_qa, "n_docs": n_docs},
+        ),
         "total_raw_chars": total_raw,
         "generations": generations,
         "question_set": question_set,
