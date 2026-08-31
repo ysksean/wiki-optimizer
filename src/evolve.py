@@ -30,7 +30,9 @@ import argparse
 import json
 import os
 import random
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import llm
@@ -50,6 +52,9 @@ HOLDOUT_RATIO = 0.4  # 질문 중 held-out 비율 (최소 2개 보장)
 WIKI_DIR = os.path.join("runs", "wiki")
 IMPACT_PATH = os.path.join(WIKI_DIR, "strategy-impact.jsonl")
 
+# 이력 파일은 모든 문서/arm이 공유한다 — batch --parallel 시 append/read 경합 방지
+_IMPACT_LOCK = threading.Lock()
+
 
 def record_strategy_impact(doc, arm, generation, strategy, r_test, accepted):
     """세대 하나의 전략과 결과를 영속 이력에 append한다."""
@@ -64,7 +69,7 @@ def record_strategy_impact(doc, arm, generation, strategy, r_test, accepted):
         "length_ratio": r_test["length_ratio"],
         "accepted": accepted,
     }
-    with open(IMPACT_PATH, "a") as f:
+    with _IMPACT_LOCK, open(IMPACT_PATH, "a") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
@@ -73,7 +78,7 @@ def load_strategy_history(doc, n_rejected=5, n_accepted=3):
     if not os.path.exists(IMPACT_PATH):
         return [], []
     entries = []
-    with open(IMPACT_PATH) as f:
+    with _IMPACT_LOCK, open(IMPACT_PATH) as f:
         for line in f:
             try:
                 e = json.loads(line)
@@ -216,8 +221,13 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     for g in range(generations):
         t = time.time()
         summary = summarize(raw_text, strategy)
-        r_train = scoring.score(raw_text, summary, train_qs)
-        r_test = scoring.score(raw_text, summary, test_qs)
+        # train/held-out 채점은 서로 독립 (공유 상태 없음) — 병렬로 세대당
+        # LLM 4회(답변+판정 x2)를 2회 폭으로 접는다. 순서·결과는 동일하다.
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fut_train = ex.submit(scoring.score, raw_text, summary, train_qs)
+            fut_test = ex.submit(scoring.score, raw_text, summary, test_qs)
+            r_train = fut_train.result()
+            r_test = fut_test.result()
         dt = time.time() - t
 
         # 판정 파싱 실패 세대는 점수가 자리만 채운 0이다 — best 후보·영속 이력에서 제외

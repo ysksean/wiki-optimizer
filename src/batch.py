@@ -24,6 +24,8 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
 
 import argparse
 import csv
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import glob
 import json
 import os
@@ -49,7 +51,13 @@ def select_docs(n, raw_dir="data/raw"):
 
 
 def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
-              out_dir="runs"):
+              out_dir="runs", parallel=1):
+    """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
+
+    문서끼리는 질문 세트·run 디렉터리가 독립이라 병렬해도 결과가 같다.
+    공유되는 것은 records/중간저장/진행 카운터(아래 락)와 영속 이력 파일
+    (evolve._IMPACT_LOCK)뿐이다.
+    """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     batch_dir = os.path.join(out_dir, f"batch-{stamp}")
     os.makedirs(batch_dir, exist_ok=True)
@@ -61,15 +69,26 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
     else:
         arms = ["evolve", "control"] if with_control else ["evolve"]
     records = []
-    total = len(files) * runs * len(arms)
-    done = 0
+    progress = {"done": 0, "total": len(files) * runs * len(arms),
+                "lock": threading.Lock()}
     t_batch = time.time()
 
-    print(f"[batch] 문서 {len(files)}개 x run {runs} x arm {arms} x gen {generations} = {total} runs")
+    print(f"[batch] 문서 {len(files)}개 x run {runs} x arm {arms} x gen {generations} "
+          f"= {progress['total']} runs (parallel={parallel})")
     try:
-        for f in files:
-            done = _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path,
-                            records, done, total)
+        if parallel > 1:
+            with ThreadPoolExecutor(max_workers=parallel) as ex:
+                futures = [
+                    ex.submit(_run_doc, f, runs, arms, generations, n_qa,
+                              batch_dir, state_path, records, progress)
+                    for f in files
+                ]
+                for fut in futures:
+                    fut.result()
+        else:
+            for f in files:
+                _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path,
+                         records, progress)
     finally:
         # 어떤 이유로 중단돼도(예외, Ctrl-C) 지금까지의 records로 집계는 남긴다
         batch_elapsed = time.time() - t_batch
@@ -87,20 +106,24 @@ def _prepare_question_set(f, n_qa):
         return None
 
 
-def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, done, total):
-    """문서 하나에 대해 run x arm을 돌리고 갱신된 done 카운트를 돌려준다."""
+def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, progress):
+    """문서 하나에 대해 run x arm을 돌린다. records/progress 갱신은 락으로 보호."""
     doc = os.path.splitext(os.path.basename(f))[0]
     size = os.path.getsize(f)
     # 질문 세트는 문서당 1회 생성해 모든 arm/run이 공유 (공정 비교)
     question_set = _prepare_question_set(f, n_qa)
     if not question_set:
         print(f"[batch] {doc}: 질문 세트 실패, 건너뜀")
-        return done + runs * len(arms)
+        with progress["lock"]:
+            progress["done"] += runs * len(arms)
+        return
 
     for r in range(runs):
         for arm in arms:
-            done += 1
-            print(f"\n[batch {done}/{total}] {doc} (size={size}) run={r} arm={arm}")
+            with progress["lock"]:
+                progress["done"] += 1
+                done = progress["done"]
+            print(f"\n[batch {done}/{progress['total']}] {doc} (size={size}) run={r} arm={arm}")
             t = time.time()
             try:
                 report = evolve.evolve(
@@ -116,14 +139,14 @@ def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, d
                 continue
 
             rec = _record(report, doc, size, r, arm, dt)
-            records.append(rec)
-            # 크래시 대비 중간저장
-            with open(state_path, "w") as sf:
-                json.dump(records, sf, ensure_ascii=False, indent=2)
+            with progress["lock"]:
+                records.append(rec)
+                # 크래시 대비 중간저장
+                with open(state_path, "w") as sf:
+                    json.dump(records, sf, ensure_ascii=False, indent=2)
             flag = "  [judge 파싱 실패 — 집계 제외]" if rec["parse_failed"] else ""
-            print(f"[batch] gen0={rec['gen0_total']} best={rec['best_total']} "
-                  f"improvement={rec['improvement']} ({dt:.0f}s){flag}")
-    return done
+            print(f"[batch] {doc} run={r} arm={arm}: gen0={rec['gen0_total']} "
+                  f"best={rec['best_total']} improvement={rec['improvement']} ({dt:.0f}s){flag}")
 
 
 def _record(report, doc, size, r, arm, dt):
@@ -287,6 +310,8 @@ if __name__ == "__main__":
     ap.add_argument("--with-control", action="store_true", help="무진화 대조군 arm 추가")
     ap.add_argument("--ablation", action="store_true",
                     help="영속 이력 ablation: evolve vs evolve-nohist 두 arm")
+    ap.add_argument("--parallel", type=int, default=1,
+                    help="동시에 돌릴 문서 수 (기본 1=순차). CLI 세션 rate limit에 주의")
     args = ap.parse_args()
 
     files = args.files if args.files else select_docs(args.docs)
@@ -294,4 +319,5 @@ if __name__ == "__main__":
     for f in files:
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)}B)")
     run_batch(files, args.runs, args.generations, args.n_qa,
-              with_control=args.with_control, ablation=args.ablation)
+              with_control=args.with_control, ablation=args.ablation,
+              parallel=args.parallel)
