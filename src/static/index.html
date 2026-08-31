@@ -337,7 +337,14 @@ const I18N = {
     no_jobs: "아직 실행한 실험이 없습니다", waiting_gen: "아직 첫 세대 결과 대기 중…",
     preparing_q: "질문 세트 준비 중…", failed: "실패",
     mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
-    audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${d}/${t} 문서 채점 중…`,
+    audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${t}개 문서 중 ${d}개 채점 중…`,
+    r_kpi_acc: "정확도", r_kpi_eff: "효율", r_kpi_read: "평균 읽은 글자",
+    r_kpi_cov: "페이지 커버리지",
+    r_graph: "백링크 그래프 — 색 = 정답률 · 크기 = 인링크 · 회색 테두리 = 미사용",
+    r_pages: "페이지별 진단", th_page: "페이지", th_inlinks: "인링크",
+    th_uses: "읽힘", th_rate: "정답률", r_unused: "미사용",
+    r_questions: "질문별 라우팅 상세", th_src_doc: "출처 문서",
+    r_parse_warn: d => `judge 파싱 실패 문서: ${d} — 해당 점수는 신뢰 불가`,
     avg_score: n => `평균 점수 (${n}개 채점)`,
     th_doc: "문서", th_raw: "raw", th_summary: "요약", th_score: "점수 (total · acc · eff)", none: "없음",
     apply_title: "최적화 Before → After", generating: (d,t) => ` — ${d}/${t} 생성 중…`,
@@ -374,7 +381,14 @@ const I18N = {
     no_jobs: "No experiments yet", waiting_gen: "Waiting for the first generation…",
     preparing_q: "Preparing question set…", failed: "Failed",
     mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
-    audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scoring ${d}/${t} documents…`,
+    audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scored ${d} of ${t} documents…`,
+    r_kpi_acc: "accuracy", r_kpi_eff: "efficiency", r_kpi_read: "avg chars read",
+    r_kpi_cov: "page coverage",
+    r_graph: "Backlink graph — color = correct rate · size = inlinks · gray outline = unused",
+    r_pages: "Per-page results", th_page: "page", th_inlinks: "inlinks",
+    th_uses: "reads", th_rate: "correct", r_unused: "unused",
+    r_questions: "Per-question routing", th_src_doc: "source doc",
+    r_parse_warn: d => `judge parse failed for: ${d} — those scores are unreliable`,
     avg_score: n => `average score (${n} scored)`,
     th_doc: "document", th_raw: "raw", th_summary: "summary", th_score: "score (total · acc · eff)", none: "none",
     apply_title: "Optimization Before → After", generating: (d,t) => ` — generating ${d}/${t}…`,
@@ -411,7 +425,14 @@ const I18N = {
     no_jobs: "还没有运行过实验", waiting_gen: "等待第一代结果…",
     preparing_q: "正在准备问题集…", failed: "失败",
     mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
-    audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 正在评分 ${d}/${t} 篇文档…`,
+    audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 共 ${t} 篇文档，已评 ${d} 篇…`,
+    r_kpi_acc: "准确率", r_kpi_eff: "效率", r_kpi_read: "平均阅读字数",
+    r_kpi_cov: "页面覆盖率",
+    r_graph: "反向链接图 — 颜色 = 正确率 · 大小 = 入链数 · 灰色描边 = 未使用",
+    r_pages: "按页面诊断", th_page: "页面", th_inlinks: "入链",
+    th_uses: "被读", th_rate: "正确率", r_unused: "未使用",
+    r_questions: "逐题路由详情", th_src_doc: "来源文档",
+    r_parse_warn: d => `judge 解析失败的文档：${d} — 相关分数不可信`,
     avg_score: n => `平均分（已评 ${n} 篇）`,
     th_doc: "文档", th_raw: "raw", th_summary: "摘要", th_score: "分数 (total · acc · eff)", none: "无",
     apply_title: "优化 Before → After", generating: (d,t) => ` — 正在生成 ${d}/${t}…`,
@@ -547,7 +568,118 @@ function fmtScore(s) {
   return s ? `${s.total} <span style="color:var(--dim)">(acc ${s.accuracy} · eff ${s.efficiency})</span>` : "-";
 }
 
+// ---------- 백링크 그래프 (결정적 force layout — poll 재렌더 캐시 안정성) ----------
+function layoutGraph(nodes, edges, W, H) {
+  const n = nodes.length;
+  if (!n) return [];
+  const pos = nodes.map((nd, i) => {
+    const a = (2 * Math.PI * i) / n;
+    return { id: nd.id, x: W/2 + Math.cos(a) * W * 0.34, y: H/2 + Math.sin(a) * H * 0.34 };
+  });
+  const idx = Object.fromEntries(pos.map((p, i) => [p.id, i]));
+  const k = Math.sqrt((W * H) / n) * 0.8;
+  for (let it = 0; it < 160; it++) {
+    const fx = new Float64Array(n), fy = new Float64Array(n);
+    for (let i = 0; i < n; i++) for (let j = i+1; j < n; j++) {
+      let dx = pos[i].x - pos[j].x, dy = pos[i].y - pos[j].y;
+      let d2 = dx*dx + dy*dy || 1, d = Math.sqrt(d2);
+      const rep = (k*k) / d2;
+      fx[i] += dx/d * rep * d; fy[i] += dy/d * rep * d;
+      fx[j] -= dx/d * rep * d; fy[j] -= dy/d * rep * d;
+    }
+    for (const e of edges) {
+      const a = idx[e.source], b = idx[e.target];
+      if (a == null || b == null) continue;
+      let dx = pos[a].x - pos[b].x, dy = pos[a].y - pos[b].y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const att = (d*d) / k * 0.02;
+      fx[a] -= dx/d * att; fy[a] -= dy/d * att;
+      fx[b] += dx/d * att; fy[b] += dy/d * att;
+    }
+    const cool = 1 - it/160;
+    for (let i = 0; i < n; i++) {
+      const disp = Math.sqrt(fx[i]*fx[i] + fy[i]*fy[i]) || 1;
+      const step = Math.min(disp, 14 * cool);
+      pos[i].x += fx[i]/disp * step + (W/2 - pos[i].x) * 0.012;
+      pos[i].y += fy[i]/disp * step + (H/2 - pos[i].y) * 0.012;
+      pos[i].x = Math.max(50, Math.min(W-50, pos[i].x));
+      pos[i].y = Math.max(26, Math.min(H-16, pos[i].y));
+    }
+  }
+  return pos;
+}
+
+function nodeColor(rate, uses) {
+  if (!uses) return null;                       // 미사용 — 회색 테두리만
+  if (rate >= 0.75) return "var(--ok)";
+  if (rate >= 0.4) return "var(--warn)";
+  return "var(--bad)";
+}
+
+function graphSVG(graph, pageRows) {
+  const W = 940, H = 560;
+  const byName = Object.fromEntries(pageRows.map(r => [r.name, r]));
+  const pos = layoutGraph(graph.nodes, graph.edges, W, H);
+  const at = Object.fromEntries(pos.map(p => [p.id, p]));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (const e of graph.edges) {
+    const a = at[e.source], b = at[e.target];
+    if (!a || !b) continue;
+    svg += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+  }
+  for (const nd of graph.nodes) {
+    const p = at[nd.id], row = byName[nd.id] || {};
+    if (!p) continue;
+    const r = 6 + Math.min(10, nd.inlinks * 1.4);
+    const fill = nodeColor(row.correct_rate ?? 0, row.uses);
+    const circle = fill
+      ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${fill}" fill-opacity="0.85"/>`
+      : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="var(--control)" stroke="var(--line-strong)" stroke-width="1.5"/>`;
+    const label = nd.id.length > 22 ? nd.id.slice(0, 21) + "…" : nd.id;
+    svg += `<g>${circle}<text x="${p.x.toFixed(1)}" y="${(p.y + r + 11).toFixed(1)}" text-anchor="middle" font-size="10">${esc(label)}</text>
+      <title>${esc(nd.id)} — inlinks ${nd.inlinks}, ${row.uses ? `reads ${row.uses}, correct ${row.correct_rate}` : t("r_unused")}</title></g>`;
+  }
+  svg += "</svg>";
+  return `<div class="chart"><div class="chart-head">${t("r_graph")}</div>${svg}</div>`;
+}
+
+function routerAuditView(res, status) {
+  const done = res.done ?? res.n_docs, total = res.total ?? res.n_docs;
+  const prog = done < total || status === "running"
+    ? `<span class="muted">${t("scoring_docs", done ?? 0, total ?? "?")}</span>` : "";
+  let html = `<div class="runbox"><h3>${t("audit_title")}${prog}</h3>`;
+  if (res.accuracy != null)
+    html += `<div class="kpis">
+      <div class="kpi"><b>${res.accuracy}</b><span>${t("r_kpi_acc")} (${res.n_questions ?? "-"} Q)</span></div>
+      <div class="kpi"><b>${res.efficiency ?? "-"}</b><span>${t("r_kpi_eff")}</span></div>
+      <div class="kpi"><b>${res.avg_read ?? "-"}</b><span>${t("r_kpi_read")}</span></div>
+      <div class="kpi"><b>${res.n_pages_used ?? "-"}/${res.n_pages ?? "-"}</b><span>${t("r_kpi_cov")}</span></div>
+    </div>`;
+  if (res.graph?.nodes?.length && res.pages)
+    html += graphSVG(res.graph, res.pages);
+  if (res.parse_failed_docs?.length)
+    html += `<div class="err" style="margin-top:8px">${t("r_parse_warn", res.parse_failed_docs.join(", "))}</div>`;
+  if (res.pages?.length) {
+    html += `<details open><summary>${t("r_pages")}</summary>${wrapTable(
+      `<tr><th>${t("th_page")}</th><th>chars</th><th>${t("th_inlinks")}</th><th>${t("th_uses")}</th><th>${t("th_rate")}</th></tr>` +
+      res.pages.map(r => `<tr>
+        <td>${esc(r.name)}</td><td>${(r.chars/1000).toFixed(1)}k</td>
+        <td>${r.inlinks}</td><td>${r.uses}</td>
+        <td>${r.uses ? `<span class="${r.correct_rate >= 0.75 ? "up" : r.correct_rate < 0.4 ? "down" : ""}">${r.correct_rate}</span>` : `<span class="muted">${t("r_unused")}</span>`}</td>
+      </tr>`).join(""))}</details>`;
+  }
+  if (res.questions?.length) {
+    html += `<details><summary>${t("r_questions")}</summary>${wrapTable(
+      `<tr><th>${t("th_src_doc")}</th><th>${t("th_q")}</th><th>${t("th_picked")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
+      res.questions.map(d => `<tr><td>${esc(d.doc)}</td><td>${esc(d.q)}</td>
+        <td>${(d.picked||[]).map(esc).join(", ")}</td><td>${d.read_chars}</td>
+        <td>${d.score != null ? (d.score ? "⭕" : "❌") : "-"}</td></tr>`).join(""))}</details>`;
+  }
+  return html + "</div>";
+}
+
 function auditView(res, status) {
+  if (res.variant === "router") return routerAuditView(res, status);
   const prog = res.done < res.total ? `<span class="muted">${t("scoring_docs", res.done, res.total)}</span>` : "";
   let html = `<div class="runbox"><h3>${t("audit_title")}${prog}</h3>`;
   if (res.avg_total != null)

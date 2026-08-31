@@ -76,10 +76,11 @@ def _run_job(job):
                     out_dir=job["dir"], files=job["files"],
                 )
             elif job["mode"] == "audit":
-                def cb(done, total, docs):
+                def cb(done, total, partial):
                     flush_result({"type": "audit", "done": done, "total": total,
-                                  "docs": docs})
-                res = audit.audit(job["base_dir"], n_qa=job["n_qa"], progress_cb=cb)
+                                  **partial})
+                res = audit.audit(job["base_dir"], n_qa=job["n_qa"], progress_cb=cb,
+                                  max_docs=job.get("max_docs"))
                 res["type"] = "audit"
                 res["done"] = res["total"] = res["n_docs"]
                 flush_result(res)
@@ -138,6 +139,7 @@ def start_job(params):
         "doc_names": doc_names,
         "generations": max(1, min(10, int(params.get("generations", 3)))),
         "n_qa": max(2, min(12, int(params.get("n_qa", 6)))),
+        "max_docs": int(params["max_docs"]) if params.get("max_docs") else None,
         "dir": os.path.join(JOBS_DIR, job_id),
         "status": "queued",
         "error": None,
