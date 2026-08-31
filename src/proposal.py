@@ -15,8 +15,11 @@
 import json
 import re
 
+import audit
 import llm
 import repo_map
+import scoring
+import structure
 
 
 def _parse_pages(text):
@@ -123,3 +126,84 @@ def propose(task, entries, strategy, gap_questions=()):
     if not pages:
         pages = _parse_pages(llm.generate(prompt, num_predict=2000, temperature=0.5))
     return validate(pages, entries)
+
+
+# ---------- 채점 ----------
+
+def _read_specs(entries_map, specs, cap, max_ctx):
+    """source spec 목록의 실물을 읽어 (context, read_chars)를 만든다."""
+    parts, seen = [], set()
+    for s in specs:
+        if s in seen:
+            continue
+        seen.add(s)
+        text, _ = repo_map.read_source(entries_map, s, cap=cap)
+        if text:
+            parts.append(f"=== {s} ===\n{text}")
+    context = "\n\n".join(parts)[:max_ctx]
+    return context, len(context)
+
+
+def total_source_chars(pages, entries):
+    """구조가 참조하는 전체 source 실물 글자 합 (효율 분모).
+
+    분모를 레포 전체가 아니라 '구조가 물고 있는 것'으로 잡는다 — 거대한
+    파일을 마구 물면 분모도 커지지만 읽는 양이 더 빨리 커져 자기조정된다.
+    """
+    entries_map = repo_map.by_rel(entries)
+    seen, total = set(), 0
+    for p in pages:
+        for s in p.get("sources", []):
+            if s in seen:
+                continue
+            seen.add(s)
+            text, _ = repo_map.read_source(entries_map, s, cap=10**9)
+            total += len(text)
+    return total
+
+
+def score_proposal(pages, qa, entries, cap=12000, max_ctx=24000):
+    """제안 구조를 Query 성능으로 채점한다.
+
+    grounded 질문만 채점한다 (gap은 정답이 없어 시험 문제가 될 수 없다 —
+    대신 구조 지표로 보고). 질문마다: Router가 pages 인덱스(path+purpose)에서
+    페이지 선택 → 그 페이지 sources 실물을 읽고 답 → 원본 근거 정답과 대조.
+    효율 분모 = total_source_chars. 종합 = 정확도 x 효율.
+    """
+    grounded = [x for x in qa if x.get("a")]
+    n_gap = len(qa) - len(grounded)
+    base = {"n_pages": len(pages), "n_gap_questions": n_gap,
+            "n_grounded_questions": len(grounded)}
+    if not pages or not grounded:
+        return {**base, "total": None, "accuracy": None, "efficiency": None,
+                "avg_read": 0, "parse_failed": False, "details": [],
+                "reason": "no_pages" if not pages else "no_grounded_questions"}
+
+    index = [{"title": p["path"], "desc": p["purpose"][:100]} for p in pages]
+    picks_per_q = audit.route_batch([x["q"] for x in grounded], index)
+    entries_map = repo_map.by_rel(entries)
+
+    preds, reads, details = [], [], []
+    for x, picks in zip(grounded, picks_per_q):
+        chosen = [pages[p] for p in picks]
+        specs = [s for pg in chosen for s in pg.get("sources", [])]
+        context, read_chars = _read_specs(entries_map, specs, cap, max_ctx)
+        pred = structure._answer(context, x["q"]) if context else "모름"
+        preds.append(pred)
+        reads.append(read_chars)
+        details.append({"q": x["q"], "picked": [pg["path"] for pg in chosen],
+                        "read_chars": read_chars, "pred": pred})
+
+    qset = [{"q": x["q"], "a": x["a"]} for x in grounded]
+    scores, parse_failed = scoring.judge_all(qset, preds)
+    for d, s in zip(details, scores):
+        d["score"] = s
+
+    denom = total_source_chars(pages, entries)
+    acc = sum(scores) / len(grounded)
+    avg_read = sum(reads) / len(reads)
+    eff = 1.0 - min(1.0, avg_read / denom) if denom else 0.0
+    return {**base, "total": round(acc * eff, 3), "accuracy": round(acc, 3),
+            "efficiency": round(eff, 3), "avg_read": int(avg_read),
+            "denom_chars": denom, "parse_failed": parse_failed,
+            "details": details}

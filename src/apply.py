@@ -30,7 +30,7 @@ def best_strategy_from_runs(runs_dir="runs"):
         strategy, total = b.get("strategy"), b.get("total")
         if not strategy or not isinstance(total, (int, float)):
             continue
-        if "struct" in b:  # B단계(구조) 결과는 요약 전략이 아니다
+        if "struct" in b or "pages" in b:  # B단계(구조)/Stage0(제안) 전략은 요약 전략이 아니다
             continue
         if best is None or total > best["total"]:
             best = {"strategy": strategy, "total": total, "source": p}

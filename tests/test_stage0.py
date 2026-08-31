@@ -172,3 +172,155 @@ def test_report_shape_is_json_serializable(tmp_path):
     # report에 들어가는 조각들이 json 직렬화 가능해야 한다
     pages, stats = proposal.validate(_pages(), _entries(tmp_path))
     json.dumps({"pages": pages, "stats": stats}, ensure_ascii=False)
+
+
+# ---------- score_proposal ----------
+
+def test_score_proposal_no_grounded_returns_unscoreable(tmp_path):
+    entries = _entries(tmp_path)
+    qa = [{"q": "q1", "a": None, "evidence": []}]
+    r = proposal.score_proposal(_pages(), qa, entries)
+    assert r["total"] is None and r["reason"] == "no_grounded_questions"
+    assert r["n_gap_questions"] == 1
+
+
+def test_score_proposal_scores_and_denom(tmp_path, monkeypatch):
+    entries = _entries(tmp_path)
+    pages = [
+        {"path": "prerm/기준.md", "title": "채점 기준", "purpose": "기준은?",
+         "outline": [], "sources": ["myrepo/docs/guide.md#채점 기준"],
+         "status": "grounded"},
+        {"path": "cases/리스크.md", "title": "사례", "purpose": "사례는?",
+         "outline": [], "sources": [], "status": "gap"},
+    ]
+    qa = [{"q": "채점 기준은?", "a": "항목별 기준", "evidence": []},
+          {"q": "사례는?", "a": None, "evidence": []}]
+    monkeypatch.setattr(proposal.audit, "route_batch", lambda qs, idx: [[0]])
+    monkeypatch.setattr(proposal.structure, "_answer", lambda ctx, q: "항목별 기준")
+    monkeypatch.setattr(proposal.scoring, "judge_all",
+                        lambda qs, preds: ([1.0], False))
+    r = proposal.score_proposal(pages, qa, entries)
+    assert r["accuracy"] == 1.0 and r["n_grounded_questions"] == 1
+    # 분모 = 구조가 참조하는 유일 source(섹션)의 실물 길이
+    assert r["denom_chars"] == proposal.total_source_chars(pages, entries) > 0
+    # 읽은 글자 = 그 섹션 + 헤더 라벨 → 효율은 (0,1) 사이가 아니라 0일 수도
+    assert r["total"] == round(r["accuracy"] * r["efficiency"], 3)
+    assert r["details"][0]["picked"] == ["prerm/기준.md"]
+
+
+def test_score_proposal_propagates_judge_parse_failure(tmp_path, monkeypatch):
+    entries = _entries(tmp_path)
+    pages = [_pages()[0]]
+    qa = [{"q": "q", "a": "a", "evidence": []}]
+    monkeypatch.setattr(proposal.audit, "route_batch", lambda qs, idx: [[0]])
+    monkeypatch.setattr(proposal.structure, "_answer", lambda ctx, q: "pred")
+    monkeypatch.setattr(proposal.scoring, "judge_all",
+                        lambda qs, preds: ([0.0], True))
+    r = proposal.score_proposal(pages, qa, entries)
+    assert r["parse_failed"] is True
+
+
+# ---------- evolve loop ----------
+
+def _setup_evolve(tmp_path, monkeypatch):
+    import evolve_proposal
+    entries = _entries(tmp_path)
+    monkeypatch.setattr(evolve_proposal.repo_map, "build_map",
+                        lambda *a, **k: entries)
+    qa = [{"q": "채점 기준은?", "a": "항목별 기준", "evidence": []},
+          {"q": "PRB 필드는?", "a": None, "evidence": []}]
+    monkeypatch.setattr(evolve_proposal.task_questions, "get_question_set",
+                        lambda *a, **k: (qa, ["PRB 필드는?"]))
+    return evolve_proposal
+
+
+def test_evolve_tracks_best_and_reflects_from_best(tmp_path, monkeypatch):
+    ep = _setup_evolve(tmp_path, monkeypatch)
+    pages = [_pages()[0]]
+    monkeypatch.setattr(ep.proposal, "propose",
+                        lambda *a, **k: (pages, {"anchor_miss": 0,
+                                                 "dropped_sources": 0,
+                                                 "dropped_pages": 0}))
+    totals = iter([0.5, 0.3, 0.7])
+
+    def fake_score(pgs, qa, entries):
+        t = next(totals)
+        return {"total": t, "accuracy": t, "efficiency": 1.0, "avg_read": 10,
+                "denom_chars": 100, "n_pages": 1, "n_gap_questions": 1,
+                "n_grounded_questions": 1, "parse_failed": False,
+                "details": [{"q": "채점 기준은?", "picked": ["prerm/기준.md"],
+                             "read_chars": 10, "pred": "p", "score": 1.0}]}
+
+    monkeypatch.setattr(ep.proposal, "score_proposal", fake_score)
+    reflected = []
+    monkeypatch.setattr(ep, "reflect",
+                        lambda s, r, g: reflected.append(r["total"]) or f"전략v{len(reflected)}")
+    rep = ep.run_evolve(["src"], "태스크", generations=3,
+                        out_dir=str(tmp_path / "runs"), use_cache=False)
+    assert rep["best"]["total"] == 0.7 and rep["best"]["generation"] == 2
+    # gen1 점수(0.3)가 아니라 best(0.5) 기준으로 reflect했는지
+    assert reflected == [0.5, 0.5]
+
+
+def test_evolve_control_never_reflects(tmp_path, monkeypatch):
+    ep = _setup_evolve(tmp_path, monkeypatch)
+    monkeypatch.setattr(ep.proposal, "propose",
+                        lambda *a, **k: ([_pages()[0]], {"anchor_miss": 0,
+                                                         "dropped_sources": 0,
+                                                         "dropped_pages": 0}))
+    monkeypatch.setattr(ep.proposal, "score_proposal",
+                        lambda *a, **k: {"total": 0.5, "accuracy": 0.5,
+                                         "efficiency": 1.0, "avg_read": 1,
+                                         "denom_chars": 10, "n_pages": 1,
+                                         "n_gap_questions": 1,
+                                         "n_grounded_questions": 1,
+                                         "parse_failed": False, "details": []})
+    monkeypatch.setattr(ep, "reflect",
+                        lambda *a: (_ for _ in ()).throw(AssertionError("reflect 호출됨")))
+    rep = ep.run_evolve(["src"], "태스크", generations=2, no_evolve=True,
+                        out_dir=str(tmp_path / "runs"), use_cache=False)
+    assert rep["arm"] == "control"
+
+
+def test_evolve_downgrades_when_no_grounded(tmp_path, monkeypatch):
+    ep = _setup_evolve(tmp_path, monkeypatch)
+    qa = [{"q": "q1", "a": None, "evidence": []}]
+    monkeypatch.setattr(ep.task_questions, "get_question_set",
+                        lambda *a, **k: (qa, ["q1"]))
+    monkeypatch.setattr(ep.proposal, "propose",
+                        lambda *a, **k: ([_pages()[1]], {"anchor_miss": 0,
+                                                         "dropped_sources": 0,
+                                                         "dropped_pages": 0}))
+    rep = ep.run_evolve(["src"], "태스크", generations=5,
+                        out_dir=str(tmp_path / "runs"), use_cache=False)
+    assert rep["scoreable"] is False
+    assert rep["generations"] == 1 and len(rep["history"]) == 1
+    assert rep["best"]["pages"]  # 단발 제안은 유지
+
+
+def test_seed_from_runs_ignores_other_modes(tmp_path):
+    import evolve_proposal as ep
+    runs = tmp_path / "runs"
+    (runs / "a").mkdir(parents=True)
+    (runs / "b").mkdir()
+    json.dump({"mode": "proposal", "best": {"strategy": "제안 전략", "total": 0.4,
+                                            "pages": []}},
+              open(runs / "a" / "report.json", "w"))
+    json.dump({"best": {"strategy": "요약 전략", "total": 0.9}},
+              open(runs / "b" / "report.json", "w"))
+    got = ep.best_proposal_strategy_from_runs(str(runs))
+    assert got["strategy"] == "제안 전략"
+
+
+def test_apply_best_ignores_proposal_strategies(tmp_path):
+    import apply as apply_mod
+    runs = tmp_path / "runs"
+    (runs / "a").mkdir(parents=True)
+    (runs / "b").mkdir()
+    json.dump({"mode": "proposal", "best": {"strategy": "제안 전략", "total": 0.9,
+                                            "pages": []}},
+              open(runs / "a" / "report.json", "w"))
+    json.dump({"best": {"strategy": "요약 전략", "total": 0.4}},
+              open(runs / "b" / "report.json", "w"))
+    got = apply_mod.best_strategy_from_runs(str(runs))
+    assert got["strategy"] == "요약 전략"
