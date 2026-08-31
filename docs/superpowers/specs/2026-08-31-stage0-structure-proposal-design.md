@@ -31,7 +31,7 @@ wiki-optimizer의 기존 세 흐름(audit / Stage A 요약 진화 / Stage B 구�
 
 | 이름 | 필수 | 설명 |
 |---|---|---|
-| `sources[]` | ✓ | 레포/참고문서 디렉터리 경로 목록 (예: `~/aipmop`, `~/skax-docs`, `~/aipmo-study`) |
+| `sources[]` | ✓ | 레포/참고문서 디렉터리 경로 목록 (예: `~/aipmop`) |
 | `task` | ✓ | 자유 텍스트 태스크 설명. 질문 세트의 유일한 출처 |
 | `out_dir` | ✓(write 시) | 골격을 쓸 위치 |
 
@@ -45,7 +45,7 @@ wiki-optimizer의 기존 세 흐름(audit / Stage A 요약 진화 / Stage B 구�
   "path": "prerm/scoring-criteria.md",
   "title": "사전RM 평가항목 채점 기준",
   "purpose": "항목별 판단 기준·배점·산출 근거는 무엇인가",
-  "sources": ["skax-docs/mega-process-1.5-prerm-execrm.md#리스크-항목-채점",
+  "sources": ["aipmop/docs/domain/prerm-scoring.md#채점-기준",
                "aipmop/api/.../scoring.py"],
   "status": "grounded"   // grounded | gap
 }]}
@@ -129,15 +129,14 @@ stub .md: frontmatter(title/purpose/sources/status/generated_by) + 빈 본문.
 ## CLI (1단계 진입점)
 
 ```
-python3 src/evolve_proposal.py --source ~/aipmop --source ~/skax-docs \
-    --task-file task.txt --n-qa 8 --generations 1 --out-dir runs
+python3 src/evolve_proposal.py --source ~/aipmop --task-file task.txt --n-qa 8 --generations 1 --out-dir runs
 # --write <dir> 로 골격 실제 생성, 기본은 dry-run
 ```
 
 ## 실행 순서 (결정)
 
 1. **1단계**: repo_map + task_questions + 1회 제안 + skeleton(dry-run) →
-   **aipmo(사전RM 태스크)로 실제 실행, 결과 보고.** 판정 포인트: 태스크에서
+   **~/aipmop 레포 하나 + 사전RM 태스크로 실제 실행, 결과 보고.** 판정 포인트: 태스크에서
    뽑은 질문이 쓸 만한가. 아니면 2단계 설계를 조정한다.
 2. **2단계**: score_proposal + evolve_proposal + control arm.
 3. **3단계**: web.py에 mode="propose" 탭.
