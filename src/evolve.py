@@ -191,7 +191,7 @@ def _flush_progress(run_dir, payload):
 
 
 def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
-           question_set=None, use_history=True, patience=None,
+           question_set=None, use_history=True, cancel_event=None, patience=None,
            history_mode="flat"):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
 
@@ -205,6 +205,9 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     (load_strategy_history가 evolve arm만 읽으므로 오염 없음).
     위키 경로는 <out_dir>/wiki/<doc>로 실험 단위 격리 — 문서 간·배치 간
     패턴 전이가 없어 run들의 독립성(paired bootstrap 전제)이 유지된다.
+
+    cancel_event(threading.Event)가 set되면 다음 세대 경계에서 멈추고,
+    그때까지의 결과로 report를 남긴다 (웹 대시보드 취소용).
 
     patience=N이면 N세대 연속 best 미갱신 시 조기 종료한다. **단독 실행 전용** —
     batch 대조 실험에서 쓰면 arm마다 유효 표본 수(세대 수)가 달라져 net 비교가
@@ -242,6 +245,9 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
 
     since_best = 0
     for g in range(generations):
+        if cancel_event is not None and cancel_event.is_set():
+            print(f"[cancel] 취소 요청 — {g}세대까지의 결과만 남긴다")
+            break
         t = time.time()
         summary = summarize(raw_text, strategy)
         # train/held-out 채점은 서로 독립 (공유 상태 없음) — 병렬로 세대당
@@ -349,6 +355,7 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         "holdout_questions": test_qs,
         "parse_failed": bool(parse_failed_gens),
         "parse_failed_generations": parse_failed_gens,
+        "cancelled": bool(cancel_event is not None and cancel_event.is_set()),
         "best": {k: v for k, v in best.items() if k != "train_result"},
         "history": history,
     }

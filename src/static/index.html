@@ -171,6 +171,7 @@
   .b-done { background: var(--ok-soft); color: var(--ok); }
   .b-error { background: var(--bad-soft); color: var(--bad); }
   .b-queued { background: var(--hover); color: var(--dim); }
+  .b-cancelled, .b-interrupted { background: var(--hover); color: var(--dim); }
 
   .runbox { margin-top: 16px; padding: 16px; border: 1px solid var(--line-subtle);
             border-radius: var(--radius-sm); background: var(--control); }
@@ -335,6 +336,7 @@ const I18N = {
     need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
     no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요",
     no_jobs: "아직 실행한 실험이 없습니다", waiting_gen: "아직 첫 세대 결과 대기 중…",
+    stop: "중지", stopping: "중지 요청됨…",
     preparing_q: "질문 세트 준비 중…", failed: "실패",
     mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
     audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${t}개 문서 중 ${d}개 채점 중…`,
@@ -380,6 +382,7 @@ const I18N = {
     need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
     no_md: "No md files found", need_docs: "Select at least one document",
     no_jobs: "No experiments yet", waiting_gen: "Waiting for the first generation…",
+    stop: "Stop", stopping: "Stop requested…",
     preparing_q: "Preparing question set…", failed: "Failed",
     mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
     audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scored ${d} of ${t} documents…`,
@@ -425,6 +428,7 @@ const I18N = {
     need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
     no_md: "未找到 md 文件", need_docs: "请至少选择一个文档",
     no_jobs: "还没有运行过实验", waiting_gen: "等待第一代结果…",
+    stop: "停止", stopping: "已请求停止…",
     preparing_q: "正在准备问题集…", failed: "失败",
     mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
     audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 共 ${t} 篇文档，已评 ${d} 篇…`,
@@ -859,16 +863,29 @@ async function renderJob(j) {
     }
     inner = `<div class="job-body">${body}</div>`;
   }
+  // summary만 실행 중 취소 지점이 있다 — 다른 모드는 대기 중(queued)에만 중지 가능
+  const stoppable = j.status === "queued" ||
+    (j.status === "running" && j.mode === "summary");
+  const stopUi = !stoppable ? ""
+    : j.cancel_requested
+      ? `<span class="meta">${t("stopping")}</span>`
+      : `<button class="ghost" onclick="event.stopPropagation();cancelRun('${j.id}')">${t("stop")}</button>`;
   return `<div class="card">
     <div class="job-head" onclick="toggle('${j.id}')">
       ${badge} <span class="mode">${t("mode_" + j.mode)}</span>
       <span class="docs-list">${j.doc_names.map(esc).join(", ")}</span>
       <span class="meta">${j.backend} · gen ${j.generations} · ${when}</span>
+      ${stopUi}
       <span class="chev${isOpen ? " open" : ""}">▾</span>
     </div>${inner}</div>`;
 }
 
 function toggle(id) { open_.has(id) ? open_.delete(id) : open_.add(id); poll(); }
+
+async function cancelRun(id) {
+  await fetch(`/api/runs/${id}/cancel`, { method: "POST" });
+  poll();
+}
 
 let timer = null, lastHtml = "";
 async function poll() {
