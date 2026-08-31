@@ -32,7 +32,7 @@ trap 'rmdir "$LOCK_DIR"' EXIT
 log "$(bash "$REPO/harness/self_update.sh" "$REPO" master)"
 
 # ── 게이트: GraphQL로 처리 대상 유무만 확인 ──────────────────────────
-QUERY='{"query":"{ issues(filter: { team: { key: { eq: \"'"$TEAM_KEY"'\" } }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }, first: 50) { nodes { identifier title priority labels { nodes { name } } } } }"}'
+QUERY='{"query":"{ issues(filter: { team: { key: { eq: \"'"$TEAM_KEY"'\" } }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }, first: 50) { nodes { identifier title priority labels { nodes { name } } comments(first: 50) { nodes { body createdAt } } } } }"}'
 
 # Linear 불통이어도 리뷰 단계(GitHub 기반)는 독립적으로 돌아야 한다 — 이슈 파이프라인만 건너뛴다
 RESP="$(curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
@@ -42,6 +42,7 @@ RESP="$(curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
 
 TRIAGE_COUNT=0; EXEC_COUNT=0
 if [ -n "$RESP" ]; then
+  # 카운트 로직은 gate.jq 단일 소스 (needs-info 자동 재접수 판정 포함) — lib.sh 함수가 위임
   TRIAGE_COUNT="$(gate_triage_count "$RESP")"
   EXEC_COUNT="$(gate_exec_count "$RESP")"
 fi

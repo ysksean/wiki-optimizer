@@ -2,14 +2,16 @@
 # 하네스 결정론적 로직 모음 — poll.sh/review.sh가 source하고 tests/test_harness.sh가 오프라인 검증한다.
 # 이 파일의 함수는 LLM·네트워크·gh 호출 없이 입력 → 출력만 있어야 한다.
 
-# $1=Linear 게이트 GraphQL 응답 JSON → triaged/needs-info 둘 다 없는 이슈 수
+_HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# $1=Linear 게이트 GraphQL 응답 JSON → triage 대상 수 (needs-info 재접수 포함, 로직은 gate.jq 단일 소스)
 gate_triage_count() {
-  jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | any(. == "triaged" or . == "needs-info")) | not)] | length' <<<"$1"
+  jq -f "$_HARNESS_DIR/gate.jq" <<<"$1" | jq '.triage'
 }
 
-# $1=Linear 게이트 GraphQL 응답 JSON → triaged이고 priority > 0인 이슈 수
+# $1=Linear 게이트 GraphQL 응답 JSON → 집행 대기 수 (로직은 gate.jq 단일 소스)
 gate_exec_count() {
-  jq '[.data.issues.nodes[] | select((.labels.nodes | map(.name) | index("triaged")) != null and .priority > 0)] | length' <<<"$1"
+  jq -f "$_HARNESS_DIR/gate.jq" <<<"$1" | jq '.exec'
 }
 
 # $1=gh pr list JSON(number,labels,...) → grokbot:s1* 라벨이 없는 첫 PR 번호 (없으면 빈값)

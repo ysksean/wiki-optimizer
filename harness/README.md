@@ -18,7 +18,7 @@ Linear 팀 SEA에 이슈(민원)를 올리면, 로컬 폴링이 Triage → PM �
 | 이슈 상태 | 의미 |
 |---|---|
 | Todo/Backlog, 라벨 없음 | 미접수 → 다음 tick에 Triage |
-| `needs-info` | 정보 부족. **답변 코멘트 후 라벨을 직접 제거**하면 재접수 |
+| `needs-info` | 정보 부족. **답변 코멘트만 달면** 다음 tick에 자동 재접수 (라벨 제거 불필요 — 최신 코멘트가 역할 태그 🔎/📋/🔧/🧿로 시작하지 않으면 게이트가 감지, `harness/gate.jq`) |
 | `triaged` + priority | 처리 대기열. PM이 우선순위순 1건/tick 집행 |
 | `triaged` + priority 없음 | 보류 (파이프라인이 영구히 무시) |
 | In Progress | Executor 작업 중 |
