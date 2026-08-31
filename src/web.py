@@ -31,9 +31,59 @@ import evolve_structure
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 JOBS_DIR = "runs/web"
 
-JOBS = {}          # job_id -> job dict
+JOBS = {}          # job_id -> job dict (JSON 직렬화 가능한 값만 담는다)
 JOBS_LOCK = threading.Lock()
 RUN_LOCK = threading.Lock()  # 동시 실행 1개 제한
+CANCEL_EVENTS = {}  # job_id -> threading.Event (직렬화 불가라 JOBS 밖에 둔다)
+
+
+def _save_job(job):
+    """job 메타를 runs/web/<id>/job.json으로 남긴다 (재시작 후 이력 복원용)."""
+    try:
+        with open(os.path.join(job["dir"], "job.json"), "w") as f:
+            json.dump(job, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def load_jobs():
+    """기동 시 runs/web/*/job.json을 스캔해 지난 실행 이력을 JOBS로 복원한다.
+
+    복원 시점에 queued/running이던 job은 워커 스레드가 사라졌으므로
+    interrupted로 마킹한다.
+    """
+    for p in sorted(glob.glob(os.path.join(JOBS_DIR, "*", "job.json"))):
+        try:
+            with open(p) as f:
+                job = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(job, dict) or not job.get("id"):
+            continue
+        job["dir"] = os.path.dirname(p)
+        if job.get("status") in ("queued", "running"):
+            job["status"] = "interrupted"
+            job.setdefault("finished_at", None)
+            _save_job(job)
+        with JOBS_LOCK:
+            JOBS[job["id"]] = job
+
+
+def cancel_job(job_id):
+    """취소 요청 처리. (payload, http_code)를 반환한다."""
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job:
+        return {"error": "없는 job"}, 404
+    if job["status"] not in ("queued", "running"):
+        return {"error": f"이미 끝난 job입니다: {job['status']}"}, 409
+    ev = CANCEL_EVENTS.get(job_id)
+    if ev is None:  # 재시작으로 복원된 job엔 워커가 없다 (방어)
+        return {"error": "취소할 수 없는 job"}, 409
+    ev.set()
+    job["cancel_requested"] = True
+    _save_job(job)
+    return {"ok": True, "status": job["status"]}, 200
 
 
 def list_docs(wiki_dir):
@@ -53,8 +103,15 @@ def list_docs(wiki_dir):
 
 def _run_job(job):
     """워커 스레드: 백엔드 설정 후 모드별 작업 실행."""
+    cancel = CANCEL_EVENTS.get(job["id"]) or threading.Event()
     with RUN_LOCK:
+        if cancel.is_set():  # queued 상태에서 취소됨
+            job["status"] = "cancelled"
+            job["finished_at"] = time.time()
+            _save_job(job)
+            return
         job["status"] = "running"
+        _save_job(job)
         llm.BACKEND = job["backend"]
         llm.LANGUAGE = job.get("language", "ko")
 
@@ -65,10 +122,12 @@ def _run_job(job):
         try:
             if job["mode"] == "summary":
                 for path in job["files"]:
+                    if cancel.is_set():
+                        break
                     job["current_doc"] = os.path.basename(path)
                     evolve.evolve(
                         path, generations=job["generations"], n_qa=job["n_qa"],
-                        out_dir=job["dir"],
+                        out_dir=job["dir"], cancel_event=cancel,
                     )
             elif job["mode"] == "structure":
                 evolve_structure.evolve_structure(
@@ -94,12 +153,15 @@ def _run_job(job):
                 res["type"] = "apply"
                 res["done"] = res["total"] = len(res["docs"])
                 flush_result(res)
-            job["status"] = "done"
+            # summary 모드만 중간 취소 지점이 있다 — 나머지 모드는 끝까지 돌면 done
+            aborted = job["mode"] == "summary" and cancel.is_set()
+            job["status"] = "cancelled" if aborted else "done"
         except Exception as e:
             job["status"] = "error"
             job["error"] = f"{type(e).__name__}: {e}"
         finally:
             job["finished_at"] = time.time()
+            _save_job(job)
 
 
 def start_job(params):
@@ -141,12 +203,15 @@ def start_job(params):
         "dir": os.path.join(JOBS_DIR, job_id),
         "status": "queued",
         "error": None,
+        "cancel_requested": False,
         "created_at": time.time(),
         "finished_at": None,
     }
     os.makedirs(job["dir"], exist_ok=True)
     with JOBS_LOCK:
         JOBS[job_id] = job
+        CANCEL_EVENTS[job_id] = threading.Event()
+    _save_job(job)
     threading.Thread(target=_run_job, args=(job,), daemon=True).start()
     return job, None
 
@@ -263,6 +328,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlparse(self.path)
+        parts = url.path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "cancel":
+            payload, code = cancel_job(parts[2])
+            self._json(payload, code)
+            return
         if url.path != "/api/runs":
             self.send_error(404)
             return
@@ -284,6 +354,7 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
     os.makedirs(JOBS_DIR, exist_ok=True)
+    load_jobs()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"wiki-optimizer 대시보드: http://localhost:{args.port}  (백엔드 기본: {llm.BACKEND})")
     srv.serve_forever()

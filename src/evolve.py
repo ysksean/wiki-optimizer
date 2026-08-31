@@ -182,12 +182,15 @@ def _flush_progress(run_dir, payload):
 
 
 def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
-           question_set=None, use_history=True):
+           question_set=None, use_history=True, cancel_event=None):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
 
     use_history=False면 reflect가 영속 이력을 읽지 않고, 기록도
     'evolve-nohist' arm으로 남겨 이력을 쓰는 run을 오염시키지 않는다
     (ablation 용도).
+
+    cancel_event(threading.Event)가 set되면 다음 세대 경계에서 멈추고,
+    그때까지의 결과로 report를 남긴다 (웹 대시보드 취소용).
     """
     raw_text = open(raw_path).read()
     doc = os.path.splitext(os.path.basename(raw_path))[0]
@@ -213,6 +216,9 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     parse_failed_gens = []
 
     for g in range(generations):
+        if cancel_event is not None and cancel_event.is_set():
+            print(f"[cancel] 취소 요청 — {g}세대까지의 결과만 남긴다")
+            break
         t = time.time()
         summary = summarize(raw_text, strategy)
         r_train = scoring.score(raw_text, summary, train_qs)
@@ -284,6 +290,7 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         "holdout_questions": test_qs,
         "parse_failed": bool(parse_failed_gens),
         "parse_failed_generations": parse_failed_gens,
+        "cancelled": bool(cancel_event is not None and cancel_event.is_set()),
         "best": {k: v for k, v in best.items() if k != "train_result"},
         "history": history,
     }
