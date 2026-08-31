@@ -203,6 +203,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     구조화 패턴 위키를 갱신하고, reflect는 flat 이력 대신 위키(index +
     패턴 페이지)를 읽는다. flat 이력 기록은 arm 구분해 그대로 남긴다
     (load_strategy_history가 evolve arm만 읽으므로 오염 없음).
+    위키 경로는 <out_dir>/wiki/<doc>로 실험 단위 격리 — 문서 간·배치 간
+    패턴 전이가 없어 run들의 독립성(paired bootstrap 전제)이 유지된다.
 
     patience=N이면 N세대 연속 best 미갱신 시 조기 종료한다. **단독 실행 전용** —
     batch 대조 실험에서 쓰면 arm마다 유효 표본 수(세대 수)가 달라져 net 비교가
@@ -219,6 +221,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         arm = "evolve" if use_history else "evolve-nohist"
     run_dir = os.path.join(out_dir, f"{doc}-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
+    # 구조화 위키는 실험 단위(out_dir x doc)로 격리 — wiki.wiki_dir_for 참조
+    pattern_wiki_dir = wiki.wiki_dir_for(out_dir, doc)
 
     print(f"[setup] 문서: {doc} ({len(raw_text)} chars)  arm={arm}")
     if question_set is None:
@@ -295,7 +299,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
             if arm == "evolve-wiki":
                 # Wiki Maintainer — 파싱 실패 세대는 근거 자체가 무효라 위키에 안 넣는다
                 try:
-                    wiki.maintain(doc, g, strategy, r_train, r_test, improved)
+                    wiki.maintain(pattern_wiki_dir, doc, g, strategy,
+                                  r_train, r_test, improved)
                 except llm.LLMError as e:
                     print(f"[wiki] maintainer 호출 실패 — 위키 변경 없음: {e}")
 
@@ -320,7 +325,7 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
             # (아직 유효한 best가 없으면 — 전 세대 판정 실패 — 현재 전략을 그대로 재시도)
             if arm == "evolve-wiki":
                 strategy = reflect(best["strategy"], best["train_result"],
-                                   history_block=wiki.wiki_block())
+                                   history_block=wiki.wiki_block(pattern_wiki_dir))
             else:
                 strategy = reflect(best["strategy"], best["train_result"],
                                    doc=doc if use_history else None)

@@ -24,14 +24,19 @@ import wiki
 
 @pytest.fixture
 def wiki_env(tmp_path, monkeypatch):
-    """위키·flat 이력·run 출력을 tmp로 격리하고 문서 파일을 만든다."""
-    monkeypatch.setattr(wiki, "WIKI_DIR", str(tmp_path / "wiki"))
-    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path / "wiki"))
-    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "wiki" / "impact.jsonl"))
+    """flat 이력·run 출력을 tmp로 격리하고 문서 파일을 만든다.
+
+    구조화 위키는 전역 경로가 없다 — evolve가 <out_dir>/wiki/<doc>로
+    스코프하므로 out만 tmp면 실전 경로가 오염되지 않는다.
+    "wdir"은 wiki 함수 직접 호출 테스트용 임의 위키 경로.
+    """
+    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path / "flat"))
+    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "flat" / "impact.jsonl"))
     doc = tmp_path / "doc.md"
     doc.write_text("x" * 1000)
     qs = [{"q": f"q{i}", "a": f"a{i}"} for i in range(6)]
-    return {"doc": str(doc), "out": str(tmp_path / "runs"), "qs": qs}
+    return {"doc": str(doc), "out": str(tmp_path / "runs"), "qs": qs,
+            "wdir": str(tmp_path / "wiki")}
 
 
 # ---------- _parse_ops ----------
@@ -59,57 +64,78 @@ def test_parse_ops_rejects_invalid(out):
 # ---------- _apply_ops / index ----------
 
 def test_apply_ops_create_append_replace_and_index(wiki_env):
-    n = wiki._apply_ops([
+    w = wiki_env["wdir"]
+    n = wiki._apply_ops(w, [
         {"op": "create", "slug": "too-long", "content": "# too-long\n요약이 길면 효율이 떨어진다 — 압축하라\n본문1"},
     ])
     assert n == 1
-    assert wiki._apply_ops([{"op": "append", "slug": "too-long", "content": "본문2"}]) == 1
-    assert wiki._apply_ops([{"op": "replace", "slug": "too-long", "old": "본문1", "new": "본문1개정"}]) == 1
+    assert wiki._apply_ops(w, [{"op": "append", "slug": "too-long", "content": "본문2"}]) == 1
+    assert wiki._apply_ops(w, [{"op": "replace", "slug": "too-long", "old": "본문1", "new": "본문1개정"}]) == 1
 
-    page = wiki._read_page("too-long")
+    page = wiki._read_page(w, "too-long")
     assert "본문1개정" in page and "본문2" in page
-    index = open(os.path.join(wiki.WIKI_DIR, "index.md")).read()
+    index = open(os.path.join(w, "index.md")).read()
     assert "**too-long**: 요약이 길면 효율이 떨어진다 — 압축하라" in index
 
 
 def test_apply_ops_skips_unsafe_ops(wiki_env):
-    wiki._apply_ops([{"op": "create", "slug": "p1", "content": "# p1\n요약\nAA\nAA"}])
-    applied = wiki._apply_ops([
+    w = wiki_env["wdir"]
+    wiki._apply_ops(w, [{"op": "create", "slug": "p1", "content": "# p1\n요약\nAA\nAA"}])
+    applied = wiki._apply_ops(w, [
         {"op": "create", "slug": "p1", "content": "# p1\n덮어쓰기 시도"},  # 기존 페이지 덮기 금지
         {"op": "append", "slug": "no-such", "content": "x"},               # 없는 페이지 append 금지
         {"op": "replace", "slug": "p1", "old": "AA", "new": "BB"},         # 2회 일치 — 오적용 방지
     ])
     assert applied == 0
-    assert "덮어쓰기" not in wiki._read_page("p1")
+    assert "덮어쓰기" not in wiki._read_page(w, "p1")
 
 
 def test_page_clamped_to_max_lines(wiki_env):
+    w = wiki_env["wdir"]
     body = "\n".join(f"line{i}" for i in range(100))
-    wiki._apply_ops([{"op": "create", "slug": "big", "content": f"# big\n요약\n{body}"}])
-    lines = wiki._read_page("big").splitlines()
+    wiki._apply_ops(w, [{"op": "create", "slug": "big", "content": f"# big\n요약\n{body}"}])
+    lines = wiki._read_page(w, "big").splitlines()
     assert len(lines) <= wiki.MAX_PAGE_LINES
     assert lines[0] == "# big" and lines[1] == "요약"  # 요약 줄은 지킨다
     assert "line99" in lines[-1]  # 오래된 본문부터 버린다
 
 
+def test_wiki_block_budget_skips_oversized_page_not_rest(wiki_env, monkeypatch):
+    """예산 초과 페이지는 건너뛰되(continue) 뒤의 작은 페이지는 실려야 한다."""
+    w = wiki_env["wdir"]
+    wiki._apply_ops(w, [
+        {"op": "create", "slug": "huge", "content": "# huge\n요약\n" + "본문 " * 3000},
+        {"op": "create", "slug": "tiny", "content": "# tiny\n작은 패턴 요약"},
+    ])
+    # huge를 최신으로 만들어 예산 판정을 먼저 받게 한다 (mtime 해상도 무관하게)
+    future = os.path.getmtime(wiki._page_path(w, "tiny")) + 10
+    os.utime(wiki._page_path(w, "huge"), (future, future))
+    block = wiki.wiki_block(w)
+    assert "[패턴: tiny]" in block
+    assert "[패턴: huge]" not in block
+    assert "**huge**" in block  # index에는 남는다
+
+
 # ---------- maintain: 파싱 실패 시 무변경 ----------
 
 def test_maintain_parse_failure_leaves_wiki_untouched(wiki_env, monkeypatch):
-    wiki._apply_ops([{"op": "create", "slug": "keep", "content": "# keep\n요약"}])
-    before = wiki._read_page("keep")
+    w = wiki_env["wdir"]
+    wiki._apply_ops(w, [{"op": "create", "slug": "keep", "content": "# keep\n요약"}])
+    before = wiki._read_page(w, "keep")
     monkeypatch.setattr(wiki.llm, "generate", lambda *a, **k: "JSON이 아닌 잡담")
 
-    ok = wiki.maintain("doc", 0, "전략", {"qa_details": []},
+    ok = wiki.maintain(w, "doc", 0, "전략", {"qa_details": []},
                        {"total": 0.5, "length_ratio": 0.3}, True)
 
     assert ok is False
-    assert wiki._read_page("keep") == before
-    assert wiki._list_pages()[0][0] == "keep" and len(wiki._list_pages()) == 1
+    assert wiki._read_page(w, "keep") == before
+    assert wiki._list_pages(w)[0][0] == "keep" and len(wiki._list_pages(w)) == 1
 
 
 # ---------- evolve(history_mode="wiki") e2e ----------
 
-def _install_fake_llm(monkeypatch, acc_by_gen, maintainer_ops, reflect_prompts):
+def _install_fake_llm(monkeypatch, acc_by_gen, maintainer_ops, reflect_prompts,
+                      maintainer_prompts=None):
     """요약/채점 fake(test_evolve_batch 패턴) + maintainer/reflect 분기.
 
     acc_by_gen: {전역 요약 호출 순번: 정답 비율}. 배치처럼 evolve()가 여러 번
@@ -135,6 +161,8 @@ def _install_fake_llm(monkeypatch, acc_by_gen, maintainer_ops, reflect_prompts):
             return json.dumps([1] * k + [0] * (n - k))
         if prompt.endswith("JSON:"):  # Wiki Maintainer
             state["maintain_calls"] += 1
+            if maintainer_prompts is not None:
+                maintainer_prompts.append(prompt)
             return json.dumps({"ops": maintainer_ops})
         if prompt.endswith("[개선된 전략 프롬프트]:"):  # reflect
             reflect_prompts.append(prompt)
@@ -159,7 +187,8 @@ def test_evolve_wiki_arm_maintains_and_injects_wiki(wiki_env, monkeypatch):
 
     assert report["arm"] == "evolve-wiki"
     assert state["maintain_calls"] == 3  # 유효 세대마다 1회
-    assert wiki._read_page("missing-facts") is not None
+    wdir = wiki.wiki_dir_for(wiki_env["out"], "doc")
+    assert wiki._read_page(wdir, "missing-facts") is not None
     # reflect(gen0 이후)에는 위키가 들어가고 flat 이력 블록은 없다
     assert len(reflect_prompts) == 2
     for p in reflect_prompts:
@@ -180,7 +209,7 @@ def test_evolve_flat_arm_never_touches_wiki(wiki_env, monkeypatch):
 
     assert report["arm"] == "evolve"
     assert state["maintain_calls"] == 0
-    assert wiki._list_pages() == []
+    assert not os.path.isdir(os.path.join(wiki_env["out"], "wiki"))  # 위키 자체가 안 생긴다
 
 
 def test_run_batch_three_arms_end_to_end(wiki_env, monkeypatch, tmp_path):
@@ -189,11 +218,12 @@ def test_run_batch_three_arms_end_to_end(wiki_env, monkeypatch, tmp_path):
     실 LLM 배치를 대신하는 오프라인 e2e: 3-arm summary.md가 실제로
     생성되고 두 net + 유의성 문구가 함께 실리는지 확인한다.
     """
-    reflect_prompts = []
+    reflect_prompts, maintainer_prompts = [], []
     ops = [{"op": "create", "slug": "missing-facts",
             "content": "# missing-facts\n핵심 사실 누락 — 수치를 명시하라"}]
     # 짝수 순번 0.5, 홀수 순번 1.0 → 모든 run에서 gen1이 best
-    _install_fake_llm(monkeypatch, {0: 0.5, 1: 1.0}, ops, reflect_prompts)
+    _install_fake_llm(monkeypatch, {0: 0.5, 1: 1.0}, ops, reflect_prompts,
+                      maintainer_prompts)
     monkeypatch.setattr(evolve, "load_question_set",
                         lambda path, text, n: wiki_env["qs"])
     doc2 = tmp_path / "doc2.md"
@@ -210,7 +240,15 @@ def test_run_batch_three_arms_end_to_end(wiki_env, monkeypatch, tmp_path):
     assert "구조화 위키 효과(net)" in summary
     assert "진화 효과(net)" in summary
     assert summary.count("문서 단위 paired bootstrap") + summary.count("판정 불가") == 2
-    assert wiki._read_page("missing-facts") is not None  # wiki arm이 위키를 만들었다
+    assert "한계(교란 요인)" in summary  # 위키 net에는 교란 요인 한계가 같이 실린다
+    # 위키는 배치 안에서 문서별로 격리된다 — 문서 간 패턴 전이 없음
+    for d in ("doc", "doc2"):
+        assert wiki._read_page(wiki.wiki_dir_for(batch_dir, d), "missing-facts") is not None
+    assert len(maintainer_prompts) == 4  # 문서 2 x gen 2
+    # doc2의 첫 maintainer 호출 시점에 index가 비어 있어야 한다
+    # (doc1이 이미 missing-facts를 만든 뒤다 — 새어들면 격리 실패)
+    assert "(비어 있음)" in maintainer_prompts[2]
+    assert "missing-facts" not in maintainer_prompts[2].split("[이번 세대")[0]
 
 
 # ---------- batch: resolve_arms / aggregate ----------
@@ -263,3 +301,21 @@ def test_aggregate_wiki_without_evolve_baseline_is_inconclusive(tmp_path):
     summary = (tmp_path / "summary.md").read_text()
     assert "비교 기준(evolve arm)이 없다" in summary
     assert "실제로 개선" not in summary
+
+
+def test_aggregate_control_without_evolve_prints_no_ghost_net(tmp_path):
+    """--arms evolve-wiki,control: 돌지도 않은 evolve의 0.0으로 net을 지어내면 안 된다."""
+    records = [_rec("d1", "evolve-wiki", 0.3), _rec("d1", "control", 0.1),
+               _rec("d2", "evolve-wiki", 0.2), _rec("d2", "control", 0.0)]
+    batch.aggregate(records, str(tmp_path), generations=3, runs=1, batch_elapsed=60.0)
+    summary = (tmp_path / "summary.md").read_text()
+    assert "진화 효과(net)" not in summary  # 유령 net 없음
+    assert "진화 효과는 판정 불가" in summary
+
+
+def test_aggregate_nohist_without_evolve_prints_no_ghost_net(tmp_path):
+    records = [_rec("d1", "evolve-nohist", 0.1), _rec("d2", "evolve-nohist", 0.2)]
+    batch.aggregate(records, str(tmp_path), generations=3, runs=1, batch_elapsed=60.0)
+    summary = (tmp_path / "summary.md").read_text()
+    assert "영속 이력 효과(net)" not in summary
+    assert "영속 이력 효과는 판정 불가" in summary

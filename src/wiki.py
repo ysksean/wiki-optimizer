@@ -6,6 +6,10 @@ flat 이력(strategy-impact.jsonl)과 달리, 패턴 1개당 페이지 1개에
 이 모듈이 그 대비축(flat vs 구조화)을 우리 실험대에 만든다.
 
 설계 원칙:
+- **위키는 실험 단위(배치 out_dir x 문서)로 스코프한다.** 모든 함수가
+  wiki_dir을 명시적으로 받는다 — 전역 경로가 없으므로 문서 A의 패턴이
+  문서 B의 reflect에 새어들거나 이전 배치 잔여물을 물려받을 수 없다.
+  (문서 간 오염은 run들의 독립성을 깨 paired bootstrap 전제를 무너뜨린다.)
 - Wiki Maintainer LLM 호출은 세대당 1회. 응답은 JSON patch 연산
   (create/append/replace)으로만 위키를 수정한다 — 통째 재작성 금지.
 - 파싱 실패 시 위키를 **건드리지 않고 skip**한다. 실패를 빈 갱신으로
@@ -24,17 +28,26 @@ import threading
 import llm
 
 
-WIKI_DIR = os.path.join("runs", "wiki")
+def wiki_dir_for(out_dir, doc):
+    """실험 단위 위키 경로 = <out_dir>/wiki/<doc>.
+
+    배치 실행이면 out_dir=batch_dir이라 배치·문서 단위로 격리되고,
+    단독 실행(out_dir="runs")이면 문서 단위로만 누적된다.
+    """
+    return os.path.join(out_dir, "wiki", doc)
 
 
-def _patterns_dir():
-    return os.path.join(WIKI_DIR, "patterns")
+def _patterns_dir(wiki_dir):
+    return os.path.join(wiki_dir, "patterns")
 
 
-def _index_path():
-    return os.path.join(WIKI_DIR, "index.md")
+def _index_path(wiki_dir):
+    return os.path.join(wiki_dir, "index.md")
 
 
+# 같은 wiki_dir을 쓰는 스레드 간 read-modify-write 경합 방지.
+# (batch --parallel은 문서 단위 병렬이고 위키는 문서별로 격리되므로
+#  실제 경합은 없지만, 락 비용이 미미해 방어적으로 유지한다.)
 _WIKI_LOCK = threading.Lock()
 
 MAX_PAGE_LINES = 40      # 요약 줄 포함 페이지 상한
@@ -44,12 +57,12 @@ _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,60}$")
 
 # ---------- 읽기 ----------
 
-def _page_path(slug):
-    return os.path.join(_patterns_dir(), f"{slug}.md")
+def _page_path(wiki_dir, slug):
+    return os.path.join(_patterns_dir(wiki_dir), f"{slug}.md")
 
 
-def _read_page(slug):
-    path = _page_path(slug)
+def _read_page(wiki_dir, slug):
+    path = _page_path(wiki_dir, slug)
     if not os.path.exists(path):
         return None
     with open(path) as f:
@@ -65,9 +78,9 @@ def _page_summary(text):
     return ""
 
 
-def _list_pages():
+def _list_pages(wiki_dir):
     """(slug, 본문, mtime) 목록. 없으면 빈 리스트."""
-    d = _patterns_dir()
+    d = _patterns_dir(wiki_dir)
     if not os.path.isdir(d):
         return []
     out = []
@@ -81,23 +94,25 @@ def _list_pages():
     return out
 
 
-def wiki_block():
+def wiki_block(wiki_dir):
     """reflect 프롬프트에 넣을 위키 텍스트 (index + 최근 패턴 페이지).
 
     위키가 비어 있으면 빈 문자열 — reflect는 이력 없이 동작한다.
     """
     with _WIKI_LOCK:
-        pages = _list_pages()
+        pages = _list_pages(wiki_dir)
     if not pages:
         return ""
     index = "\n".join(f"- **{slug}**: {_page_summary(text)}" for slug, text, _ in pages)
     lines = ["[전략 패턴 위키 — 과거 실험에서 축적된 패턴. 근본 원인이 같은 실패를 반복하지 마라]",
              "[index]", index, ""]
     budget = MAX_BLOCK_CHARS - sum(len(x) for x in lines)
-    # 최근 갱신된 페이지부터 상세 본문을 싣는다 (예산 내에서)
+    # 최근 갱신된 페이지부터 상세 본문을 싣는다 (예산 내에서).
+    # 예산 초과 페이지는 건너뛰고 계속 본다 — 큰 페이지 하나가 뒤의 작은
+    # 페이지들까지 막으면 안 된다.
     for slug, text, _ in sorted(pages, key=lambda p: p[2], reverse=True):
         if len(text) > budget:
-            break
+            continue
         lines.append(f"[패턴: {slug}]\n{text.strip()}")
         budget -= len(text)
     return "\n".join(lines) + "\n\n"
@@ -148,13 +163,13 @@ def _clamp_page(text):
     return "\n".join(head + body[-(MAX_PAGE_LINES - 2):])
 
 
-def _apply_ops(ops):
+def _apply_ops(wiki_dir, ops):
     """patch 연산 적용 + index 재생성. 적용된 연산 수를 돌려준다."""
     applied = 0
-    os.makedirs(_patterns_dir(), exist_ok=True)
+    os.makedirs(_patterns_dir(wiki_dir), exist_ok=True)
     for op in ops:
         slug = op["slug"]
-        existing = _read_page(slug)
+        existing = _read_page(wiki_dir, slug)
         if op["op"] == "create":
             if existing is not None:
                 continue  # 이미 있는 페이지를 통째로 덮지 않는다
@@ -170,20 +185,20 @@ def _apply_ops(ops):
             if existing is None or existing.count(op["old"]) != 1:
                 continue
             new_text = existing.replace(op["old"], op["new"])
-        with open(_page_path(slug), "w") as f:
+        with open(_page_path(wiki_dir, slug), "w") as f:
             f.write(_clamp_page(new_text))
         applied += 1
-    _rebuild_index()
+    _rebuild_index(wiki_dir)
     return applied
 
 
-def _rebuild_index():
+def _rebuild_index(wiki_dir):
     """index.md를 패턴 페이지 요약 줄에서 결정론적으로 재생성한다."""
-    pages = _list_pages()
+    pages = _list_pages(wiki_dir)
     lines = ["# 전략 패턴 index", ""]
     lines += [f"- **{slug}**: {_page_summary(text)}" for slug, text, _ in pages]
-    os.makedirs(WIKI_DIR, exist_ok=True)
-    with open(_index_path(), "w") as f:
+    os.makedirs(wiki_dir, exist_ok=True)
+    with open(_index_path(wiki_dir), "w") as f:
         f.write("\n".join(lines) + "\n")
 
 
@@ -209,14 +224,14 @@ MAINTAINER_PROMPT = """너는 요약 전략 실험의 '위키 관리자'다.
 JSON:"""
 
 
-def maintain(doc, generation, strategy, r_train, r_test, accepted):
+def maintain(wiki_dir, doc, generation, strategy, r_train, r_test, accepted):
     """세대 결과를 위키에 반영한다 (LLM 1회). 성공 여부를 돌려준다.
 
     파싱 실패 시 위키를 건드리지 않는다 — 조용한 빈 갱신으로 메우지 않는다.
     """
     missed = [d["q"] for d in (r_train or {}).get("qa_details", []) if d["score"] < 1]
     with _WIKI_LOCK:
-        pages = _list_pages()
+        pages = _list_pages(wiki_dir)
         index = "\n".join(f"- **{s}**: {_page_summary(t)}" for s, t, _ in pages) or "(비어 있음)"
     prompt = MAINTAINER_PROMPT.format(
         index=index,
@@ -232,6 +247,6 @@ def maintain(doc, generation, strategy, r_train, r_test, accepted):
         print(f"[wiki] maintainer 응답 파싱 실패 (doc={doc} gen={generation}) — 위키 변경 없음")
         return False
     with _WIKI_LOCK:
-        applied = _apply_ops(ops)
+        applied = _apply_ops(wiki_dir, ops)
     print(f"[wiki] doc={doc} gen={generation}: 패턴 연산 {applied}/{len(ops)}건 적용")
     return True

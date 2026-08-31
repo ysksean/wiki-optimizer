@@ -92,7 +92,8 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
               out_dir="runs", parallel=1, stage="summary", arms=None):
     """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
 
-    문서끼리는 질문 세트·run 디렉터리가 독립이라 병렬해도 결과가 같다.
+    문서끼리는 질문 세트·run 디렉터리·구조화 위키(evolve-wiki arm,
+    <batch_dir>/wiki/<doc>로 문서별 격리)가 독립이라 병렬해도 결과가 같다.
     공유되는 것은 records/중간저장/진행 카운터(아래 락)와 영속 이력 파일
     (evolve._IMPACT_LOCK)뿐이다.
 
@@ -434,12 +435,21 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
                 "flat 이력 대비 **구조화 위키가 실제로 개선**한다.",
                 "flat 이력과 통계적으로 **구분되지 않는다** — 관측된 차이는 노이즈로 설명 가능.",
             )
+            lines.append(
+                "- 한계(교란 요인): 이 net은 '이력의 구조'만 분리한 값이 아니다. "
+                "(1) evolve-wiki는 세대당 Wiki Maintainer LLM 1회를 더 써 컴퓨트 예산이 크고, "
+                "(2) flat 이력은 과거 배치 누적분을 갖고 시작하지만 위키는 배치마다 비어 있으며, "
+                "(3) 주입 형태(200자 전략 목록 vs index+패턴 페이지)와 분량이 다르다. "
+                "net 차이가 구조 덕인지 이 차이들 덕인지는 이 배치만으로 분리되지 않는다."
+            )
         else:
             lines.append(
                 "- evolve-wiki arm만 있고 비교 기준(evolve arm)이 없다 — "
                 "구조화 위키 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
             )
-    if "evolve-nohist" in by_arm:
+    # 아래 net들은 전부 evolve arm이 기준선이다 — 없는 arm의 수치를
+    # _arm_stats의 0.0으로 메워 유령 net을 인쇄하면 안 된다 (evolve 존재 필수).
+    if "evolve-nohist" in by_arm and "evolve" in by_arm:
         nh = _arm_stats(by_arm["evolve-nohist"])
         net = ev["mean_imp"] - nh["mean_imp"]
         lines.append(
@@ -451,7 +461,12 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             "이력 없는 진화 대비 **영속 이력이 실제로 개선**한다.",
             "이력 유무가 통계적으로 **구분되지 않는다** — 관측된 차이는 노이즈로 설명 가능.",
         )
-    elif "control" in by_arm:
+    elif "evolve-nohist" in by_arm:
+        lines.append(
+            "- evolve-nohist arm이 있는데 비교 기준(evolve arm)이 없다 — "
+            "영속 이력 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
+        )
+    elif "control" in by_arm and "evolve" in by_arm:
         ct = _arm_stats(by_arm["control"])
         net = ev["mean_imp"] - ct["mean_imp"]
         lines.append(
@@ -462,6 +477,11 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             valid, "evolve", "control",
             "노이즈 기준선(control) 대비 **진화가 실제로 개선**한다.",
             "control과 통계적으로 **구분되지 않는다** — 관측된 향상폭은 **선택 노이즈**로 설명 가능.",
+        )
+    elif "control" in by_arm:
+        lines.append(
+            "- control arm이 있는데 비교 기준(evolve arm)이 없다 — "
+            "진화 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
         )
     elif "evolve" in by_arm:
         lines.append(
