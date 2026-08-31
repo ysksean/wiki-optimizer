@@ -265,7 +265,7 @@
   <div class="card">
     <label data-i18n="folder_label"></label>
     <div class="folder-row">
-      <input type="text" id="dir" data-i18n-placeholder="folder_ph">
+      <input type="text" id="dir" data-i18n-placeholder="folder_ph" onchange="savePrefs()">
       <button class="ghost" onclick="pickDir()" data-i18n="pick_dir"></button>
       <button class="ghost" onclick="loadDocs()" data-i18n="load_docs"></button>
     </div>
@@ -277,11 +277,11 @@
           <option value="structure" data-i18n="mode_b"></option>
         </select></div>
       <div><label class="hint" data-i18n="gens" data-i18n-title="gens_tip"></label>
-        <input type="number" id="gens" value="3" min="1" max="10"></div>
+        <input type="number" id="gens" value="3" min="1" max="10" onchange="savePrefs()"></div>
       <div><label class="hint" data-i18n="nqa" data-i18n-title="nqa_tip"></label>
-        <input type="number" id="nqa" value="6" min="2" max="12"></div>
+        <input type="number" id="nqa" value="6" min="2" max="12" onchange="savePrefs()"></div>
       <div><label data-i18n="backend"></label>
-        <select id="backend">
+        <select id="backend" onchange="savePrefs()">
           <option value="claude" data-i18n="backend_claude"></option>
           <option value="codex" data-i18n="backend_codex"></option>
         </select></div>
@@ -475,6 +475,25 @@ function setLang(lang) {
   poll();
 }
 
+// ---------- 폼 값 저장/복원 (wikiopt_lang 저장 로직의 확장) ----------
+function savePrefs() {
+  try {
+    localStorage.setItem("wikiopt_prefs", JSON.stringify({
+      dir: $("dir").value.trim(), backend: $("backend").value,
+      gens: $("gens").value, nqa: $("nqa").value,
+    }));
+  } catch (e) {}
+}
+
+function loadPrefs() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem("wikiopt_prefs") || "{}"); } catch (e) {}
+  if (p.dir) $("dir").value = p.dir;
+  if (p.backend) $("backend").value = p.backend;
+  if (p.gens) $("gens").value = p.gens;
+  if (p.nqa) $("nqa").value = p.nqa;
+}
+
 // ---------- 데이터 로드/실행 ----------
 async function loadDocs() {
   $("msg").textContent = "";
@@ -496,6 +515,7 @@ async function pickDir() {
   if (j.error) { $("msg").textContent = j.error; return; }
   if (j.cancelled) return;
   $("dir").value = j.dir;
+  savePrefs();
   loadDocs();
 }
 
@@ -864,6 +884,7 @@ async function poll() {
 }
 
 applyLang();
+loadPrefs();
 poll();
 </script>
 </body>
