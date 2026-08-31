@@ -178,3 +178,45 @@ def test_aggregate_empty_records_writes_stub_summary(tmp_path):
     summary = (tmp_path / "summary.md").read_text()
     assert "(성공한 run 없음)" in summary
     assert not (tmp_path / "results.csv").exists()
+
+
+# ---------- perf: control arm train 채점 생략 + patience 조기 종료 ----------
+
+def test_control_arm_skips_train_scoring(evolve_env, monkeypatch):
+    """control은 reflect가 없으므로 train 채점(LLM 2회/세대)을 생략한다."""
+    _install_fake_llm(monkeypatch, acc_by_gen={0: 0.5, 1: 1.0})
+    score_calls = []
+    real_score = evolve.scoring.score
+
+    def spy_score(raw_text, summary, qs):
+        score_calls.append(len(qs))
+        return real_score(raw_text, summary, qs)
+
+    monkeypatch.setattr(evolve.scoring, "score", spy_score)
+    report = evolve.evolve(evolve_env["doc"], generations=2,
+                           out_dir=evolve_env["out"],
+                           question_set=evolve_env["qs"], no_evolve=True)
+
+    assert len(score_calls) == 2  # 세대당 held-out 1회만 (train 없음)
+    assert all(h["train_score"] is None for h in report["history"])
+    assert report["best"]["generation"] == 1  # held-out 판정은 그대로
+
+
+def test_patience_stops_after_plateau(evolve_env, monkeypatch):
+    _install_fake_llm(monkeypatch, acc_by_gen={0: 1.0, 1: 0.5, 2: 0.5, 3: 0.5})
+    _capture_reflect(monkeypatch)
+    report = evolve.evolve(evolve_env["doc"], generations=4,
+                           out_dir=evolve_env["out"],
+                           question_set=evolve_env["qs"], patience=2)
+    # gen0 best → gen1·gen2 연속 미갱신 → gen2에서 종료 (gen3 실행 안 함)
+    assert len(report["history"]) == 3
+    assert report["best"]["generation"] == 0
+
+
+def test_no_patience_runs_all_generations(evolve_env, monkeypatch):
+    _install_fake_llm(monkeypatch, acc_by_gen={0: 1.0, 1: 0.5, 2: 0.5, 3: 0.5})
+    _capture_reflect(monkeypatch)
+    report = evolve.evolve(evolve_env["doc"], generations=4,
+                           out_dir=evolve_env["out"],
+                           question_set=evolve_env["qs"])
+    assert len(report["history"]) == 4
