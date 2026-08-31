@@ -24,10 +24,15 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
 질문 세트(cross-doc)는 묶음당 1회 생성해 모든 arm/run이 공유한다.
 (B단계는 train/held-out 분할이 없어 향상폭은 전체 질문 세트 점수 기준이다.)
 
+--arms로 arm 목록을 직접 지정할 수 있다 (A단계 전용). evolve-wiki arm은
+flat 이력 대신 구조화 패턴 위키(wiki.py)를 reflect에 주입한다 — 논문
+(arxiv 2608.27454)의 "flat 이력 vs 구조화 위키" 대비축을 재현하는 arm이다.
+
 사용법:
   python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
   python3 src/batch.py --files a.md b.md --runs 3 --generations 4
   python3 src/batch.py --stage structure --docs 3 --runs 2 --with-control
+  python3 src/batch.py --arms evolve,evolve-wiki,control --docs 3 --runs 2
 """
 
 import argparse
@@ -61,8 +66,30 @@ def select_docs(n, raw_dir="data/raw"):
     return [files[int(i * step)] for i in range(n)]
 
 
+KNOWN_ARMS = ("evolve", "evolve-wiki", "evolve-nohist", "control")
+
+
+def resolve_arms(arms=None, with_control=False, ablation=False, stage="summary"):
+    """arm 목록 결정. --arms 명시가 최우선, 없으면 기존 플래그 규칙."""
+    if arms:
+        if stage == "structure":
+            raise ValueError("--arms는 A단계(summary) 전용이다")
+        unknown = [a for a in arms if a not in KNOWN_ARMS]
+        if unknown:
+            raise ValueError(f"알 수 없는 arm: {unknown} (지원: {list(KNOWN_ARMS)})")
+        if len(set(arms)) != len(arms):
+            raise ValueError(f"arm 중복: {arms}")
+        return list(arms)
+    if ablation:
+        # 영속 이력 ablation: 둘 다 진화하되 이력 참조만 켜고/끈다 (A단계 전용)
+        if stage == "structure":
+            raise ValueError("--ablation은 --stage structure와 함께 쓸 수 없다")
+        return ["evolve", "evolve-nohist"]
+    return ["evolve", "control"] if with_control else ["evolve"]
+
+
 def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
-              out_dir="runs", parallel=1, stage="summary"):
+              out_dir="runs", parallel=1, stage="summary", arms=None):
     """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
 
     문서끼리는 질문 세트·run 디렉터리가 독립이라 병렬해도 결과가 같다.
@@ -77,13 +104,7 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
     os.makedirs(batch_dir, exist_ok=True)
     state_path = os.path.join(batch_dir, "batch_state.json")
 
-    if ablation:
-        # 영속 이력 ablation: 둘 다 진화하되 이력 참조만 켜고/끈다 (A단계 전용)
-        if stage == "structure":
-            raise ValueError("--ablation은 --stage structure와 함께 쓸 수 없다")
-        arms = ["evolve", "evolve-nohist"]
-    else:
-        arms = ["evolve", "control"] if with_control else ["evolve"]
+    arms = resolve_arms(arms, with_control=with_control, ablation=ablation, stage=stage)
     records = []
     # structure는 문서 묶음 전체가 하나의 실험 단위 — 문서별 루프가 없다
     total = (runs * len(arms)) if stage == "structure" else (len(files) * runs * len(arms))
@@ -199,6 +220,7 @@ def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, p
                     f, generations=generations, n_qa=n_qa, out_dir=batch_dir,
                     no_evolve=(arm == "control"), question_set=question_set,
                     use_history=(arm != "evolve-nohist"),
+                    history_mode=("wiki" if arm == "evolve-wiki" else "flat"),
                 )
             except Exception as e:  # 한 run 실패해도 배치는 계속
                 print(f"[batch] run 실패: {e}")
@@ -397,6 +419,26 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
 
     lines.append("\n## 해석")
     ev = _arm_stats(by_arm.get("evolve", []))
+    if "evolve-wiki" in by_arm:
+        # 논문의 대비축: flat 이력(evolve) vs 구조화 위키(evolve-wiki).
+        # 아래 evolve vs control 비교와 독립이라 둘 다 보고한다 (3-arm 배치).
+        if "evolve" in by_arm:
+            wk = _arm_stats(by_arm["evolve-wiki"])
+            net_w = wk["mean_imp"] - ev["mean_imp"]
+            lines.append(
+                f"- 구조화 위키 효과(net) = evolve-wiki {wk['mean_imp']:+.3f} - "
+                f"evolve {ev['mean_imp']:+.3f} = **{net_w:+.3f}**"
+            )
+            lines += _significance_lines(
+                valid, "evolve-wiki", "evolve",
+                "flat 이력 대비 **구조화 위키가 실제로 개선**한다.",
+                "flat 이력과 통계적으로 **구분되지 않는다** — 관측된 차이는 노이즈로 설명 가능.",
+            )
+        else:
+            lines.append(
+                "- evolve-wiki arm만 있고 비교 기준(evolve arm)이 없다 — "
+                "구조화 위키 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
+            )
     if "evolve-nohist" in by_arm:
         nh = _arm_stats(by_arm["evolve-nohist"])
         net = ev["mean_imp"] - nh["mean_imp"]
@@ -421,7 +463,7 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             "노이즈 기준선(control) 대비 **진화가 실제로 개선**한다.",
             "control과 통계적으로 **구분되지 않는다** — 관측된 향상폭은 **선택 노이즈**로 설명 가능.",
         )
-    else:
+    elif "evolve" in by_arm:
         lines.append(
             f"- evolve 평균 향상폭 {ev['mean_imp']:+.3f}. "
             "단, control arm 없이는 노이즈 max 편향과 구분 불가 (--with-control 권장)."
@@ -451,9 +493,19 @@ if __name__ == "__main__":
                     help="동시에 돌릴 문서 수 (기본 1=순차, A단계 전용). CLI 세션 rate limit에 주의")
     ap.add_argument("--stage", choices=["summary", "structure"], default="summary",
                     help="summary=A단계(문서별 요약), structure=B단계(폴더 구조)")
+    ap.add_argument("--arms", default=None,
+                    help="쉼표 구분 arm 목록 (예: evolve,evolve-wiki,control) — A단계 전용, "
+                         "--with-control/--ablation보다 우선")
     args = ap.parse_args()
     if args.ablation and args.stage == "structure":
         ap.error("--ablation은 --stage structure와 함께 쓸 수 없다")
+    arm_list = None
+    if args.arms:
+        arm_list = [a.strip() for a in args.arms.split(",") if a.strip()]
+        try:
+            resolve_arms(arm_list, stage=args.stage)
+        except ValueError as e:
+            ap.error(str(e))
 
     files = args.files if args.files else select_docs(args.docs)
     print("[batch] 대상 문서:")
@@ -461,4 +513,4 @@ if __name__ == "__main__":
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)}B)")
     run_batch(files, args.runs, args.generations, args.n_qa,
               with_control=args.with_control, ablation=args.ablation,
-              parallel=args.parallel, stage=args.stage)
+              parallel=args.parallel, stage=args.stage, arms=arm_list)

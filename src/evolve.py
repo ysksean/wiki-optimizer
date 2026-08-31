@@ -38,6 +38,7 @@ from datetime import datetime
 import llm
 import provenance
 import scoring
+import wiki
 
 
 SEED_STRATEGY = (
@@ -146,13 +147,14 @@ def summarize(raw_text, strategy):
     return llm.generate(prompt, num_predict=400, temperature=0.3)
 
 
-def reflect(strategy, train_result, doc=None):
+def reflect(strategy, train_result, doc=None, history_block=None):
     """train 채점 결과(틀린 질문 + 효율)를 근거로 요약 전략을 개선.
 
     train_result는 반드시 *strategy로 만든 요약*의 채점 결과여야 한다.
     (held-out 질문은 여기 절대 노출하지 않는다.)
     doc을 주면 영속 이력(채택/기각 전략)을 함께 제공해 실패 방향의
-    재제안을 막는다.
+    재제안을 막는다. history_block을 주면 flat 이력 대신 그 텍스트를
+    쓴다 (evolve-wiki arm이 구조화 위키를 주입하는 통로).
     """
     missed = [d["q"] for d in train_result["qa_details"] if d["score"] < 1]
     missed_str = "\n".join(f"- {q}" for q in missed) if missed else "(없음)"
@@ -171,7 +173,8 @@ def reflect(strategy, train_result, doc=None):
         "주의: 아래 질문들은 예시일 뿐이다. 그 질문들만 노리는 전략이 아니라, "
         "문서의 어떤 질문에도 통할 일반적인 요약 전략을 써라.\n"
         "개선된 '전략 프롬프트' 한 문단만 출력(설명 금지).\n\n"
-        + (_history_block(doc) if doc else "")
+        + (history_block if history_block is not None
+           else (_history_block(doc) if doc else ""))
         + f"[현재 전략]\n{strategy}\n\n"
         f"[요약만으로 답 못한 질문들]\n{missed_str}\n\n"
         f"[길이 비율] {ratio} (작을수록 효율↑). {hint}\n\n"
@@ -188,12 +191,18 @@ def _flush_progress(run_dir, payload):
 
 
 def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
-           question_set=None, use_history=True, patience=None):
+           question_set=None, use_history=True, patience=None,
+           history_mode="flat"):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
 
     use_history=False면 reflect가 영속 이력을 읽지 않고, 기록도
     'evolve-nohist' arm으로 남겨 이력을 쓰는 run을 오염시키지 않는다
     (ablation 용도).
+
+    history_mode="wiki"면 evolve-wiki arm — 세대마다 Wiki Maintainer가
+    구조화 패턴 위키를 갱신하고, reflect는 flat 이력 대신 위키(index +
+    패턴 페이지)를 읽는다. flat 이력 기록은 arm 구분해 그대로 남긴다
+    (load_strategy_history가 evolve arm만 읽으므로 오염 없음).
 
     patience=N이면 N세대 연속 best 미갱신 시 조기 종료한다. **단독 실행 전용** —
     batch 대조 실험에서 쓰면 arm마다 유효 표본 수(세대 수)가 달라져 net 비교가
@@ -202,7 +211,12 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     raw_text = open(raw_path).read()
     doc = os.path.splitext(os.path.basename(raw_path))[0]
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    arm = "control" if no_evolve else ("evolve" if use_history else "evolve-nohist")
+    if no_evolve:
+        arm = "control"
+    elif history_mode == "wiki":
+        arm = "evolve-wiki"
+    else:
+        arm = "evolve" if use_history else "evolve-nohist"
     run_dir = os.path.join(out_dir, f"{doc}-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
@@ -278,6 +292,12 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
 
         if not parse_failed:
             record_strategy_impact(doc, arm, g, strategy, r_test, improved)
+            if arm == "evolve-wiki":
+                # Wiki Maintainer — 파싱 실패 세대는 근거 자체가 무효라 위키에 안 넣는다
+                try:
+                    wiki.maintain(doc, g, strategy, r_train, r_test, improved)
+                except llm.LLMError as e:
+                    print(f"[wiki] maintainer 호출 실패 — 위키 변경 없음: {e}")
 
         _flush_progress(run_dir, {
             "mode": "summary", "doc": doc, "arm": arm,
@@ -298,8 +318,12 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
             # 점수가 안 올랐으면 best 전략으로 되돌리되, 피드백도
             # *그 best 전략의* train 채점 결과를 쓴다 (전략-결과 짝 유지).
             # (아직 유효한 best가 없으면 — 전 세대 판정 실패 — 현재 전략을 그대로 재시도)
-            strategy = reflect(best["strategy"], best["train_result"],
-                               doc=doc if use_history else None)
+            if arm == "evolve-wiki":
+                strategy = reflect(best["strategy"], best["train_result"],
+                                   history_block=wiki.wiki_block())
+            else:
+                strategy = reflect(best["strategy"], best["train_result"],
+                                   doc=doc if use_history else None)
 
     print(f"\n[done] best gen={best['generation']} held-out total={best['total']}")
     print(f"[done] best summary ({len(best['summary'] or '')} chars):\n{best['summary']}\n")
@@ -312,7 +336,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         "provenance": provenance.collect(
             doc_text=raw_text, question_set=question_set,
             params={"generations": generations, "n_qa": n_qa,
-                    "use_history": use_history, "no_evolve": no_evolve},
+                    "use_history": use_history, "no_evolve": no_evolve,
+                    "history_mode": history_mode},
         ),
         "generations": generations,
         "train_questions": train_qs,
