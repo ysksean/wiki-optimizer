@@ -94,6 +94,7 @@
   .workflow-head .panel-title { margin-top: 1px; }
   .workflow-head .panel-desc { margin-bottom: 0; }
   .workflow-divider { height: 1px; margin: 24px 0; background: var(--line-subtle); }
+  .field-help { display: block; margin-top: 6px; color: var(--dim); font-size: 12px; line-height: 16px; }
 
   label { display: block; margin-bottom: 7px; color: var(--tx-secondary); font-size: 13px; font-weight: 600; }
   .hint { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
@@ -127,7 +128,7 @@
   .folder-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 10px; }
   .parameter-grid {
     display: grid; align-items: end; gap: 14px; margin-top: 0;
-    grid-template-columns: minmax(220px,1.6fr) 96px 96px minmax(200px,1fr) auto;
+    grid-template-columns: minmax(220px,1.6fr) 132px 132px minmax(200px,1fr) auto;
   }
   .parameter-grid > .msg { align-self: center; }
   @media (max-width: 820px) {
@@ -138,14 +139,14 @@
   /* ---------- 문서 선택 ---------- */
   .docs {
     display: grid; gap: 8px; margin-top: 16px;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
   }
   .docs-toolbar {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     min-height: 44px; margin-top: 12px; color: var(--dim); font-size: 13px;
   }
   .docs-toolbar[hidden] { display: none; }
-  .docs-toolbar button { min-height: 36px; padding: 5px 12px; font-size: 13px; }
+  .docs-toolbar button { min-height: 44px; padding: 7px 12px; font-size: 13px; }
   .docs label {
     display: flex; align-items: center; gap: 10px; margin: 0;
     min-height: 44px; padding: 9px 12px; cursor: pointer;
@@ -297,6 +298,9 @@
     .job-head .chev { grid-column: 3; grid-row: 1; }
     .job-body { padding: 4px 16px 16px; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  }
 </style>
 </head>
 <body>
@@ -315,30 +319,35 @@
       </select></div>
   </div>
 
-  <section class="card" aria-labelledby="setup-title">
+  <main>
+
+  <div class="card">
+    <section aria-labelledby="setup-title">
     <div class="workflow-head">
       <span class="step-number" aria-hidden="true">1</span>
       <div>
-        <p class="panel-title" id="setup-title" data-i18n="setup_title"></p>
+        <h2 class="panel-title" id="setup-title" data-i18n="setup_title"></h2>
         <p class="panel-desc" data-i18n="setup_desc"></p>
       </div>
     </div>
     <label for="dir" data-i18n="folder_label"></label>
     <div class="folder-row">
-      <input type="text" id="dir" data-i18n-placeholder="folder_ph" oninput="syncDirActions()">
+      <input type="text" id="dir" data-i18n-placeholder="folder_ph" oninput="handleDirInput()">
       <button class="ghost" onclick="pickDir()" data-i18n="pick_dir"></button>
-      <button class="ghost" onclick="loadDocs()" data-i18n="load_docs"></button>
+      <button class="ghost" id="loadDocsBtn" onclick="loadDocs()" data-i18n="load_docs"></button>
     </div>
     <div id="docs" class="docs"></div>
     <div id="docsToolbar" class="docs-toolbar" hidden>
       <span id="docsStatus" role="status" aria-live="polite"></span>
       <button type="button" class="ghost" id="toggleDocs" onclick="toggleAllDocs()"></button>
     </div>
+    </section>
     <div class="workflow-divider"></div>
+    <section aria-labelledby="experiment-title">
     <div class="workflow-head">
       <span class="step-number" aria-hidden="true">2</span>
       <div>
-        <p class="panel-title" data-i18n="experiment_title"></p>
+        <h2 class="panel-title" id="experiment-title" data-i18n="experiment_title"></h2>
         <p class="panel-desc" data-i18n="experiment_desc"></p>
       </div>
     </div>
@@ -348,10 +357,12 @@
           <option value="summary" data-i18n="mode_a"></option>
           <option value="structure" data-i18n="mode_b"></option>
         </select></div>
-      <div><label for="gens" class="hint" data-i18n="gens" data-i18n-title="gens_tip"></label>
-        <input type="number" id="gens" value="3" min="1" max="10"></div>
-      <div><label for="nqa" class="hint" data-i18n="nqa" data-i18n-title="nqa_tip"></label>
-        <input type="number" id="nqa" value="6" min="2" max="12"></div>
+      <div><label for="gens" data-i18n="gens"></label>
+        <input type="number" id="gens" value="3" min="1" max="10" aria-describedby="gensHelp">
+        <span class="field-help" id="gensHelp" data-i18n="gens_help"></span></div>
+      <div><label for="nqa" data-i18n="nqa"></label>
+        <input type="number" id="nqa" value="6" min="2" max="12" aria-describedby="nqaHelp">
+        <span class="field-help" id="nqaHelp" data-i18n="nqa_help"></span></div>
       <div><label for="backend" data-i18n="backend"></label>
         <select id="backend">
           <option value="claude" data-i18n="backend_claude"></option>
@@ -360,13 +371,14 @@
       <button id="go" onclick="startRun()" data-i18n="run_exp" disabled></button>
       <span id="msg" class="err msg" role="status" aria-live="polite"></span>
     </div>
-  </section>
+    </section>
+  </div>
 
   <section class="card" aria-labelledby="wiki-title">
     <div class="workflow-head">
       <span class="step-number" aria-hidden="true">3</span>
       <div>
-        <p class="panel-title" id="wiki-title" data-i18n="wiki_title"></p>
+        <h2 class="panel-title" id="wiki-title" data-i18n="wiki_title"></h2>
         <p class="panel-desc" data-i18n="wiki_desc"></p>
       </div>
     </div>
@@ -386,11 +398,18 @@
     <span class="count" id="runsCount"></span>
   </div>
   <div id="jobs"></div>
+  </main>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const open_ = new Set();   // 펼쳐둔 job id
+const LOCALES = { ko: "ko-KR", en: "en-US", zh: "zh-CN" };
+let loadedDir = "";
+let docsRequest = 0;
+let docsController = null;
+let requestPending = false;
+let hasActiveJob = false;
 
 // ---------- i18n ----------
 const I18N = {
@@ -403,8 +422,8 @@ const I18N = {
     folder_ph: "~/dev/llm_wiki  또는  data/raw",
     pick_dir: "폴더 선택…", load_docs: "문서 불러오기",
     mode: "모드", mode_a: "A — 요약 전략 진화 (문서별)", mode_b: "B — 폴더 구조 진화 (선택 문서 전체)",
-    gens: "세대 수 ⓘ", gens_tip: "요약 → 채점 → 전략 개선을 반복하는 횟수. 많을수록 좋은 전략을 찾을 기회가 늘지만 세대당 1~2분씩 더 걸림",
-    nqa: "질문 수 ⓘ", nqa_tip: "채점용 시험 문제 개수. 원본에서 '실제로 물어볼 법한 질문+정답'을 이만큼 뽑아 고정하고, 요약이 몇 개를 맞히는지로 점수를 냄",
+    gens: "세대 수", gens_help: "세대당 문서별 약 1–2분",
+    nqa: "질문 수", nqa_help: "정답률 평가 문항 (2–12)",
     backend: "백엔드", backend_claude: "claude (Claude Code 구독)", backend_codex: "codex (ChatGPT 구독)",
     run_exp: "실험 실행",
     wiki_title: "내 위키 진단 · 최적화",
@@ -415,12 +434,16 @@ const I18N = {
     docs_selected: (n,t) => `${t}개 문서 중 ${n}개 선택`, select_all: "모두 선택", clear_all: "선택 해제",
     runs_title: "실험 기록", runs_count: n => `${n}건`,
     need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
-    no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요",
+    no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요", load_failed: "문서를 불러오지 못했습니다. 경로와 서버 상태를 확인하세요.",
+    request_failed: "요청에 실패했습니다. 잠시 후 다시 시도하세요.",
     no_jobs: "아직 실행한 실험이 없습니다", no_jobs_hint: "문서를 불러오고 실험을 실행하면 세대별 점수와 전략 변화가 여기에 표시됩니다.",
     waiting_gen: "아직 첫 세대 결과 대기 중…",
     preparing_q: "질문 세트 준비 중…", failed: "실패",
     status_running: "실행 중", status_done: "완료", status_error: "오류", status_queued: "대기 중",
-    run_meta: (backend,gens,time) => `${backend} · ${gens}세대 · ${time}`,
+    run_meta: (mode,backend,gens,time) => [backend, ...(mode === "summary" || mode === "structure" ? [`${gens}세대`] : []), time].join(" · "),
+    best_gen: n => `최고 점수 (${n}세대)`, held_out: "검증", train: "학습", gen_short: n => `${n}세대`,
+    generation_label: "세대", ratio: "비율", total: "종합", acc_short: "정확도", eff_short: "효율",
+    chart_label: n => `세대별 검증 점수 추세${n == null ? "" : `, 최고 점수 ${n}세대`}`,
     mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
     audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${d}/${t} 문서 채점 중…`,
     avg_score: n => `평균 점수 (${n}개 채점)`,
@@ -447,8 +470,8 @@ const I18N = {
     folder_ph: "~/dev/llm_wiki  or  data/raw",
     pick_dir: "Choose folder…", load_docs: "Load documents",
     mode: "Mode", mode_a: "A — evolve summary strategy (per document)", mode_b: "B — evolve folder structure (all selected)",
-    gens: "Generations ⓘ", gens_tip: "How many summarize → score → improve iterations to run. More generations mean more chances to find a good strategy, but each adds 1–2 min per document",
-    nqa: "Questions ⓘ", nqa_tip: "Number of exam questions. Realistic Q&A pairs are extracted from the raw source and fixed; the summary is scored by how many it answers correctly",
+    gens: "Generations", gens_help: "About 1–2 min per document each",
+    nqa: "Questions", nqa_help: "Accuracy sample size (2–12)",
     backend: "Backend", backend_claude: "claude (Claude Code subscription)", backend_codex: "codex (ChatGPT subscription)",
     run_exp: "Run experiment",
     wiki_title: "Audit & optimize my wiki",
@@ -456,15 +479,19 @@ const I18N = {
     btn_audit: "Audit current wiki (Before)", btn_apply: "Generate optimized (After)",
     strategy_custom: "Custom strategy (leave empty to use the best strategy from experiments)",
     strategy_label: "Custom optimization strategy",
-    docs_selected: (n,t) => `${n} of ${t} documents selected`, select_all: "Select all", clear_all: "Clear selection",
+    docs_selected: (n,t) => `${n} of ${t} document${t === 1 ? "" : "s"} selected`, select_all: "Select all", clear_all: "Clear selection",
     runs_title: "Runs", runs_count: n => `${n} total`,
     need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
-    no_md: "No md files found", need_docs: "Select at least one document",
+    no_md: "No md files found", need_docs: "Select at least one document", load_failed: "Documents could not be loaded. Check the path and server status.",
+    request_failed: "The request failed. Please try again.",
     no_jobs: "No experiments yet", no_jobs_hint: "Load documents and run an experiment to see generation scores and strategy changes here.",
     waiting_gen: "Waiting for the first generation…",
     preparing_q: "Preparing question set…", failed: "Failed",
     status_running: "Running", status_done: "Done", status_error: "Error", status_queued: "Queued",
-    run_meta: (backend,gens,time) => `${backend} · ${gens} gen · ${time}`,
+    run_meta: (mode,backend,gens,time) => [backend, ...(mode === "summary" || mode === "structure" ? [`${gens} gen`] : []), time].join(" · "),
+    best_gen: n => `Best score (gen ${n})`, held_out: "Held-out", train: "Train", gen_short: n => `gen ${n}`,
+    generation_label: "Generation", ratio: "Ratio", total: "Total", acc_short: "Accuracy", eff_short: "Efficiency",
+    chart_label: n => `Validation score by generation${n == null ? "" : `, best at generation ${n}`}`,
     mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
     audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scoring ${d}/${t} documents…`,
     avg_score: n => `average score (${n} scored)`,
@@ -491,8 +518,8 @@ const I18N = {
     folder_ph: "~/dev/llm_wiki  或  data/raw",
     pick_dir: "选择文件夹…", load_docs: "加载文档",
     mode: "模式", mode_a: "A — 摘要策略进化（按文档）", mode_b: "B — 文件夹结构进化（所选全部文档）",
-    gens: "代数 ⓘ", gens_tip: "摘要 → 评分 → 策略改进的迭代次数。代数越多，找到好策略的机会越大，但每代每篇文档多花 1–2 分钟",
-    nqa: "问题数 ⓘ", nqa_tip: "评分用试题数量。从原文中提取'实际会问的问题+答案'并固定，按摘要能答对多少题来打分",
+    gens: "代数", gens_help: "每代每篇文档约 1–2 分钟",
+    nqa: "问题数", nqa_help: "准确率评估题数（2–12）",
     backend: "后端", backend_claude: "claude（Claude Code 订阅）", backend_codex: "codex（ChatGPT 订阅）",
     run_exp: "运行实验",
     wiki_title: "诊断并优化我的 wiki",
@@ -503,12 +530,16 @@ const I18N = {
     docs_selected: (n,t) => `已选择 ${n}/${t} 篇文档`, select_all: "全选", clear_all: "清除选择",
     runs_title: "运行记录", runs_count: n => `共 ${n} 条`,
     need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
-    no_md: "未找到 md 文件", need_docs: "请至少选择一个文档",
+    no_md: "未找到 md 文件", need_docs: "请至少选择一个文档", load_failed: "无法加载文档。请检查路径和服务器状态。",
+    request_failed: "请求失败，请稍后重试。",
     no_jobs: "还没有运行过实验", no_jobs_hint: "加载文档并运行实验后，这里将显示各代评分和策略变化。",
     waiting_gen: "等待第一代结果…",
     preparing_q: "正在准备问题集…", failed: "失败",
     status_running: "运行中", status_done: "已完成", status_error: "错误", status_queued: "等待中",
-    run_meta: (backend,gens,time) => `${backend} · ${gens}代 · ${time}`,
+    run_meta: (mode,backend,gens,time) => [backend, ...(mode === "summary" || mode === "structure" ? [`${gens}代`] : []), time].join(" · "),
+    best_gen: n => `最高分（第 ${n} 代）`, held_out: "验证", train: "训练", gen_short: n => `第 ${n} 代`,
+    generation_label: "代", ratio: "比例", total: "总分", acc_short: "准确率", eff_short: "效率",
+    chart_label: n => `各代验证分数趋势${n == null ? "" : `，最高分在第 ${n} 代`}`,
     mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
     audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 正在评分 ${d}/${t} 篇文档…`,
     avg_score: n => `平均分（已评 ${n} 篇）`,
@@ -555,10 +586,30 @@ function setLang(lang) {
 }
 
 // ---------- 데이터 로드/실행 ----------
+function syncActionStates() {
+  const ready = Boolean(loadedDir) && $("dir").value.trim() === loadedDir;
+  const selected = document.querySelectorAll("#docs input[type=checkbox]:checked").length;
+  const busy = requestPending || hasActiveJob;
+  $("auditBtn").disabled = !ready || busy;
+  $("applyBtn").disabled = !ready || busy;
+  $("go").disabled = selected === 0 || busy;
+}
+
 function syncDirActions() {
-  const ready = Boolean($("dir").value.trim());
-  $("auditBtn").disabled = !ready;
-  $("applyBtn").disabled = !ready;
+  syncActionStates();
+}
+
+function clearDocs() {
+  loadedDir = "";
+  $("docs").innerHTML = "";
+  syncDocSelection();
+  syncDirActions();
+}
+
+function handleDirInput() {
+  docsController?.abort();
+  if ($("dir").value.trim() !== loadedDir) clearDocs();
+  else syncDirActions();
 }
 
 function syncDocSelection() {
@@ -567,7 +618,7 @@ function syncDocSelection() {
   $("docsToolbar").hidden = boxes.length === 0;
   $("docsStatus").textContent = boxes.length ? t("docs_selected", selected, boxes.length) : "";
   $("toggleDocs").textContent = selected === boxes.length ? t("clear_all") : t("select_all");
-  $("go").disabled = selected === 0;
+  syncActionStates();
 }
 
 function toggleAllDocs() {
@@ -577,18 +628,51 @@ function toggleAllDocs() {
   syncDocSelection();
 }
 
+function renderDocs(docs) {
+  const fragment = document.createDocumentFragment();
+  docs.forEach(d => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    const size = document.createElement("span");
+    input.type = "checkbox";
+    input.value = d.path;
+    input.addEventListener("change", syncDocSelection);
+    size.className = "sz";
+    size.textContent = `${(d.size/1000).toFixed(1)}k`;
+    label.append(input, document.createTextNode(d.name), size);
+    fragment.append(label);
+  });
+  $("docs").replaceChildren(fragment);
+}
+
 async function loadDocs() {
   $("msg").textContent = "";
   const dir = $("dir").value.trim();
   if (!dir) { $("msg").textContent = t("need_dir"); return; }
-  const r = await fetch(`/api/docs?dir=${encodeURIComponent(dir)}`);
-  const j = await r.json();
-  if (j.error) { $("msg").textContent = j.error; return; }
-  if (!j.docs.length) { $("msg").textContent = t("no_md"); return; }
-  $("docs").innerHTML = j.docs.map(d => `
-    <label><input type="checkbox" value="${d.path}" onchange="syncDocSelection()">${d.name}
-      <span class="sz">${(d.size/1000).toFixed(1)}k</span></label>`).join("");
-  syncDocSelection();
+  const requestId = ++docsRequest;
+  docsController?.abort();
+  docsController = new AbortController();
+  clearDocs();
+  $("loadDocsBtn").disabled = true;
+  $("loadDocsBtn").setAttribute("aria-busy", "true");
+  try {
+    const r = await fetch(`/api/docs?dir=${encodeURIComponent(dir)}`, {signal: docsController.signal});
+    const j = await r.json();
+    if (requestId !== docsRequest || $("dir").value.trim() !== dir) return;
+    if (!r.ok || j.error) { $("msg").textContent = j.error || t("load_failed"); return; }
+    if (!j.docs.length) { $("msg").textContent = t("no_md"); return; }
+    renderDocs(j.docs);
+    loadedDir = dir;
+    syncDocSelection();
+    syncDirActions();
+  } catch (e) {
+    if (requestId === docsRequest && e.name !== "AbortError") $("msg").textContent = t("load_failed");
+  } finally {
+    if (requestId === docsRequest) {
+      $("loadDocsBtn").disabled = false;
+      $("loadDocsBtn").removeAttribute("aria-busy");
+    }
+  }
 }
 
 async function pickDir() {
@@ -603,13 +687,24 @@ async function pickDir() {
 }
 
 async function startJobRequest(body, msgEl) {
+  if (requestPending || hasActiveJob) return;
   $(msgEl).textContent = "";
-  const r = await fetch("/api/runs", { method:"POST",
-    headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
-  const j = await r.json();
-  if (j.error) { $(msgEl).textContent = j.error; return; }
-  open_.add(j.id);
-  poll();
+  requestPending = true;
+  syncActionStates();
+  try {
+    const r = await fetch("/api/runs", { method:"POST",
+      headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok || j.error) { $(msgEl).textContent = j.error || t("request_failed"); return; }
+    open_.add(j.id);
+    hasActiveJob = true;
+  } catch (e) {
+    $(msgEl).textContent = t("request_failed");
+  } finally {
+    requestPending = false;
+    syncActionStates();
+    poll();
+  }
 }
 
 function startAudit() {
@@ -627,20 +722,29 @@ function startApply() {
 }
 
 async function startRun() {
+  if (requestPending || hasActiveJob) return;
   $("msg").textContent = "";
   const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
   if (!files.length) { $("msg").textContent = t("need_docs"); return; }
-  $("go").disabled = true;
-  const r = await fetch("/api/runs", { method:"POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ files, mode: $("mode").value,
-      generations: +$("gens").value, n_qa: +$("nqa").value,
-      backend: $("backend").value, language: LANG }) });
-  const j = await r.json();
-  syncDocSelection();
-  if (j.error) { $("msg").textContent = j.error; return; }
-  open_.add(j.id);
-  poll();
+  requestPending = true;
+  syncActionStates();
+  try {
+    const r = await fetch("/api/runs", { method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ files, mode: $("mode").value,
+        generations: +$("gens").value, n_qa: +$("nqa").value,
+        backend: $("backend").value, language: LANG }) });
+    const j = await r.json();
+    if (!r.ok || j.error) { $("msg").textContent = j.error || t("request_failed"); return; }
+    open_.add(j.id);
+    hasActiveJob = true;
+  } catch (e) {
+    $("msg").textContent = t("request_failed");
+  } finally {
+    requestPending = false;
+    syncActionStates();
+    poll();
+  }
 }
 
 // ---------- 뷰 ----------
@@ -724,7 +828,8 @@ function chart(hist, key, bestGen) {
     return `<polyline points="${pts.join(" ")}" fill="none" stroke="${stroke}" ${extra}/>` +
       hist.map((h, i) => `<circle cx="${X(i)}" cy="${Y(get(h))}" r="3" fill="${stroke}"/>`).join("");
   };
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  const chartLabel = t("chart_label", bestGen);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(chartLabel)}"><title>${esc(chartLabel)}</title>`;
   for (const v of [0, .5, 1]) {
     svg += `<line x1="${P}" y1="${Y(v)}" x2="${W-P}" y2="${Y(v)}" stroke="var(--line-subtle)" stroke-dasharray="3 5"/>
             <text x="4" y="${Y(v)+4}">${v}</text>`;
@@ -738,10 +843,10 @@ function chart(hist, key, bestGen) {
       svg += `<circle cx="${X(bi)}" cy="${Y(hist[bi].score.total)}" r="6" fill="none" stroke="var(--acc)" stroke-width="1.5"/>`;
     }
   }
-  xs.forEach((g, i) => { svg += `<text x="${X(i)-12}" y="${H-8}">gen${g}</text>`; });
+  xs.forEach((g, i) => { svg += `<text x="${X(i)-12}" y="${H-8}">${t("gen_short", g)}</text>`; });
   svg += `</svg>`;
-  const legend = `<div class="chart-head"><span><i></i>held-out</span>` +
-    (hist[0][key] ? `<span><i class="train"></i>train</span>` : "") + `</div>`;
+  const legend = `<div class="chart-head"><span><i></i>${t("held_out")}</span>` +
+    (hist[0][key] ? `<span><i class="train"></i>${t("train")}</span>` : "") + `</div>`;
   return `<div class="chart">${legend}${svg}</div>`;
 }
 
@@ -752,13 +857,13 @@ function summaryRun(run) {
   let html = `<div class="runbox"><h3>${esc(p.doc)}
       <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
     <div class="kpis">
-      <div class="kpi"><b>${p.best_total}</b><span>best (gen ${p.best_gen})</span></div>
+      <div class="kpi"><b>${p.best_total}</b><span>${t("best_gen", p.best_gen)}</span></div>
       <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>${t("accuracy")}</span></div>
       <div class="kpi"><b>${(best.score||{}).efficiency ?? "-"}</b><span>${t("efficiency")}</span></div>
     </div>
     ${chart(p.history, "train_score", p.best_gen)}
     <details><summary>${t("strategy_per_gen")}</summary>${wrapTable(
-      `<tr><th>gen</th><th>held-out</th><th>ratio</th><th>${t("th_strategy")}</th></tr>` +
+      `<tr><th>${t("generation_label")}</th><th>${t("held_out")}</th><th>${t("ratio")}</th><th>${t("th_strategy")}</th></tr>` +
       p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
         <td>${h.score.total}</td><td>${h.score.length_ratio}</td>
@@ -780,10 +885,10 @@ function structureRun(run) {
   if (!p) return "";
   let html = `<div class="runbox"><h3>${t("structure_title", p.docs.map(esc).join(", "))}
       <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
-    <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>best (gen ${p.best_gen})</span></div></div>
+    <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>${t("best_gen", p.best_gen)}</span></div></div>
     ${chart(p.history, "", p.best_gen)}
     <details><summary>${t("files_per_gen")}</summary>${wrapTable(
-      `<tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>${t("th_files")}</th></tr>` +
+      `<tr><th>${t("generation_label")}</th><th>${t("total")}</th><th>${t("acc_short")}</th><th>${t("eff_short")}</th><th>${t("th_files")}</th></tr>` +
       p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
         <td>${h.score.total}</td><td>${h.score.accuracy}</td><td>${h.score.efficiency}</td>
@@ -806,7 +911,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
 async function renderJob(j) {
   const isOpen = open_.has(j.id);
   const badge = `<span class="badge b-${j.status}">${t("status_" + j.status)}</span>`;
-  const when = new Date(j.created_at*1000).toLocaleTimeString();
+  const when = new Date(j.created_at*1000).toLocaleTimeString(LOCALES[LANG]);
   let inner = `<div class="job-body" id="job-${j.id}-body" hidden></div>`;
   if (isOpen) {
     const r = await fetch(`/api/runs/${j.id}`);
@@ -828,12 +933,12 @@ async function renderJob(j) {
     inner = `<div class="job-body" id="job-${j.id}-body">${body}</div>`;
   }
   return `<div class="card">
-    <button type="button" class="job-head" onclick="toggle('${j.id}')"
+    <button type="button" class="job-head" data-job-id="${j.id}" onclick="toggle('${j.id}')"
       aria-expanded="${isOpen}" aria-controls="job-${j.id}-body">
       ${badge} <span class="mode">${t("mode_" + j.mode)}</span>
       <span class="docs-list">${j.doc_names.map(esc).join(", ")}</span>
-      <span class="meta">${t("run_meta", j.backend, j.generations, when)}</span>
-      <span class="chev${isOpen ? " open" : ""}">▾</span>
+      <span class="meta">${t("run_meta", j.mode, j.backend, j.generations, when)}</span>
+      <span class="chev${isOpen ? " open" : ""}" aria-hidden="true">▾</span>
     </button>${inner}</div>`;
 }
 
@@ -842,18 +947,34 @@ function toggle(id) { open_.has(id) ? open_.delete(id) : open_.add(id); poll(); 
 let timer = null, lastHtml = "";
 async function poll() {
   clearTimeout(timer);
-  const r = await fetch("/api/runs");
-  const { jobs } = await r.json();
-  const parts = await Promise.all(jobs.map(renderJob));
-  const html = parts.join("") ||
-    `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
-  $("runsCount").textContent = jobs.length ? t("runs_count", jobs.length) : "";
-  // 내용이 같으면 다시 그리지 않는다 (펼쳐둔 details 유지)
-  if (html !== lastHtml) { $("jobs").innerHTML = html; lastHtml = html; }
-  if (jobs.some(j => j.status === "running" || j.status === "queued"))
-    timer = setTimeout(poll, 2000);
-  else
-    timer = setTimeout(poll, 10000);
+  const focusedJobId = document.activeElement?.dataset?.jobId;
+  const expandedDetails = [...document.querySelectorAll("#jobs details")]
+    .flatMap((el, index) => el.open ? [index] : []);
+  let delay = 10000;
+  try {
+    const r = await fetch("/api/runs");
+    if (!r.ok) throw new Error(`poll failed: ${r.status}`);
+    const { jobs } = await r.json();
+    const parts = await Promise.all(jobs.map(renderJob));
+    const html = parts.join("") ||
+      `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
+    $("runsCount").textContent = jobs.length ? t("runs_count", jobs.length) : "";
+    hasActiveJob = jobs.some(j => j.status === "running" || j.status === "queued");
+    delay = hasActiveJob ? 2000 : 10000;
+    if (html !== lastHtml) {
+      $("jobs").innerHTML = html;
+      lastHtml = html;
+      const details = document.querySelectorAll("#jobs details");
+      expandedDetails.forEach(index => { if (details[index]) details[index].open = true; });
+      if (focusedJobId)
+        document.querySelector(`[data-job-id="${focusedJobId}"]`)?.focus();
+    }
+  } catch (e) {
+    delay = 3000;
+  } finally {
+    syncActionStates();
+    timer = setTimeout(poll, delay);
+  }
 }
 
 applyLang();
