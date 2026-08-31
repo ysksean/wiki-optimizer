@@ -10,6 +10,9 @@ KEY_FILE="${LINEAR_API_KEY_FILE:-$HOME/.config/linear/api_key}"
 LOG_DIR="${LINEAR_HARNESS_LOG_DIR:-$HOME/.local/state/linear-harness}"
 LOCK_DIR="${TMPDIR:-/tmp}/linear-harness.lock"
 TEAM_KEY="SEA"
+# 접수 대상 Linear 프로젝트 — 이름 변경에도 안 깨지도록 UUID로 고정한다.
+# 이 프로젝트에 속하지 않은 이슈는 하네스가 보지 않는다 (등록 시 프로젝트 지정 필수).
+PROJECT_ID="743aced1-1a59-4db3-be15-ea047da371c6"  # wiki-optimizer
 MAX_TURNS=150
 
 mkdir -p "$LOG_DIR"
@@ -32,7 +35,7 @@ trap 'rmdir "$LOCK_DIR"' EXIT
 log "$(bash "$REPO/harness/self_update.sh" "$REPO" master)"
 
 # ── 게이트: GraphQL로 처리 대상 유무만 확인 ──────────────────────────
-QUERY='{"query":"{ issues(filter: { team: { key: { eq: \"'"$TEAM_KEY"'\" } }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }, first: 50) { nodes { identifier title priority labels { nodes { name } } comments(first: 50) { nodes { body createdAt } } } } }"}'
+QUERY='{"query":"{ issues(filter: { team: { key: { eq: \"'"$TEAM_KEY"'\" } }, project: { id: { eq: \"'"$PROJECT_ID"'\" } }, state: { type: { in: [\"unstarted\", \"backlog\"] } } }, first: 50) { nodes { identifier title priority labels { nodes { name } } comments(first: 50) { nodes { body createdAt } } } } }"}'
 
 # Linear 불통이어도 리뷰 단계(GitHub 기반)는 독립적으로 돌아야 한다 — 이슈 파이프라인만 건너뛴다
 RESP="$(curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
