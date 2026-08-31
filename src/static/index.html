@@ -644,7 +644,7 @@ function graphSVG(graph, pageRows) {
   const byName = Object.fromEntries(pageRows.map(r => [r.name, r]));
   const pos = layoutGraph(graph.nodes, graph.edges, W, H);
   const at = Object.fromEntries(pos.map(p => [p.id, p]));
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t("r_graph"))}">`;
   for (const e of graph.edges) {
     const a = at[e.source], b = at[e.target];
     if (!a || !b) continue;
