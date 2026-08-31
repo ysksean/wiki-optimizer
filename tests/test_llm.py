@@ -77,3 +77,18 @@ def test_nonzero_rc_still_raises(monkeypatch):
     )
     with pytest.raises(llm.LLMError, match="claude CLI 실패"):
         llm.generate("p", retries=0)
+
+
+def test_stats_recording(monkeypatch, tmp_path):
+    """LLM_STATS_PATH가 설정되면 호출별 jsonl이 남고, 없으면 아무 일도 없다."""
+    import json
+    stats = tmp_path / "stats.jsonl"
+    monkeypatch.setattr(llm, "STATS_PATH", str(stats))
+    monkeypatch.setattr(llm, "_generate_claude", lambda p, timeout=300: "요약 결과")
+    llm.generate("문서를 요약하라.\n\n요약:")
+    rec = json.loads(stats.read_text().splitlines()[0])
+    assert rec["kind"] == "summarize" and rec["ok"] is True
+    assert rec["prompt_chars"] > 0 and rec["out_chars"] == len("요약 결과")
+
+    monkeypatch.setattr(llm, "STATS_PATH", "")
+    llm.generate("아무 프롬프트")  # 경로 미설정 — 예외 없이 그냥 지나가야 한다
