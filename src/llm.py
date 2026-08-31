@@ -58,16 +58,51 @@ def generate(
         prompt = f"[언어 지시] {directive}\n\n{prompt}"
     last_err = None
     for attempt in range(retries + 1):
+        t0 = time.time()
         try:
             if BACKEND == "codex":
-                return _generate_codex(prompt, timeout=timeout)
-            return _generate_claude(prompt, timeout=timeout)
+                out = _generate_codex(prompt, timeout=timeout)
+            else:
+                out = _generate_claude(prompt, timeout=timeout)
+            _record_stat(prompt, out, time.time() - t0, attempt, ok=True)
+            return out
         except (subprocess.SubprocessError, OSError) as e:
+            _record_stat(prompt, "", time.time() - t0, attempt, ok=False)
             last_err = e
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
             continue
     raise LLMError(f"LLM 호출 실패 (백엔드={BACKEND}, {retries + 1}회 시도): {last_err}")
+
+
+# 옵트인 호출 계측 — LLM_STATS_PATH가 설정돼 있으면 호출별 jsonl 한 줄 append.
+# 어디가 비싼지는 추측하지 않고 잰다. 실패해도 본 호출에 영향 없음.
+STATS_PATH = os.environ.get("LLM_STATS_PATH", "")
+
+
+def _record_stat(prompt, out, elapsed, attempt, ok):
+    if not STATS_PATH:
+        return
+    try:
+        import json as _json
+        rec = {"ts": round(time.time(), 1), "backend": BACKEND,
+               "elapsed_sec": round(elapsed, 2), "prompt_chars": len(prompt),
+               "out_chars": len(out), "attempt": attempt, "ok": ok,
+               "kind": _prompt_kind(prompt)}
+        with open(STATS_PATH, "a") as f:
+            f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _prompt_kind(prompt):
+    """프롬프트 말미 마커로 호출 종류를 분류한다 (계측 라벨용, 로직에 미사용)."""
+    tail = prompt.rstrip()[-30:]
+    for marker, kind in (("요약:", "summarize"), ("답변 배열:", "answer"),
+                         ("판정 배열:", "judge"), ("전략 프롬프트]:", "reflect")):
+        if tail.endswith(marker):
+            return kind
+    return "other"
 
 
 def _generate_claude(prompt, timeout=300):

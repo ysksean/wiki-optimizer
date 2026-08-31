@@ -32,7 +32,7 @@ for n in $(s2_eligible "$PRS"); do
   fi
 done
 
-linear_issue_id() { # $1=검색 텍스트 — 첫 SEA-N의 UUID 반환 (없으면 빈값)
+linear_issue_id() { # $1=PR **제목** — 첫 SEA-N의 UUID 반환 (본문 금지: 2026-08-31 실사고)
   local ident num
   ident="$(extract_issue_ident "$TEAM_KEY" "$1")"
   [ -z "$ident" ] && return 0
@@ -57,7 +57,7 @@ WATCHDOG_HOURS="${WATCHDOG_HOURS:-6}"
 watchdog() {
   local n issue_id marker has body
   for n in $(stalled_prs "$PRS" "$(date +%s)" "$WATCHDOG_HOURS"); do
-    issue_id="$(linear_issue_id "$(gh pr view "$n" --repo "$GH_REPO" --json title,body -q '.title + " " + (.body // "")')")" \
+    issue_id="$(linear_issue_id "$(gh pr view "$n" --repo "$GH_REPO" --json title -q '.title')")" \
       || { log "watchdog — PR#$n 이슈 조회 실패, 건너뜀"; continue; }
     [ -z "$issue_id" ] && { log "watchdog — PR#$n 교착이나 Linear 이슈 미연결"; continue; }
     marker="<!-- watchdog:PR#$n -->"
@@ -200,7 +200,7 @@ if [ -n "$S1_PR" ]; then
         gh pr edit "$PR" --repo "$GH_REPO" --add-label "needs-changes"
         # 재작업 횟수 = 지금 것 포함 누적 S1 리뷰 코멘트 수 (한도 초과 시 사람 개입)
         S1_RUNS="$(gh pr view "$PR" --repo "$GH_REPO" --json comments -q '[.comments[].body | select(contains("Grokbot Stage 1"))] | length')"
-        ISSUE_ID="$(linear_issue_id "$(jq -r '.title + " " + (.body // "")' "$WORK/meta.json")")"
+        ISSUE_ID="$(linear_issue_id "$(jq -r '.title' "$WORK/meta.json")")"
         if [ -n "$ISSUE_ID" ] && [ "$S1_RUNS" -le "$REWORK_LIMIT" ]; then
           SUMMARY="🧿 Grokbot 재작업 지시 ($GRADE) — PR #$PR 리뷰에서 지적사항이 나왔다. PR 코멘트의 Grokbot 리뷰를 읽고 기존 브랜치에 수정 커밋을 올려라. 수정 push 후 PR의 grokbot:s1-done, needs-changes 라벨을 제거할 것."
           linear_rollback "$ISSUE_ID" "$SUMMARY" && log "S1 — PR#$PR $GRADE → Linear 재작업 롤백 (${S1_RUNS}회차)"
