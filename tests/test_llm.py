@@ -3,7 +3,6 @@
 실제 CLI를 호출하지 않는다 — subprocess.run/shutil.which를 monkeypatch로 대체.
 """
 
-import subprocess
 from types import SimpleNamespace
 
 import pytest
