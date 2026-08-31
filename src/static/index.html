@@ -359,6 +359,7 @@ const I18N = {
     structure_title: d => `구조 진화 — ${d}`,
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
+    chart_aria: (n, best) => `세대별 held-out 점수 추이, 총 ${n}세대` + (best == null ? "" : `, best 세대 ${best}`),
   },
   en: {
     subtitle: "Point at a wiki folder, run summary (A) / structure (B) optimization, and watch results evolve",
@@ -403,6 +404,7 @@ const I18N = {
     structure_title: d => `Structure evolution — ${d}`,
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
+    chart_aria: (n, best) => `Held-out score by generation, ${n} generations` + (best == null ? "" : `, best generation ${best}`),
   },
   zh: {
     subtitle: "指定 wiki 文件夹，运行摘要（A）/ 结构（B）优化，查看结果如何演化",
@@ -447,6 +449,7 @@ const I18N = {
     structure_title: d => `结构进化 — ${d}`,
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
+    chart_aria: (n, best) => `各代 held-out 分数走势，共 ${n} 代` + (best == null ? "" : `，最佳第 ${best} 代`),
   },
 };
 
@@ -752,7 +755,8 @@ function chart(hist, key, bestGen) {
     return `<polyline points="${pts.join(" ")}" fill="none" stroke="${stroke}" ${extra}/>` +
       hist.map((h, i) => `<circle cx="${X(i)}" cy="${Y(get(h))}" r="3" fill="${stroke}"/>`).join("");
   };
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  const ariaBest = bestGen != null && xs.indexOf(bestGen) >= 0 ? bestGen : null;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t("chart_aria", xs.length, ariaBest))}">`;
   for (const v of [0, .5, 1]) {
     svg += `<line x1="${P}" y1="${Y(v)}" x2="${W-P}" y2="${Y(v)}" stroke="var(--line-subtle)" stroke-dasharray="3 5"/>
             <text x="4" y="${Y(v)+4}">${v}</text>`;
