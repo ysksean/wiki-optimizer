@@ -290,3 +290,29 @@ def test_reflect_prompt_includes_history(tmp_path, monkeypatch):
     # doc 없이 부르면 이력 미포함 (하위 호환)
     evolve.reflect("현재 전략", train_result)
     assert "REJECTED-DIRECTION" not in captured["prompt"]
+
+
+def test_score_structure_parallel_preserves_question_order(monkeypatch):
+    """질문별 route→answer가 병렬이어도 details/preds는 질문 순서를 지킨다."""
+    import time as _time
+    struct = {"files": [{"title": "T", "content": "c" * 50}],
+              "index": [{"title": "T", "desc": "c"}]}
+    qs = [{"q": f"q{i}", "a": f"a{i}"} for i in range(6)]
+    monkeypatch.setattr(structure, "route", lambda q, idx: [0])
+
+    def slow_first_answer(ctx, q):
+        # 앞 질문일수록 늦게 끝나게 해 완료 순서를 뒤집는다
+        _time.sleep((6 - int(q[1:])) * 0.01)
+        return f"pred-{q}"
+
+    monkeypatch.setattr(structure, "_answer", slow_first_answer)
+    captured = {}
+
+    def spy_judge(qs_, preds):
+        captured["preds"] = list(preds)
+        return [1.0] * len(qs_), False
+
+    monkeypatch.setattr(scoring, "judge_all", spy_judge)
+    result = structure.score_structure(struct, qs, total_raw_chars=100)
+    assert [d["q"] for d in result["details"]] == [f"q{i}" for i in range(6)]
+    assert captured["preds"] == [f"pred-q{i}" for i in range(6)]

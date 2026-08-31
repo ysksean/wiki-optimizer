@@ -16,6 +16,7 @@ Query 성능(정확도 x 효율)으로 평가한다.
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import llm
 import scoring
@@ -123,17 +124,20 @@ def score_structure(struct, question_set, total_raw_chars):
                 "avg_read": 0, "n_files": 0, "parse_failed": False, "details": []}
 
     by_title = {f["title"]: f["content"] for f in files}
-    preds, reads, details = [], [], []
 
-    for qa in question_set:
+    def _query_one(qa):
         picks = route(qa["q"], index)
         chosen_titles = [index[p]["title"] for p in picks]
         context = "\n\n".join(by_title.get(t, "") for t in chosen_titles)
-        read_chars = len(context)
-        pred = _answer(context, qa["q"])
-        preds.append(pred)
-        reads.append(read_chars)
-        details.append({"q": qa["q"], "picked": chosen_titles, "read_chars": read_chars, "pred": pred})
+        return {"q": qa["q"], "picked": chosen_titles,
+                "read_chars": len(context), "pred": _answer(context, qa["q"])}
+
+    # 질문별 route→answer 체인은 상호 독립 — 병렬로 세대당 2n회 직렬 호출을
+    # 4폭으로 접는다. ex.map은 입력 순서를 보존하므로 judge와의 짝이 안 틀어진다.
+    with ThreadPoolExecutor(max_workers=min(4, len(question_set))) as ex:
+        details = list(ex.map(_query_one, question_set))
+    preds = [d["pred"] for d in details]
+    reads = [d["read_chars"] for d in details]
 
     scores, parse_failed = scoring.judge_all(question_set, preds)
     for d, s in zip(details, scores):
