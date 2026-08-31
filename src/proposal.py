@@ -1,0 +1,123 @@
+"""위키 구조 제안 생성 + 검증 (Stage 0).
+
+제안 = 레포 위의 라우팅 테이블. flat 리스트 하나이며 path의 슬래시에서
+폴더가 파생된다 (트리 자료구조 없음).
+
+  pages: [{path, title, purpose, outline, sources, status}]
+  - path:    "prerm/risk-cases.md" (상대경로, .md)
+  - purpose: 이 페이지가 답해야 할 질문
+  - outline: md 내부 섹션 목차 제안 ["## ...", ...]
+  - sources: 근거 원본 ["rel" | "rel#헤딩"] — 앵커는 지도로 결정론 검증,
+             미검증이면 앵커 제거(파일 전체 폴백) + anchor_miss 카운트
+  - status:  grounded | gap (유효 source가 없으면 gap으로 강제)
+"""
+
+import json
+import re
+
+import llm
+import repo_map
+
+
+def _parse_pages(text):
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return []
+    pages = data.get("pages", [])
+    return pages if isinstance(pages, list) else []
+
+
+_SAFE_PATH_RE = re.compile(r"^[\w\-./가-힣 ]+$")
+
+
+def _clean_path(path):
+    """상대경로 강제. 절대경로·`..`·이상 문자는 거부(None)."""
+    p = str(path).strip()
+    if not p or p.startswith("/") or ".." in p.split("/") or not _SAFE_PATH_RE.match(p):
+        return None
+    if not p.endswith(".md"):
+        p += ".md"
+    return p
+
+
+def validate(pages, entries):
+    """LLM이 낸 pages를 지도 기준으로 정화한다.
+
+    반환: (clean_pages, stats)  stats: {anchor_miss, dropped_sources, dropped_pages}
+    """
+    entries_map = repo_map.by_rel(entries)
+    stats = {"anchor_miss": 0, "dropped_sources": 0, "dropped_pages": 0}
+    clean = []
+    seen_paths = set()
+    for p in pages:
+        if not isinstance(p, dict):
+            stats["dropped_pages"] += 1
+            continue
+        path = _clean_path(p.get("path", ""))
+        title = str(p.get("title", "")).strip()
+        purpose = str(p.get("purpose", "")).strip()
+        if not path or not title or not purpose or path in seen_paths:
+            stats["dropped_pages"] += 1
+            continue
+        seen_paths.add(path)
+        outline = [str(s).strip() for s in p.get("outline", [])
+                   if isinstance(s, str) and str(s).strip()][:12]
+        sources = []
+        for s in p.get("sources", []):
+            if not isinstance(s, str) or not s.strip():
+                continue
+            rel, _, anchor = s.strip().partition("#")
+            rel = rel.strip()
+            entry = entries_map.get(rel)
+            if entry is None:
+                stats["dropped_sources"] += 1
+                continue
+            if anchor:
+                if repo_map.find_anchor(entry, anchor) is None:
+                    stats["anchor_miss"] += 1
+                    sources.append(rel)  # 파일 전체 폴백
+                else:
+                    sources.append(f"{rel}#{anchor.strip()}")
+            else:
+                sources.append(rel)
+        status = "grounded" if sources else "gap"
+        clean.append({
+            "path": path, "title": title, "purpose": purpose,
+            "outline": outline, "sources": sources, "status": status,
+        })
+    return clean, stats
+
+
+def propose(task, entries, strategy, gap_questions=()):
+    """태스크 + 지도 + 분할 전략 → 검증된 pages.
+
+    반환: (pages, stats). 파싱 실패 시 1회 재시도, 그래도 실패면 ([], stats).
+    """
+    dg = repo_map.digest(entries)
+    gap_str = "\n".join(f"- {q}" for q in gap_questions) or "(없음)"
+    prompt = (
+        "너는 지식베이스(위키) 구조 설계자다. 아래 태스크를 위한 위키의 "
+        "폴더/페이지 구조를 '분할 전략'에 따라 제안하라.\n"
+        f"[분할 전략]\n{strategy}\n\n"
+        "규칙:\n"
+        "- path는 상대경로 .md (슬래시로 폴더 표현, 파일 5~12개).\n"
+        "- purpose는 그 페이지가 답해야 할 질문 한 문장.\n"
+        "- outline은 그 md 안의 섹션 목차 3~6개 (\"## ...\" 형태).\n"
+        "- sources는 아래 [소스 지도]의 경로만 사용. 문서는 \"경로#헤딩\"으로 "
+        "섹션까지 좁혀도 된다 (지도에 있는 헤딩만).\n"
+        "- 근거 소스가 지도에 없지만 태스크에 필요한 축은 sources를 비우고 "
+        "만들어라 (아래 [근거 없는 질문들]이 그 후보다).\n"
+        '출력은 JSON만: {"pages":[{"path":"...","title":"...","purpose":"...",'
+        '"outline":["## ..."],"sources":["..."]}]}  다른 텍스트 금지.\n\n'
+        f"[태스크]\n{task}\n\n"
+        f"[근거 없는 질문들 — gap 페이지 후보]\n{gap_str}\n\n"
+        f"[소스 지도]\n{dg}"
+    )
+    pages = _parse_pages(llm.generate(prompt, num_predict=2000, temperature=0.3))
+    if not pages:
+        pages = _parse_pages(llm.generate(prompt, num_predict=2000, temperature=0.5))
+    return validate(pages, entries)
