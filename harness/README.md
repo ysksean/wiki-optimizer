@@ -4,6 +4,8 @@ Linear 팀 SEA에 이슈(민원)를 올리면, 로컬 폴링이 Triage → PM �
 
 ```
 이슈 등록 → poll.sh (launchd 10분 주기)
+              ├─ 자가 갱신: 메인 체크아웃이 clean master면 origin/master를 ff-only pull
+              │            (dirty·타 브랜치·충돌이면 건너뛰고 poll.log에 사유만 남김)
               ├─ 게이트: GraphQL로 대상 유무 확인 → 없으면 LLM 호출 없이 종료
               └─ claude -p 1회:
                    🔎 Triage  평가 + priority + 라벨(triaged/needs-info)
