@@ -1,6 +1,6 @@
 # Linear 개인 민원창구 하네스 (MVP)
 
-Linear 팀 SEA에 이슈(민원)를 올리면, 로컬 폴링이 Triage → PM → Executor를 자동으로 돌려 PR과 리포트 코멘트까지 만든다. **머지는 항상 사람이 한다.**
+Linear 팀 SEA의 **wiki-optimizer 프로젝트**에 이슈(민원)를 올리면, 로컬 폴링이 Triage → PM → Executor를 자동으로 돌려 PR과 리포트 코멘트까지 만든다. **머지는 항상 사람이 한다.**
 
 ```
 이슈 등록 → poll.sh (launchd 10분 주기)
@@ -13,10 +13,19 @@ Linear 팀 SEA에 이슈(민원)를 올리면, 로컬 폴링이 Triage → PM �
                    🔧 Executor worktree 작업 → PR → 리포트 → In Review
 ```
 
+## 접수 범위
+
+게이트는 **팀 SEA + wiki-optimizer 프로젝트 + Todo/Backlog** 이슈만 조회한다 (`harness/poll.sh`의 `PROJECT_ID`, 이름 변경에 안 깨지도록 UUID 고정).
+
+> **이슈를 등록할 때 프로젝트를 반드시 `wiki-optimizer`로 지정할 것.** 프로젝트가 비어 있는 이슈는 하네스가 아예 보지 않고, 로그에도 남지 않는다 (조용히 잠든다).
+
+대상 repo가 늘어나면 프로젝트를 하나 더 만들고 `PROJECT_ID`를 분기시키는 것이 확장 경로다.
+
 ## 상태 규약 (Linear가 곧 상태 저장소)
 
 | 이슈 상태 | 의미 |
 |---|---|
+| 프로젝트 미지정 | **접수 안 됨** — 게이트 쿼리에 안 잡힌다 |
 | Todo/Backlog, 라벨 없음 | 미접수 → 다음 tick에 Triage |
 | `needs-info` | 정보 부족. **답변 코멘트만 달면** 다음 tick에 자동 재접수 (라벨 제거 불필요 — 최신 코멘트가 역할 태그 🔎/📋/🔧/🧿로 시작하지 않으면 게이트가 감지, `harness/gate.jq`) |
 | `triaged` + priority | 처리 대기열. PM이 우선순위순 1건/tick 집행 |
