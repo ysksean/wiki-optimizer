@@ -148,7 +148,7 @@
   .docs-toolbar button { min-height: 36px; padding: 5px 12px; font-size: 13px; }
   .docs label {
     display: flex; align-items: center; gap: 10px; margin: 0;
-    min-height: 42px; padding: 9px 12px; cursor: pointer;
+    min-height: 44px; padding: 9px 12px; cursor: pointer;
     border: 1px solid var(--line-subtle); border-radius: 8px;
     background: var(--control); color: var(--tx-secondary);
     font-size: 14px; font-weight: 450;
@@ -234,7 +234,14 @@
   tr.is-best td { background: var(--ok-soft); }
 
   details { margin-top: 12px; }
-  summary { cursor: pointer; color: var(--acc); font-size: 13px; font-weight: 550; }
+  summary {
+    display: flex; align-items: center; width: fit-content; min-height: 44px;
+    cursor: pointer; color: var(--acc); font-size: 13px; font-weight: 550;
+    list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; margin-right: 7px; transition: transform .15s; }
+  details[open] > summary::before { transform: rotate(90deg); }
   summary:hover { color: var(--acc-hover); }
 
   pre, .diff {
@@ -270,6 +277,8 @@
   .arrow { color: var(--dim); margin: 0 6px; }
   .up { color: var(--ok); } .down { color: var(--bad); }
   .note { margin-top: 8px; color: var(--dim); font-size: 13px; }
+  #jobs .empty-state { padding: 24px; color: var(--dim); }
+  .empty-state strong { display: block; margin-bottom: 4px; color: var(--tx-secondary); font-size: 15px; }
 
   @media (max-width: 640px) {
     .topbar { align-items: flex-start; gap: 12px; }
@@ -282,6 +291,11 @@
     .workflow-divider { margin: 22px 0; }
     .action-row { display: grid !important; grid-template-columns: 1fr; }
     .action-row button { width: 100%; }
+    .job-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 10px; }
+    .job-head .docs-list { grid-column: 1 / -1; }
+    .job-head .meta { grid-column: 1 / -1; margin-left: 0; }
+    .job-head .chev { grid-column: 3; grid-row: 1; }
+    .job-body { padding: 4px 16px 16px; }
   }
 </style>
 </head>
@@ -402,8 +416,11 @@ const I18N = {
     runs_title: "실험 기록", runs_count: n => `${n}건`,
     need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
     no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요",
-    no_jobs: "아직 실행한 실험이 없습니다", waiting_gen: "아직 첫 세대 결과 대기 중…",
+    no_jobs: "아직 실행한 실험이 없습니다", no_jobs_hint: "문서를 불러오고 실험을 실행하면 세대별 점수와 전략 변화가 여기에 표시됩니다.",
+    waiting_gen: "아직 첫 세대 결과 대기 중…",
     preparing_q: "질문 세트 준비 중…", failed: "실패",
+    status_running: "실행 중", status_done: "완료", status_error: "오류", status_queued: "대기 중",
+    run_meta: (backend,gens,time) => `${backend} · ${gens}세대 · ${time}`,
     mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
     audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${d}/${t} 문서 채점 중…`,
     avg_score: n => `평균 점수 (${n}개 채점)`,
@@ -443,8 +460,11 @@ const I18N = {
     runs_title: "Runs", runs_count: n => `${n} total`,
     need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
     no_md: "No md files found", need_docs: "Select at least one document",
-    no_jobs: "No experiments yet", waiting_gen: "Waiting for the first generation…",
+    no_jobs: "No experiments yet", no_jobs_hint: "Load documents and run an experiment to see generation scores and strategy changes here.",
+    waiting_gen: "Waiting for the first generation…",
     preparing_q: "Preparing question set…", failed: "Failed",
+    status_running: "Running", status_done: "Done", status_error: "Error", status_queued: "Queued",
+    run_meta: (backend,gens,time) => `${backend} · ${gens} gen · ${time}`,
     mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
     audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scoring ${d}/${t} documents…`,
     avg_score: n => `average score (${n} scored)`,
@@ -484,8 +504,11 @@ const I18N = {
     runs_title: "运行记录", runs_count: n => `共 ${n} 条`,
     need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
     no_md: "未找到 md 文件", need_docs: "请至少选择一个文档",
-    no_jobs: "还没有运行过实验", waiting_gen: "等待第一代结果…",
+    no_jobs: "还没有运行过实验", no_jobs_hint: "加载文档并运行实验后，这里将显示各代评分和策略变化。",
+    waiting_gen: "等待第一代结果…",
     preparing_q: "正在准备问题集…", failed: "失败",
+    status_running: "运行中", status_done: "已完成", status_error: "错误", status_queued: "等待中",
+    run_meta: (backend,gens,time) => `${backend} · ${gens}代 · ${time}`,
     mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
     audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 正在评分 ${d}/${t} 篇文档…`,
     avg_score: n => `平均分（已评 ${n} 篇）`,
@@ -782,7 +805,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
 
 async function renderJob(j) {
   const isOpen = open_.has(j.id);
-  const badge = `<span class="badge b-${j.status}">${j.status}</span>`;
+  const badge = `<span class="badge b-${j.status}">${t("status_" + j.status)}</span>`;
   const when = new Date(j.created_at*1000).toLocaleTimeString();
   let inner = `<div class="job-body" id="job-${j.id}-body" hidden></div>`;
   if (isOpen) {
@@ -809,7 +832,7 @@ async function renderJob(j) {
       aria-expanded="${isOpen}" aria-controls="job-${j.id}-body">
       ${badge} <span class="mode">${t("mode_" + j.mode)}</span>
       <span class="docs-list">${j.doc_names.map(esc).join(", ")}</span>
-      <span class="meta">${j.backend} · gen ${j.generations} · ${when}</span>
+      <span class="meta">${t("run_meta", j.backend, j.generations, when)}</span>
       <span class="chev${isOpen ? " open" : ""}">▾</span>
     </button>${inner}</div>`;
 }
@@ -823,7 +846,7 @@ async function poll() {
   const { jobs } = await r.json();
   const parts = await Promise.all(jobs.map(renderJob));
   const html = parts.join("") ||
-    `<div class="card" style="padding:24px;color:var(--dim)">${t("no_jobs")}</div>`;
+    `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
   $("runsCount").textContent = jobs.length ? t("runs_count", jobs.length) : "";
   // 내용이 같으면 다시 그리지 않는다 (펼쳐둔 details 유지)
   if (html !== lastHtml) { $("jobs").innerHTML = html; lastHtml = html; }
