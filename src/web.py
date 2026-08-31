@@ -135,10 +135,11 @@ def _run_job(job):
                     out_dir=job["dir"], files=job["files"],
                 )
             elif job["mode"] == "audit":
-                def cb(done, total, docs):
+                def cb(done, total, partial):
                     flush_result({"type": "audit", "done": done, "total": total,
-                                  "docs": docs})
-                res = audit.audit(job["base_dir"], n_qa=job["n_qa"], progress_cb=cb)
+                                  **partial})
+                res = audit.audit(job["base_dir"], n_qa=job["n_qa"], progress_cb=cb,
+                                  max_docs=job.get("max_docs"))
                 res["type"] = "audit"
                 res["done"] = res["total"] = res["n_docs"]
                 flush_result(res)
@@ -162,6 +163,18 @@ def _run_job(job):
         finally:
             job["finished_at"] = time.time()
             _save_job(job)
+
+
+def _clamp_int(params, key, default, lo, hi):
+    """정수 파라미터를 [lo, hi]로 클램프해 반환. 파싱 불가면 (None, 에러메시지)."""
+    val = params.get(key, default)
+    if val is None:
+        val = default
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        return None, f"{key}는 정수여야 합니다: {val!r}"
+    return max(lo, min(hi, n)), None
 
 
 def start_job(params):
@@ -188,6 +201,18 @@ def start_job(params):
             return None, f"폴더가 없습니다: {base_dir}"
         doc_names = [os.path.basename(base_dir.rstrip("/"))]
 
+    generations, err = _clamp_int(params, "generations", 3, 1, 10)
+    if err:
+        return None, err
+    n_qa, err = _clamp_int(params, "n_qa", 6, 2, 12)
+    if err:
+        return None, err
+    max_docs = None
+    if params.get("max_docs"):
+        max_docs, err = _clamp_int(params, "max_docs", None, 1, 1000)
+        if err:
+            return None, err
+
     job_id = uuid.uuid4().hex[:8]
     job = {
         "id": job_id,
@@ -198,8 +223,9 @@ def start_job(params):
         "base_dir": base_dir,
         "strategy": (params.get("strategy") or "").strip(),
         "doc_names": doc_names,
-        "generations": max(1, min(10, int(params.get("generations", 3)))),
-        "n_qa": max(2, min(12, int(params.get("n_qa", 6)))),
+        "generations": generations,
+        "n_qa": n_qa,
+        "max_docs": max_docs,
         "dir": os.path.join(JOBS_DIR, job_id),
         "status": "queued",
         "error": None,
@@ -342,7 +368,11 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError):
             self._json({"error": "잘못된 JSON"}, 400)
             return
-        job, err = start_job(params)
+        try:
+            job, err = start_job(params)
+        except Exception as e:  # 검증을 뚫은 예외도 무응답 대신 JSON으로
+            self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+            return
         if err:
             self._json({"error": err}, 400)
         else:

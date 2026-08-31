@@ -30,10 +30,13 @@ import argparse
 import json
 import os
 import random
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import llm
+import provenance
 import scoring
 
 
@@ -49,6 +52,9 @@ HOLDOUT_RATIO = 0.4  # 질문 중 held-out 비율 (최소 2개 보장)
 WIKI_DIR = os.path.join("runs", "wiki")
 IMPACT_PATH = os.path.join(WIKI_DIR, "strategy-impact.jsonl")
 
+# 이력 파일은 모든 문서/arm이 공유한다 — batch --parallel 시 append/read 경합 방지
+_IMPACT_LOCK = threading.Lock()
+
 
 def record_strategy_impact(doc, arm, generation, strategy, r_test, accepted):
     """세대 하나의 전략과 결과를 영속 이력에 append한다."""
@@ -63,7 +69,7 @@ def record_strategy_impact(doc, arm, generation, strategy, r_test, accepted):
         "length_ratio": r_test["length_ratio"],
         "accepted": accepted,
     }
-    with open(IMPACT_PATH, "a") as f:
+    with _IMPACT_LOCK, open(IMPACT_PATH, "a") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
@@ -72,7 +78,7 @@ def load_strategy_history(doc, n_rejected=5, n_accepted=3):
     if not os.path.exists(IMPACT_PATH):
         return [], []
     entries = []
-    with open(IMPACT_PATH) as f:
+    with _IMPACT_LOCK, open(IMPACT_PATH) as f:
         for line in f:
             try:
                 e = json.loads(line)
@@ -182,7 +188,7 @@ def _flush_progress(run_dir, payload):
 
 
 def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
-           question_set=None, use_history=True, cancel_event=None):
+           question_set=None, use_history=True, cancel_event=None, patience=None):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
 
     use_history=False면 reflect가 영속 이력을 읽지 않고, 기록도
@@ -191,6 +197,10 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
 
     cancel_event(threading.Event)가 set되면 다음 세대 경계에서 멈추고,
     그때까지의 결과로 report를 남긴다 (웹 대시보드 취소용).
+
+    patience=N이면 N세대 연속 best 미갱신 시 조기 종료한다. **단독 실행 전용** —
+    batch 대조 실험에서 쓰면 arm마다 유효 표본 수(세대 수)가 달라져 net 비교가
+    왜곡되므로 batch는 이 값을 전달하지 않는다.
     """
     raw_text = open(raw_path).read()
     doc = os.path.splitext(os.path.basename(raw_path))[0]
@@ -215,26 +225,37 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     history = []
     parse_failed_gens = []
 
+    since_best = 0
     for g in range(generations):
         if cancel_event is not None and cancel_event.is_set():
             print(f"[cancel] 취소 요청 — {g}세대까지의 결과만 남긴다")
             break
         t = time.time()
         summary = summarize(raw_text, strategy)
-        r_train = scoring.score(raw_text, summary, train_qs)
-        r_test = scoring.score(raw_text, summary, test_qs)
+        # train/held-out 채점은 서로 독립 (공유 상태 없음) — 병렬로 세대당
+        # LLM 4회(답변+판정 x2)를 2회 폭으로 접는다. 순서·결과는 동일하다.
+        # control arm은 reflect를 하지 않으므로 train 채점(반성 전용) 자체가
+        # 불필요하다 — LLM 2회/세대 절약. 비교 축인 held-out 점수는 영향 없음.
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fut_train = None if no_evolve else ex.submit(scoring.score, raw_text, summary, train_qs)
+            fut_test = ex.submit(scoring.score, raw_text, summary, test_qs)
+            r_train = fut_train.result() if fut_train else None
+            r_test = fut_test.result()
         dt = time.time() - t
 
         # 판정 파싱 실패 세대는 점수가 자리만 채운 0이다 — best 후보·영속 이력에서 제외
-        parse_failed = bool(r_train.get("parse_failed") or r_test.get("parse_failed"))
+        parse_failed = bool(r_test.get("parse_failed")
+                            or (r_train is not None and r_train.get("parse_failed")))
         if parse_failed:
             parse_failed_gens.append(g)
         improved = (not parse_failed) and r_test["total"] > best["total"]
         marker = "  <- best" if improved else ("  (judge 파싱 실패 — 제외)" if parse_failed else "")
+        train_part = (f"train={r_train['total']} (acc={r_train['accuracy']}) "
+                      if r_train is not None else "train=skip(control) ")
         print(
             f"[gen {g}] held-out={r_test['total']} (acc={r_test['accuracy']}) "
-            f"train={r_train['total']} (acc={r_train['accuracy']}) "
-            f"eff={r_test['efficiency']} ratio={r_test['length_ratio']}  ({dt:.0f}s){marker}"
+            + train_part
+            + f"eff={r_test['efficiency']} ratio={r_test['length_ratio']}  ({dt:.0f}s){marker}"
         )
 
         history.append(
@@ -243,7 +264,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
                 "strategy": strategy,
                 "summary": summary,
                 "score": {k: v for k, v in r_test.items() if k != "qa_details"},
-                "train_score": {k: v for k, v in r_train.items() if k != "qa_details"},
+                "train_score": ({k: v for k, v in r_train.items() if k != "qa_details"}
+                                if r_train is not None else None),
                 "elapsed_sec": round(dt, 1),
             }
         )
@@ -256,6 +278,9 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
                 "summary": summary,
                 "train_result": r_train,
             }
+            since_best = 0
+        elif not parse_failed:
+            since_best += 1
 
         if not parse_failed:
             record_strategy_impact(doc, arm, g, strategy, r_test, improved)
@@ -269,6 +294,11 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
                 for h in history
             ],
         })
+
+        if patience and since_best >= patience:
+            print(f"[early-stop] {patience}세대 연속 best 미갱신 — gen {g}에서 종료 "
+                  f"(남은 {generations - 1 - g}세대 x LLM 호출 절약)")
+            break
 
         if not no_evolve and g < generations - 1 and best["strategy"] is not None:
             # 점수가 안 올랐으면 best 전략으로 되돌리되, 피드백도
@@ -285,6 +315,11 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     report = {
         "doc": doc,
         "arm": arm,
+        "provenance": provenance.collect(
+            doc_text=raw_text, question_set=question_set,
+            params={"generations": generations, "n_qa": n_qa,
+                    "use_history": use_history, "no_evolve": no_evolve},
+        ),
         "generations": generations,
         "train_questions": train_qs,
         "holdout_questions": test_qs,
@@ -311,6 +346,8 @@ if __name__ == "__main__":
     ap.add_argument("--generations", type=int, default=4)
     ap.add_argument("--n-qa", type=int, default=8)
     ap.add_argument("--control", action="store_true", help="진화 없이 seed 재샘플링(대조군)")
+    ap.add_argument("--patience", type=int, default=None,
+                    help="N세대 연속 best 미갱신이면 조기 종료 (기본: 끝까지)")
     args = ap.parse_args()
     evolve(args.raw_path, generations=args.generations, n_qa=args.n_qa,
-           no_evolve=args.control)
+           no_evolve=args.control, patience=args.patience)

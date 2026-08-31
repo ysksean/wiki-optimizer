@@ -36,6 +36,12 @@ Two experimental safeguards on top:
   seed-strategy-resampling arm alongside. Since "best of N noisy runs" is biased
   upward even with zero real improvement, the true effect is
   `evolve gain − control gain`. Both arms share the same question set per document.
+- **Significance testing** — the net effect is reported with a 95% confidence
+  interval and a p-value from a paired bootstrap (1000 resamples, fixed seed).
+  Documents are the resampling unit, not runs: runs on the same document share a
+  question set, so treating them as independent would understate the p-value.
+  With fewer than two paired documents the summary says the effect cannot be
+  judged instead of claiming an improvement.
 
 ## Two stages
 
