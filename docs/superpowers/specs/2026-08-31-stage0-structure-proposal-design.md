@@ -45,10 +45,16 @@ wiki-optimizer의 기존 세 흐름(audit / Stage A 요약 진화 / Stage B 구�
   "path": "prerm/scoring-criteria.md",
   "title": "사전RM 평가항목 채점 기준",
   "purpose": "항목별 판단 기준·배점·산출 근거는 무엇인가",
+  "outline": ["## 채점 기준", "## 배점 근거", "## 사전RM 시사점"],
   "sources": ["aipmop/docs/domain/prerm-scoring.md#채점-기준",
                "aipmop/api/.../scoring.py"],
   "status": "grounded"   // grounded | gap
 }]}
+```
+
+- `outline` — 그 md 파일 안의 섹션 목차 제안. skeleton이 빈 헤딩으로 써 준다.
+
+```json
 ```
 
 ### sources 해상도 — 하이브리드 (결정)
@@ -150,6 +156,34 @@ python3 src/evolve_proposal.py --source ~/aipmop --task-file task.txt --n-qa 8 -
 - skeleton: dry-run 무변경, 기존 파일 skip, frontmatter 형식.
 - score_proposal: 가짜 llm.generate 주입으로 denom/anchor_miss/gap 제외 검증
   (기존 test_core.py 방식).
+
+## 입력 가이드 (문서화 대상)
+
+정확도는 두 입력이 결정한다 — 질문은 task에서, 정답은 sources에서 나온다.
+
+- **task에 넣을 것 4가지**: ① 위키의 소비자와 소비 시점 ② 실제 던질 질문 예시
+  2~3개 ③ 데이터의 성질·제약 ④ 산출물 용도. 질문 생성이 ②의 패턴을 증식시키고,
+  ③이 조직 축을, ④가 outline을 결정한다.
+- **sources 우선순위**: ① SoT 실물 샘플(1건이라도) ② 도메인 정의 문서 ③ 스키마가
+  있는 코드 디렉터리(레포 전체 말고 좁혀서). 범용 문서·중복 버전 노트는 넣지 않는다.
+- **gap 역이용**: 소스를 얇게 시작해도 된다 — gap 목록이 곧 "추가로 확보할 데이터
+  목록"이다. 데이터를 받으면 source에 추가하고 재실행해 gap→grounded 전환을 본다.
+
+## 반복 개선 (warm start)
+
+사용자가 결과를 보고 데이터·프롬프트를 추가해 재실행하는 흐름을 1급으로 지원한다.
+
+| 입력 변화 | 다시 도는 것 | 유지 |
+|---|---|---|
+| 데이터 추가 | 새 폴더 스캔, gap 질문 oracle 재시도 | 지도 캐시, 질문 세트, 이전 best 전략(seed) |
+| task 수정 | 질문 세트 재생성 | 지도 캐시, 이전 best 전략은 seed로 |
+| 세대만 추가 | 진화 루프 계속 | 전부 |
+
+- 이전 run의 best 분할 전략을 다음 run의 seed로 쓴다 — `apply.best_strategy_from_runs`
+  와 같은 관례로 `runs/**/report.json`에서 proposal run의 best를 찾는다
+  (`--seed-from-runs` / 대시보드 "이어서 개선" 버튼).
+- **점수 비교 규칙**: 질문 세트가 같을 때만 점수를 직접 비교한다. task가 바뀌면
+  다른 시험지다 — gap 개수 등 구조 지표만 비교하고 UI에 구분 표시한다.
 
 ## 범위 밖 (명시)
 
