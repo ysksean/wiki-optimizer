@@ -37,7 +37,7 @@
 
 2단계에서 지시된 그 이슈 1건을 끝까지 처리한다.
 
-**재작업 분기**: 이슈 코멘트에 "🧿 Grokbot 재작업 지시"가 있고 열린 PR이 연결돼 있으면, 새 브랜치를 만들지 말고 기존 PR 브랜치를 **별도 worktree**로 체크아웃해서 PR의 Grokbot 리뷰 코멘트가 지적한 것만 고쳐라: `git fetch origin <브랜치> && git worktree add ../wo-<이슈식별자-소문자> <브랜치>`. **절대 메인 체크아웃(현재 cwd)에서 `git switch`/`git checkout`으로 브랜치를 바꾸지 마라** — 메인 체크아웃은 폴링 하네스가 상주하는 곳이라, master를 벗어나면 자가 갱신이 멈추고 다음 tick들이 옛 코드로 돈다 (2026-08-31 실제 발생). 수정 push 후 `gh pr edit <PR> --remove-label grokbot:s1-done --remove-label needs-changes`로 라벨을 떼서 Grokbot이 재심사하게 하고, 리포트 코멘트를 남기고 상태를 In Review로. (아래 1~6단계 중 worktree 생성·PR 생성만 건너뛰고 나머지 규칙은 동일.)
+**재작업 분기**: 이슈 코멘트에 "🧿 Grokbot 재작업 지시"가 있고 열린 PR이 연결돼 있으면, 새 브랜치를 만들지 말고 기존 PR 브랜치를 **별도 worktree**로 체크아웃해서 PR의 Grokbot 리뷰 코멘트가 지적한 것만 고쳐라: `git fetch origin <브랜치> && git worktree add ../wo-<이슈식별자-소문자>-rework -B <브랜치> origin/<브랜치>` — **반드시 origin 기준**(`-B ... origin/<브랜치>`)으로 잡아라. 로컬에 같은 이름의 브랜치가 갈라져 있어도 PR에 없는 커밋을 집지 않는다. `worktree add`가 "already checked out"으로 실패하면: `git worktree list`로 기존 체크아웃 위치를 찾아 그 경로에서 작업하거나, 그 worktree가 버려진 것이면 `git worktree remove --force` 후 재시도한다. **어떤 경우에도 메인 체크아웃(현재 cwd)에서 `git switch`/`git checkout`으로 브랜치를 바꾸지 마라** — 메인 체크아웃은 폴링 하네스가 상주하는 곳이라, master를 벗어나면 자가 갱신이 멈추고 다음 tick들이 옛 코드로 돈다 (2026-08-31 실제 발생). 수정 push 후 `gh pr edit <PR> --remove-label grokbot:s1-done --remove-label needs-changes`로 라벨을 떼서 Grokbot이 재심사하게 하고, 리포트 코멘트를 남기고 상태를 In Review로. (아래 1~6단계 중 worktree 생성·PR 생성만 건너뛰고 나머지 규칙은 동일.)
 
 1. 작업 공간 준비 (현재 cwd는 wiki-optimizer repo다):
    - `git worktree add ../wo-<이슈식별자-소문자> -b sea/<이슈식별자-소문자> origin/master` (origin/master가 없으면 master)

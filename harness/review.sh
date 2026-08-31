@@ -85,9 +85,11 @@ fail_label() { # $1=pr $2=stage — 실패 시 라벨 박아 재시도 폭주 �
   log "PR#$1 ${2} FAILED — grokbot:${2}-error 라벨, 재시도 중단. 작업물 보존: ${WORK:-?}"
 }
 
-linear_issue_id() { # PR 제목/본문에서 SEA-N 찾아 UUID 반환 (없으면 빈값)
+linear_issue_id() { # PR **제목**에서 SEA-N 찾아 UUID 반환 (없으면 빈값)
+  # 본문은 보지 않는다 — 산문에 언급된 무관한 이슈 번호를 집어 엉뚱한 이슈를
+  # 재작업 롤백시킨 실사고(2026-08-31, PR#36 본문의 SEA-16) 재발 방지.
   local ident num
-  ident="$(extract_issue_ident "$TEAM_KEY" "$(jq -r '.title + " " + (.body // "")' "$WORK/meta.json")")"
+  ident="$(extract_issue_ident "$TEAM_KEY" "$(jq -r '.title' "$WORK/meta.json")")"
   [ -z "$ident" ] && return 0
   num="${ident#${TEAM_KEY}-}"
   curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
