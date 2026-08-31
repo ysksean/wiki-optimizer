@@ -19,6 +19,7 @@
 2. 판단이 서면:
    - priority 설정 — 1(Urgent)/2(High)/3(Medium)/4(Low). 남발하지 말 것: Urgent는 "지금 당장 망가져 있음"뿐.
    - 종류 라벨 1개 (Bug/Feature/Improvement) + `triaged` 라벨 추가.
+   - 프로젝트를 **wiki-optimizer**로 설정한다 (이미 설정돼 있으면 그대로).
    - 평가 코멘트: 판단 요지 2~4문장 + 배정 우선순위와 이유.
 3. 판단이 안 서면 (대상 불명확, wiki-optimizer 범위 밖, 재현 정보 부족):
    - `needs-info` 라벨 추가 + 무엇이 더 필요한지 묻는 코멘트. priority는 건드리지 않는다.
