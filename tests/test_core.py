@@ -12,6 +12,7 @@ import apply as apply_mod
 import audit
 import evolve
 import scoring
+import structure
 
 
 # ---------- scoring: 파싱 ----------
@@ -55,6 +56,122 @@ def test_score_combines_multiplicatively(monkeypatch):
     assert result["accuracy"] == 0.5
     assert result["efficiency"] == 0.5
     assert result["total"] == 0.25
+    assert result["parse_failed"] is False
+
+
+# ---------- scoring: judge 파싱 — 실패와 오답을 구분 ----------
+
+@pytest.mark.parametrize("text,n,expected", [
+    ("[1,0,1]", 3, [1.0, 0.0, 1.0]),
+    ("판정 배열: [1, 0, 1]", 3, [1.0, 0.0, 1.0]),
+    ("[1.0, 0.0, 1.0]", 3, [1.0, 0.0, 1.0]),            # JSON float 0/1은 허용
+    ("[1, 0, 1] 설명: 2번은 [참고]와 다름 ]", 3, [1.0, 0.0, 1.0]),  # greedy `\[.*\]`면 뒤 `]`까지 번짐
+    ("항목 [1]만 봄. 판정: [0,1,1]", 3, [0.0, 1.0, 1.0]),  # 첫 대괄호가 아니어도 개수 맞는 블록을 찾는다
+    ("[1 0 1]", 3, [1.0, 0.0, 1.0]),                    # JSON은 아니지만 토큰이 딱 맞음
+])
+def test_parse_judgement_accepts_clean_arrays(text, n, expected):
+    assert scoring.parse_judgement(text, n) == expected
+
+
+@pytest.mark.parametrize("text,n", [
+    ("[10, 0.5, 1]", 3),      # `10`·`0.5` 안의 0/1 문자를 긁으면 안 됨
+    ("[1,0]", 3),             # 항목 부족 — 0으로 메우지 않는다
+    ("[1,0,1,1]", 3),         # 항목 초과
+    ("판정 불가", 3),
+    ("", 3),
+    ("[true,false,true]", 3),
+])
+def test_parse_judgement_rejects_noise(text, n):
+    assert scoring.parse_judgement(text, n) is None
+
+
+def test_judge_all_retries_once_then_succeeds(monkeypatch):
+    qs = [{"q": "Q1", "a": "A1"}, {"q": "Q2", "a": "A2"}]
+    responses = iter(["판정: 어렵네요", "[1,0]"])
+    calls = []
+    monkeypatch.setattr(scoring.llm, "generate",
+                        lambda p, **k: (calls.append(p), next(responses))[1])
+    scores, failed = scoring.judge_all(qs, ["A1", "wrong"])
+    assert (scores, failed) == ([1.0, 0.0], False)
+    assert len(calls) == 2 and calls[0] == calls[1]  # 같은 프롬프트로 1회 재요청
+
+
+def test_judge_all_marks_parse_failed_after_retry(monkeypatch):
+    qs = [{"q": "Q1", "a": "A1"}, {"q": "Q2", "a": "A2"}]
+    responses = iter(["garbage", "[10, 0.5]"])
+    monkeypatch.setattr(scoring.llm, "generate", lambda *a, **k: next(responses))
+    scores, failed = scoring.judge_all(qs, ["A1", "wrong"])
+    assert failed is True
+    assert scores == [0.0, 0.0]  # 자리만 채움 — 호출자가 parse_failed로 걸러야 한다
+
+
+def test_score_propagates_parse_failed(monkeypatch):
+    qs = [{"q": "Q1", "a": "A1"}, {"q": "Q2", "a": "A2"}]
+    responses = iter(['["A1","A2"]', "no array", "still no array"])
+    monkeypatch.setattr(scoring.llm, "generate", lambda *a, **k: next(responses))
+    result = scoring.score("x" * 1000, "x" * 500, qs)
+    assert result["parse_failed"] is True
+    assert result["accuracy"] == 0.0  # 0점이지만 parse_failed로 구분된다
+
+
+# ---------- structure: 공용 judge 사용 + parse_failed 전파 ----------
+
+def test_score_structure_uses_shared_judge_and_flags_parse_failure(monkeypatch):
+    struct = {"files": [{"title": "T", "content": "c" * 50}],
+              "index": [{"title": "T", "desc": "c"}]}
+    qs = [{"q": "q1", "a": "a1"}, {"q": "q2", "a": "a2"}]
+    monkeypatch.setattr(structure, "route", lambda q, idx: [0])
+    monkeypatch.setattr(structure, "_answer", lambda ctx, q: "pred")
+    monkeypatch.setattr(scoring, "judge_all", lambda qs_, preds: ([0.0, 0.0], True))
+    result = structure.score_structure(struct, qs, total_raw_chars=100)
+    assert result["parse_failed"] is True and result["accuracy"] == 0.0
+
+    monkeypatch.setattr(scoring, "judge_all", lambda qs_, preds: ([1.0, 0.0], False))
+    result = structure.score_structure(struct, qs, total_raw_chars=100)
+    assert result["parse_failed"] is False and result["accuracy"] == 0.5
+
+
+# ---------- evolve: parse_failed 세대는 best·영속 이력에서 제외 ----------
+
+def test_evolve_excludes_parse_failed_generation(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "WIKI_DIR", str(tmp_path / "wiki"))
+    monkeypatch.setattr(evolve, "IMPACT_PATH", str(tmp_path / "wiki" / "impact.jsonl"))
+    raw = tmp_path / "doc.md"
+    raw.write_text("x" * 100)
+    qs = [{"q": f"q{i}", "a": f"a{i}"} for i in range(4)]  # train 2 / held-out 2
+
+    # gen0: held-out 판정 파싱 실패인데 total은 (오염 상황을 흉내내) 높게.
+    # gen1: 정상 채점, 낮은 점수. → best는 gen1이어야 한다.
+    plan = iter([
+        {"total": 0.4, "accuracy": 0.5, "efficiency": 0.8, "length_ratio": 0.2,
+         "parse_failed": False, "qa_details": []},                      # gen0 train
+        {"total": 0.9, "accuracy": 1.0, "efficiency": 0.9, "length_ratio": 0.1,
+         "parse_failed": True, "qa_details": []},                       # gen0 held-out (실패)
+        {"total": 0.4, "accuracy": 0.5, "efficiency": 0.8, "length_ratio": 0.2,
+         "parse_failed": False, "qa_details": []},                      # gen1 train
+        {"total": 0.5, "accuracy": 0.5, "efficiency": 1.0, "length_ratio": 0.1,
+         "parse_failed": False, "qa_details": []},                      # gen1 held-out
+    ])
+    monkeypatch.setattr(evolve.scoring, "score", lambda *a, **k: next(plan))
+    monkeypatch.setattr(evolve, "summarize", lambda raw_text, strategy: "요약")
+    reflected = []
+    def fake_reflect(strategy, train_result, doc=None):
+        reflected.append(strategy)
+        return strategy + "+"
+    monkeypatch.setattr(evolve, "reflect", fake_reflect)
+
+    report = evolve.evolve(str(raw), generations=2, out_dir=str(tmp_path / "runs"),
+                           question_set=qs)
+
+    assert report["best"]["generation"] == 1 and report["best"]["total"] == 0.5
+    assert report["parse_failed"] is True
+    assert report["parse_failed_generations"] == [0]
+    assert report["history"][0]["score"]["parse_failed"] is True
+    # gen0에는 유효한 best가 없으므로 reflect 없이 seed 전략을 그대로 재시도
+    assert reflected == []
+    # 영속 이력에는 실패 세대가 기록되지 않는다 (reflect 오염 방지)
+    accepted, rejected = evolve.load_strategy_history("doc")
+    assert [e["generation"] for e in accepted] == [1] and rejected == []
 
 
 # ---------- evolve: held-out 분할 ----------

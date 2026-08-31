@@ -210,6 +210,7 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
     best = {"total": -1.0, "generation": -1, "strategy": None, "summary": None,
             "train_result": None}
     history = []
+    parse_failed_gens = []
 
     for g in range(generations):
         t = time.time()
@@ -218,8 +219,12 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         r_test = scoring.score(raw_text, summary, test_qs)
         dt = time.time() - t
 
-        improved = r_test["total"] > best["total"]
-        marker = "  <- best" if improved else ""
+        # 판정 파싱 실패 세대는 점수가 자리만 채운 0이다 — best 후보·영속 이력에서 제외
+        parse_failed = bool(r_train.get("parse_failed") or r_test.get("parse_failed"))
+        if parse_failed:
+            parse_failed_gens.append(g)
+        improved = (not parse_failed) and r_test["total"] > best["total"]
+        marker = "  <- best" if improved else ("  (judge 파싱 실패 — 제외)" if parse_failed else "")
         print(
             f"[gen {g}] held-out={r_test['total']} (acc={r_test['accuracy']}) "
             f"train={r_train['total']} (acc={r_train['accuracy']}) "
@@ -246,7 +251,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
                 "train_result": r_train,
             }
 
-        record_strategy_impact(doc, arm, g, strategy, r_test, improved)
+        if not parse_failed:
+            record_strategy_impact(doc, arm, g, strategy, r_test, improved)
 
         _flush_progress(run_dir, {
             "mode": "summary", "doc": doc, "arm": arm,
@@ -258,14 +264,17 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
             ],
         })
 
-        if not no_evolve and g < generations - 1:
+        if not no_evolve and g < generations - 1 and best["strategy"] is not None:
             # 점수가 안 올랐으면 best 전략으로 되돌리되, 피드백도
             # *그 best 전략의* train 채점 결과를 쓴다 (전략-결과 짝 유지).
+            # (아직 유효한 best가 없으면 — 전 세대 판정 실패 — 현재 전략을 그대로 재시도)
             strategy = reflect(best["strategy"], best["train_result"],
                                doc=doc if use_history else None)
 
     print(f"\n[done] best gen={best['generation']} held-out total={best['total']}")
     print(f"[done] best summary ({len(best['summary'] or '')} chars):\n{best['summary']}\n")
+    if parse_failed_gens:
+        print(f"[warn] judge 파싱 실패 세대: {parse_failed_gens} — 이 run의 점수는 집계에서 제외해야 한다")
 
     report = {
         "doc": doc,
@@ -273,6 +282,8 @@ def evolve(raw_path, generations=4, n_qa=8, out_dir="runs", no_evolve=False,
         "generations": generations,
         "train_questions": train_qs,
         "holdout_questions": test_qs,
+        "parse_failed": bool(parse_failed_gens),
+        "parse_failed_generations": parse_failed_gens,
         "best": {k: v for k, v in best.items() if k != "train_result"},
         "history": history,
     }

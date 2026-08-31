@@ -15,6 +15,7 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
 - 크래시 대비: run 하나 끝날 때마다 batch_state.json에 전체 기록 저장
   (자동 resume은 없음 — 재실행하면 새 배치 디렉터리가 생긴다)
 - 결과: CSV(runs/batch-<stamp>/results.csv) + 요약 리포트(summary.md)
+- judge 파싱 실패(report.parse_failed) run은 CSV에는 남기되 arm 통계/net에서 제외
 
 사용법:
   python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
@@ -114,29 +115,46 @@ def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, d
             if not report:
                 continue
 
-            hist = report["history"]
-            gen0 = hist[0]["score"]["total"]
-            best = report["best"]["total"]
-            rec = {
-                "doc": doc,
-                "size": size,
-                "run": r,
-                "arm": arm,
-                "gen0_total": gen0,
-                "best_total": best,
-                "best_gen": report["best"]["generation"],
-                "improvement": round(best - gen0, 3),
-                "improved": best > gen0,
-                "gen0_acc": hist[0]["score"]["accuracy"],
-                "best_acc": hist[report["best"]["generation"]]["score"]["accuracy"],
-                "elapsed_sec": round(dt, 1),
-            }
+            rec = _record(report, doc, size, r, arm, dt)
             records.append(rec)
             # 크래시 대비 중간저장
             with open(state_path, "w") as sf:
                 json.dump(records, sf, ensure_ascii=False, indent=2)
-            print(f"[batch] gen0={gen0} best={best} improvement={rec['improvement']} ({dt:.0f}s)")
+            flag = "  [judge 파싱 실패 — 집계 제외]" if rec["parse_failed"] else ""
+            print(f"[batch] gen0={rec['gen0_total']} best={rec['best_total']} "
+                  f"improvement={rec['improvement']} ({dt:.0f}s){flag}")
     return done
+
+
+def _record(report, doc, size, r, arm, dt):
+    """evolve report 하나 → 집계용 레코드.
+
+    parse_failed: 어느 세대든 judge 파싱이 실패한 run. gen0/best 어느 쪽이
+    0으로 자리만 채워졌는지 알 수 없으므로 run 통째로 net 산식에서 뺀다.
+    """
+    hist = report["history"]
+    gen0 = hist[0]["score"]["total"]
+    best_gen = report["best"]["generation"]
+    parse_failed = bool(report.get("parse_failed"))
+    if best_gen < 0:  # 전 세대 판정 실패 — 유효한 best 없음
+        parse_failed = True
+        best_gen = 0
+    best = hist[best_gen]["score"]["total"]
+    return {
+        "doc": doc,
+        "size": size,
+        "run": r,
+        "arm": arm,
+        "gen0_total": gen0,
+        "best_total": best,
+        "best_gen": best_gen,
+        "improvement": round(best - gen0, 3),
+        "improved": best > gen0,
+        "gen0_acc": hist[0]["score"]["accuracy"],
+        "best_acc": hist[best_gen]["score"]["accuracy"],
+        "parse_failed": parse_failed,
+        "elapsed_sec": round(dt, 1),
+    }
 
 
 def _arm_stats(rs):
@@ -158,29 +176,43 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             w.writeheader()
             w.writerows(records)
 
+    # judge 파싱 실패 run은 점수가 자리만 채운 0이라 향상폭/net 산식을 오염시킨다.
+    # 통계에서는 빼고, 얼마나(어느 arm에서) 빠졌는지는 반드시 보여준다.
+    failed = [r for r in records if r.get("parse_failed")]
+    valid = [r for r in records if not r.get("parse_failed")]
+
     lines = []
     lines.append("# 배치 결과 요약 (held-out 점수 기준)\n")
     lines.append(f"- 실행: 문서 {len({r['doc'] for r in records})}개 x run {runs} x gen {generations}")
     lines.append(f"- 총 run: {len(records)}개")
+    if failed:
+        lines.append(f"- judge 파싱 실패 run: {len(failed)}개 (아래 통계에서 제외)")
     lines.append(f"- 총 소요: {batch_elapsed/60:.1f}분\n")
 
     if not records:
         lines.append("(성공한 run 없음)")
         _write(batch_dir, lines)
         return
+    if not valid:
+        lines.append("(유효한 run 없음 — 전부 judge 파싱 실패. 판정 프롬프트/모델을 점검할 것)")
+        _write(batch_dir, lines)
+        return
 
     by_arm = {}
-    for r in records:
+    for r in valid:
         by_arm.setdefault(r["arm"], []).append(r)
+    failed_by_arm = {}
+    for r in failed:
+        failed_by_arm[r["arm"]] = failed_by_arm.get(r["arm"], 0) + 1
 
     lines.append("## Arm별 지표 (best - gen0, held-out)")
-    lines.append("| arm | runs | 평균 향상폭 | 표준편차 | 개선run 비율 |")
-    lines.append("|---|---|---|---|---|")
-    for arm, rs in sorted(by_arm.items()):
-        s = _arm_stats(rs)
+    lines.append("| arm | runs | 평균 향상폭 | 표준편차 | 개선run 비율 | 파싱실패(제외) |")
+    lines.append("|---|---|---|---|---|---|")
+    for arm in sorted(set(by_arm) | set(failed_by_arm)):
+        s = _arm_stats(by_arm.get(arm, []))
         lines.append(
             f"| {arm} | {s['n']} | {s['mean_imp']:+.3f} | {s['stdev_imp']:.3f} "
-            f"| {s['improved_ratio']*100:.0f}% |"
+            f"| {s['improved_ratio']*100:.0f}% | {failed_by_arm.get(arm, 0)} |"
         )
     lines.append("")
 
@@ -189,7 +221,7 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
     lines.append("| 문서 | size | arm | gen0(평균) | best(평균) | 향상폭 |")
     lines.append("|---|---|---|---|---|---|")
     docs = {}
-    for r in records:
+    for r in valid:
         docs.setdefault((r["doc"], r["arm"]), []).append(r)
     for (doc, arm), rs in sorted(docs.items(), key=lambda kv: (kv[1][0]["size"], kv[0][1])):
         g0 = statistics.mean(r["gen0_total"] for r in rs)

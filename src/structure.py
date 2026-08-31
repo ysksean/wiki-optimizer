@@ -18,6 +18,7 @@ import json
 import re
 
 import llm
+import scoring
 
 
 # ---------- Organizer ----------
@@ -107,36 +108,19 @@ def _answer(context, question):
     return llm.generate(prompt, num_predict=80, temperature=0.0)
 
 
-def _judge_all(question_set, preds):
-    lines = [
-        f"{i+1}. 질문:{qa['q']} | 정답:{qa['a']} | 예측:{p}"
-        for i, (qa, p) in enumerate(zip(question_set, preds))
-    ]
-    prompt = (
-        "각 항목에서 '예측'이 '정답'과 사실상 같으면 1, 아니면 0. "
-        "순서대로 0/1 JSON 배열로만.\n예: [1,0,1,1]\n\n" + "\n".join(lines) + "\n\n판정:"
-    )
-    out = llm.generate(prompt, num_predict=40, temperature=0.0)
-    m = re.search(r"\[.*\]", out, re.DOTALL)
-    nums = re.findall(r"[01]", m.group(0)) if m else []
-    scores = [float(x) for x in nums[: len(question_set)]]
-    while len(scores) < len(question_set):
-        scores.append(0.0)
-    return scores
-
-
 def score_structure(struct, question_set, total_raw_chars):
     """구조 전체를 Query 성능으로 채점한다.
 
     각 질문마다: Router가 파일 선택 -> 그 파일만 읽어 답 -> 읽은 글자수 기록.
     정확도 = 평균 정답률. 효율 = 1 - (평균 읽은 글자 / 전체 원본 글자).
     종합 = 정확도 x 효율.
+    판정은 scoring.judge_all 공용 — parse_failed=True면 점수는 신뢰 불가.
     """
     files = struct.get("files", [])
     index = struct.get("index", [])
     if not files:
         return {"total": 0.0, "accuracy": 0.0, "efficiency": 0.0,
-                "avg_read": 0, "n_files": 0, "details": []}
+                "avg_read": 0, "n_files": 0, "parse_failed": False, "details": []}
 
     by_title = {f["title"]: f["content"] for f in files}
     preds, reads, details = [], [], []
@@ -151,7 +135,7 @@ def score_structure(struct, question_set, total_raw_chars):
         reads.append(read_chars)
         details.append({"q": qa["q"], "picked": chosen_titles, "read_chars": read_chars, "pred": pred})
 
-    scores = _judge_all(question_set, preds)
+    scores, parse_failed = scoring.judge_all(question_set, preds)
     for d, s in zip(details, scores):
         d["score"] = s
 
@@ -166,6 +150,7 @@ def score_structure(struct, question_set, total_raw_chars):
         "efficiency": round(eff, 3),
         "avg_read": int(avg_read),
         "n_files": len(files),
+        "parse_failed": parse_failed,
         "details": details,
     }
 
