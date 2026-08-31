@@ -17,9 +17,16 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
 - 결과: CSV(runs/batch-<stamp>/results.csv) + 요약 리포트(summary.md)
 - judge 파싱 실패(report.parse_failed) run은 CSV에는 남기되 arm 통계/net에서 제외
 
+--stage structure면 A단계(evolve.evolve, 문서별 요약) 대신 B단계
+(evolve_structure, 문서 묶음 전체의 폴더 구조)를 같은 arm 체계로 돌린다.
+문서 묶음이 하나의 실험 단위라 "문서별 루프" 대신 "묶음 x run x arm"이고,
+질문 세트(cross-doc)는 묶음당 1회 생성해 모든 arm/run이 공유한다.
+(B단계는 train/held-out 분할이 없어 향상폭은 전체 질문 세트 점수 기준이다.)
+
 사용법:
   python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
   python3 src/batch.py --files a.md b.md --runs 3 --generations 4
+  python3 src/batch.py --stage structure --docs 3 --runs 2 --with-control
 """
 
 import argparse
@@ -34,6 +41,8 @@ import time
 from datetime import datetime
 
 import evolve
+import evolve_structure
+import structure
 
 
 def select_docs(n, raw_dir="data/raw"):
@@ -51,12 +60,15 @@ def select_docs(n, raw_dir="data/raw"):
 
 
 def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
-              out_dir="runs", parallel=1):
+              out_dir="runs", parallel=1, stage="summary"):
     """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
 
     문서끼리는 질문 세트·run 디렉터리가 독립이라 병렬해도 결과가 같다.
     공유되는 것은 records/중간저장/진행 카운터(아래 락)와 영속 이력 파일
     (evolve._IMPACT_LOCK)뿐이다.
+
+    stage="structure"면 B단계(폴더 구조 진화)를 같은 arm 집계로 돌린다 —
+    문서 묶음 전체가 하나의 실험 단위라 문서별 루프·parallel이 적용되지 않는다.
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     batch_dir = os.path.join(out_dir, f"batch-{stamp}")
@@ -64,19 +76,25 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
     state_path = os.path.join(batch_dir, "batch_state.json")
 
     if ablation:
-        # 영속 이력 ablation: 둘 다 진화하되 이력 참조만 켜고/끈다
+        # 영속 이력 ablation: 둘 다 진화하되 이력 참조만 켜고/끈다 (A단계 전용)
+        if stage == "structure":
+            raise ValueError("--ablation은 --stage structure와 함께 쓸 수 없다")
         arms = ["evolve", "evolve-nohist"]
     else:
         arms = ["evolve", "control"] if with_control else ["evolve"]
     records = []
-    progress = {"done": 0, "total": len(files) * runs * len(arms),
-                "lock": threading.Lock()}
+    # structure는 문서 묶음 전체가 하나의 실험 단위 — 문서별 루프가 없다
+    total = (runs * len(arms)) if stage == "structure" else (len(files) * runs * len(arms))
+    progress = {"done": 0, "total": total, "lock": threading.Lock()}
     t_batch = time.time()
 
-    print(f"[batch] 문서 {len(files)}개 x run {runs} x arm {arms} x gen {generations} "
-          f"= {progress['total']} runs (parallel={parallel})")
+    print(f"[batch] stage={stage} 문서 {len(files)}개 x run {runs} x arm {arms} "
+          f"x gen {generations} = {total} runs (parallel={parallel})")
     try:
-        if parallel > 1:
+        if stage == "structure":
+            _run_structure(files, runs, arms, generations, n_qa, batch_dir,
+                           state_path, records, total)
+        elif parallel > 1:
             with ThreadPoolExecutor(max_workers=parallel) as ex:
                 futures = [
                     ex.submit(_run_doc, f, runs, arms, generations, n_qa,
@@ -104,6 +122,55 @@ def _prepare_question_set(f, n_qa):
     except Exception as e:  # LLMError, 타임아웃, 인코딩 오류 등 — 문서 1개 때문에 배치를 죽이지 않는다
         print(f"[batch] 질문 세트 생성 중 예외: {e}")
         return None
+
+
+def _prepare_cross_question_set(files, n_qa):
+    """구조 실험용 cross-doc 질문 세트. 실패(예외/빈 결과)는 None."""
+    try:
+        docs = evolve_structure.load_docs(0, files=files)
+        return structure.build_cross_question_set(docs, n=n_qa) or None
+    except Exception as e:  # LLMError, 타임아웃, 인코딩 오류 등
+        print(f"[batch] 질문 세트 생성 중 예외: {e}")
+        return None
+
+
+def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
+                   records, total):
+    """문서 묶음 하나에 대해 run x arm으로 구조 진화를 돌린다."""
+    doc = "+".join(os.path.splitext(os.path.basename(f))[0] for f in files)
+    size = sum(os.path.getsize(f) for f in files)
+    # 질문 세트는 묶음당 1회 생성해 모든 arm/run이 공유 (공정 비교)
+    question_set = _prepare_cross_question_set(files, n_qa)
+    if not question_set:
+        print(f"[batch] {doc}: 질문 세트 실패, 중단")
+        return
+
+    done = 0
+    for r in range(runs):
+        for arm in arms:
+            done += 1
+            print(f"\n[batch {done}/{total}] {doc} (size={size}) run={r} arm={arm}")
+            t = time.time()
+            try:
+                report = evolve_structure.evolve_structure(
+                    files=files, generations=generations, n_qa=n_qa,
+                    out_dir=batch_dir, no_evolve=(arm == "control"),
+                    question_set=question_set,
+                )
+            except Exception as e:  # 한 run 실패해도 배치는 계속
+                print(f"[batch] run 실패: {e}")
+                continue
+            dt = time.time() - t
+            if not report:
+                continue
+
+            rec = _record(report, doc, size, r, arm, dt)
+            records.append(rec)
+            with open(state_path, "w") as sf:
+                json.dump(records, sf, ensure_ascii=False, indent=2)
+            flag = "  [judge 파싱 실패 — 집계 제외]" if rec["parse_failed"] else ""
+            print(f"[batch] gen0={rec['gen0_total']} best={rec['best_total']} "
+                  f"improvement={rec['improvement']} ({dt:.0f}s){flag}")
 
 
 def _run_doc(f, runs, arms, generations, n_qa, batch_dir, state_path, records, progress):
@@ -309,10 +376,14 @@ if __name__ == "__main__":
     ap.add_argument("--n-qa", type=int, default=8)
     ap.add_argument("--with-control", action="store_true", help="무진화 대조군 arm 추가")
     ap.add_argument("--ablation", action="store_true",
-                    help="영속 이력 ablation: evolve vs evolve-nohist 두 arm")
+                    help="영속 이력 ablation: evolve vs evolve-nohist 두 arm (A단계 전용)")
     ap.add_argument("--parallel", type=int, default=1,
-                    help="동시에 돌릴 문서 수 (기본 1=순차). CLI 세션 rate limit에 주의")
+                    help="동시에 돌릴 문서 수 (기본 1=순차, A단계 전용). CLI 세션 rate limit에 주의")
+    ap.add_argument("--stage", choices=["summary", "structure"], default="summary",
+                    help="summary=A단계(문서별 요약), structure=B단계(폴더 구조)")
     args = ap.parse_args()
+    if args.ablation and args.stage == "structure":
+        ap.error("--ablation은 --stage structure와 함께 쓸 수 없다")
 
     files = args.files if args.files else select_docs(args.docs)
     print("[batch] 대상 문서:")
@@ -320,4 +391,4 @@ if __name__ == "__main__":
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)}B)")
     run_batch(files, args.runs, args.generations, args.n_qa,
               with_control=args.with_control, ablation=args.ablation,
-              parallel=args.parallel)
+              parallel=args.parallel, stage=args.stage)
