@@ -863,7 +863,9 @@ async function renderJob(j) {
     }
     inner = `<div class="job-body">${body}</div>`;
   }
-  const stoppable = j.status === "running" || j.status === "queued";
+  // summary만 실행 중 취소 지점이 있다 — 다른 모드는 대기 중(queued)에만 중지 가능
+  const stoppable = j.status === "queued" ||
+    (j.status === "running" && j.mode === "summary");
   const stopUi = !stoppable ? ""
     : j.cancel_requested
       ? `<span class="meta">${t("stopping")}</span>`

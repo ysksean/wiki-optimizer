@@ -38,11 +38,21 @@ CANCEL_EVENTS = {}  # job_id -> threading.Event (직렬화 불가라 JOBS 밖에
 
 
 def _save_job(job):
-    """job 메타를 runs/web/<id>/job.json으로 남긴다 (재시작 후 이력 복원용)."""
+    """job 메타를 runs/web/<id>/job.json으로 남긴다 (재시작 후 이력 복원용).
+
+    워커·HTTP 스레드가 같은 job dict를 만지므로 락 안에서 스냅샷을 뜬 뒤
+    직렬화하고, tmp → os.replace로 원자적으로 써서 반쯤 쓰인 파일이
+    load_jobs()의 복원을 깨뜨리지 않게 한다.
+    """
+    with JOBS_LOCK:
+        snapshot = dict(job)
+    path = os.path.join(snapshot["dir"], "job.json")
+    tmp = path + ".tmp"
     try:
-        with open(os.path.join(job["dir"], "job.json"), "w") as f:
-            json.dump(job, f, ensure_ascii=False)
-    except OSError:
+        with open(tmp, "w") as f:
+            json.dump(snapshot, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
         pass
 
 
@@ -77,6 +87,10 @@ def cancel_job(job_id):
         return {"error": "없는 job"}, 404
     if job["status"] not in ("queued", "running"):
         return {"error": f"이미 끝난 job입니다: {job['status']}"}, 409
+    if job["status"] == "running" and job["mode"] != "summary":
+        # summary만 실행 중 취소 지점이 있다 — 나머지 모드는 완주 후 done이 뜨는
+        # 거짓 취소가 되므로 정직하게 거부한다 (queued일 땐 모든 모드 취소 가능)
+        return {"error": "이 모드는 실행 중 취소를 지원하지 않습니다"}, 409
     ev = CANCEL_EVENTS.get(job_id)
     if ev is None:  # 재시작으로 복원된 job엔 워커가 없다 (방어)
         return {"error": "취소할 수 없는 job"}, 409
@@ -104,8 +118,22 @@ def list_docs(wiki_dir):
 def _run_job(job):
     """워커 스레드: 백엔드 설정 후 모드별 작업 실행."""
     cancel = CANCEL_EVENTS.get(job["id"]) or threading.Event()
+    try:
+        # queued 취소는 RUN_LOCK을 기다리지 않고 즉시 처리한다
+        # (앞 job이 길게 돌면 락 안에서만 체크해서는 그때까지 취소가 안 먹는다)
+        if cancel.is_set():
+            job["status"] = "cancelled"
+            job["finished_at"] = time.time()
+            _save_job(job)
+            return
+        _run_job_locked(job, cancel)
+    finally:
+        CANCEL_EVENTS.pop(job["id"], None)  # 종료된 job의 Event 누수 방지
+
+
+def _run_job_locked(job, cancel):
     with RUN_LOCK:
-        if cancel.is_set():  # queued 상태에서 취소됨
+        if cancel.is_set():  # 락 대기 중(queued) 취소됨
             job["status"] = "cancelled"
             job["finished_at"] = time.time()
             _save_job(job)
