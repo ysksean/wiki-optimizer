@@ -140,6 +140,12 @@
     display: grid; gap: 8px; margin-top: 16px;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   }
+  .docs-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 44px; margin-top: 12px; color: var(--dim); font-size: 13px;
+  }
+  .docs-toolbar[hidden] { display: none; }
+  .docs-toolbar button { min-height: 36px; padding: 5px 12px; font-size: 13px; }
   .docs label {
     display: flex; align-items: center; gap: 10px; margin: 0;
     min-height: 42px; padding: 9px 12px; cursor: pointer;
@@ -160,10 +166,14 @@
   #jobs .card { padding: 0; border-radius: var(--radius-md); box-shadow: none; overflow: hidden; }
   .job-head {
     display: flex; align-items: center; gap: 10px;
+    width: 100%; border: 0; border-radius: 0; background: transparent; color: inherit;
+    text-align: left;
     min-height: 56px; padding: 14px 18px; cursor: pointer;
     transition: background .12s;
   }
   .job-head:hover { background: var(--hover); }
+  .job-head:active { transform: none; }
+  .job-head:focus-visible { position: relative; z-index: 1; box-shadow: inset 0 0 0 2px var(--acc); }
   .job-head .mode { font-weight: 650; font-size: 14px; }
   .job-head .docs-list {
     color: var(--tx-secondary); font-size: 13px;
@@ -301,11 +311,15 @@
     </div>
     <label for="dir" data-i18n="folder_label"></label>
     <div class="folder-row">
-      <input type="text" id="dir" data-i18n-placeholder="folder_ph">
+      <input type="text" id="dir" data-i18n-placeholder="folder_ph" oninput="syncDirActions()">
       <button class="ghost" onclick="pickDir()" data-i18n="pick_dir"></button>
       <button class="ghost" onclick="loadDocs()" data-i18n="load_docs"></button>
     </div>
     <div id="docs" class="docs"></div>
+    <div id="docsToolbar" class="docs-toolbar" hidden>
+      <span id="docsStatus" role="status" aria-live="polite"></span>
+      <button type="button" class="ghost" id="toggleDocs" onclick="toggleAllDocs()"></button>
+    </div>
     <div class="workflow-divider"></div>
     <div class="workflow-head">
       <span class="step-number" aria-hidden="true">2</span>
@@ -329,7 +343,7 @@
           <option value="claude" data-i18n="backend_claude"></option>
           <option value="codex" data-i18n="backend_codex"></option>
         </select></div>
-      <button id="go" onclick="startRun()" data-i18n="run_exp"></button>
+      <button id="go" onclick="startRun()" data-i18n="run_exp" disabled></button>
       <span id="msg" class="err msg" role="status" aria-live="polite"></span>
     </div>
   </section>
@@ -343,8 +357,8 @@
       </div>
     </div>
     <div class="action-row" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
-      <button class="ghost" onclick="startAudit()" data-i18n="btn_audit"></button>
-      <button onclick="startApply()" data-i18n="btn_apply"></button>
+      <button id="auditBtn" class="ghost" onclick="startAudit()" data-i18n="btn_audit" disabled></button>
+      <button id="applyBtn" onclick="startApply()" data-i18n="btn_apply" disabled></button>
       <span id="msg2" class="err" role="status" aria-live="polite"></span>
     </div>
     <details><summary data-i18n="strategy_custom"></summary>
@@ -384,6 +398,7 @@ const I18N = {
     btn_audit: "현재 위키 진단 (Before)", btn_apply: "최적화 생성 (After)",
     strategy_custom: "전략 직접 지정 (비우면 실험 결과의 best 전략 사용)",
     strategy_label: "직접 지정할 최적화 전략",
+    docs_selected: (n,t) => `${t}개 문서 중 ${n}개 선택`, select_all: "모두 선택", clear_all: "선택 해제",
     runs_title: "실험 기록", runs_count: n => `${n}건`,
     need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
     no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요",
@@ -424,6 +439,7 @@ const I18N = {
     btn_audit: "Audit current wiki (Before)", btn_apply: "Generate optimized (After)",
     strategy_custom: "Custom strategy (leave empty to use the best strategy from experiments)",
     strategy_label: "Custom optimization strategy",
+    docs_selected: (n,t) => `${n} of ${t} documents selected`, select_all: "Select all", clear_all: "Clear selection",
     runs_title: "Runs", runs_count: n => `${n} total`,
     need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
     no_md: "No md files found", need_docs: "Select at least one document",
@@ -464,6 +480,7 @@ const I18N = {
     btn_audit: "诊断当前 wiki（Before）", btn_apply: "生成优化版（After）",
     strategy_custom: "自定义策略（留空则使用实验得出的最佳策略）",
     strategy_label: "自定义优化策略",
+    docs_selected: (n,t) => `已选择 ${n}/${t} 篇文档`, select_all: "全选", clear_all: "清除选择",
     runs_title: "运行记录", runs_count: n => `共 ${n} 条`,
     need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
     no_md: "未找到 md 文件", need_docs: "请至少选择一个文档",
@@ -503,6 +520,7 @@ function applyLang() {
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
   document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  syncDocSelection();
 }
 
 function setLang(lang) {
@@ -514,6 +532,28 @@ function setLang(lang) {
 }
 
 // ---------- 데이터 로드/실행 ----------
+function syncDirActions() {
+  const ready = Boolean($("dir").value.trim());
+  $("auditBtn").disabled = !ready;
+  $("applyBtn").disabled = !ready;
+}
+
+function syncDocSelection() {
+  const boxes = [...document.querySelectorAll("#docs input[type=checkbox]")];
+  const selected = boxes.filter(x => x.checked).length;
+  $("docsToolbar").hidden = boxes.length === 0;
+  $("docsStatus").textContent = boxes.length ? t("docs_selected", selected, boxes.length) : "";
+  $("toggleDocs").textContent = selected === boxes.length ? t("clear_all") : t("select_all");
+  $("go").disabled = selected === 0;
+}
+
+function toggleAllDocs() {
+  const boxes = [...document.querySelectorAll("#docs input[type=checkbox]")];
+  const shouldSelect = boxes.some(x => !x.checked);
+  boxes.forEach(x => { x.checked = shouldSelect; });
+  syncDocSelection();
+}
+
 async function loadDocs() {
   $("msg").textContent = "";
   const dir = $("dir").value.trim();
@@ -523,8 +563,9 @@ async function loadDocs() {
   if (j.error) { $("msg").textContent = j.error; return; }
   if (!j.docs.length) { $("msg").textContent = t("no_md"); return; }
   $("docs").innerHTML = j.docs.map(d => `
-    <label><input type="checkbox" value="${d.path}">${d.name}
+    <label><input type="checkbox" value="${d.path}" onchange="syncDocSelection()">${d.name}
       <span class="sz">${(d.size/1000).toFixed(1)}k</span></label>`).join("");
+  syncDocSelection();
 }
 
 async function pickDir() {
@@ -534,6 +575,7 @@ async function pickDir() {
   if (j.error) { $("msg").textContent = j.error; return; }
   if (j.cancelled) return;
   $("dir").value = j.dir;
+  syncDirActions();
   loadDocs();
 }
 
@@ -572,7 +614,7 @@ async function startRun() {
       generations: +$("gens").value, n_qa: +$("nqa").value,
       backend: $("backend").value, language: LANG }) });
   const j = await r.json();
-  $("go").disabled = false;
+  syncDocSelection();
   if (j.error) { $("msg").textContent = j.error; return; }
   open_.add(j.id);
   poll();
@@ -742,7 +784,7 @@ async function renderJob(j) {
   const isOpen = open_.has(j.id);
   const badge = `<span class="badge b-${j.status}">${j.status}</span>`;
   const when = new Date(j.created_at*1000).toLocaleTimeString();
-  let inner = "";
+  let inner = `<div class="job-body" id="job-${j.id}-body" hidden></div>`;
   if (isOpen) {
     const r = await fetch(`/api/runs/${j.id}`);
     const d = await r.json();
@@ -760,15 +802,16 @@ async function renderJob(j) {
           || `<div class="runbox" style="color:var(--dim)">${t("waiting_gen")}</div>`;
       }
     }
-    inner = `<div class="job-body">${body}</div>`;
+    inner = `<div class="job-body" id="job-${j.id}-body">${body}</div>`;
   }
   return `<div class="card">
-    <div class="job-head" onclick="toggle('${j.id}')">
+    <button type="button" class="job-head" onclick="toggle('${j.id}')"
+      aria-expanded="${isOpen}" aria-controls="job-${j.id}-body">
       ${badge} <span class="mode">${t("mode_" + j.mode)}</span>
       <span class="docs-list">${j.doc_names.map(esc).join(", ")}</span>
       <span class="meta">${j.backend} · gen ${j.generations} · ${when}</span>
       <span class="chev${isOpen ? " open" : ""}">▾</span>
-    </div>${inner}</div>`;
+    </button>${inner}</div>`;
 }
 
 function toggle(id) { open_.has(id) ? open_.delete(id) : open_.add(id); poll(); }
@@ -791,6 +834,7 @@ async function poll() {
 }
 
 applyLang();
+syncDirActions();
 poll();
 </script>
 </body>
