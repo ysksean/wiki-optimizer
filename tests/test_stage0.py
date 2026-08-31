@@ -324,3 +324,57 @@ def test_apply_best_ignores_proposal_strategies(tmp_path):
               open(runs / "b" / "report.json", "w"))
     got = apply_mod.best_strategy_from_runs(str(runs))
     assert got["strategy"] == "요약 전략"
+
+
+# ---------- web 배선 (propose) ----------
+
+def test_web_propose_validation(tmp_path, monkeypatch):
+    import web
+    monkeypatch.setattr(web.threading, "Thread",
+                        lambda *a, **k: type("T", (), {"start": lambda self: None})())
+    monkeypatch.setattr(web, "JOBS_DIR", str(tmp_path / "jobs"))
+    # 소스 없음
+    job, err = web.start_job({"mode": "propose", "sources": [], "task": "t"})
+    assert job is None and "소스" in err
+    # 없는 폴더
+    job, err = web.start_job({"mode": "propose",
+                              "sources": [str(tmp_path / "nope")], "task": "t"})
+    assert job is None and "폴더가 없습니다" in err
+    # 태스크 없음
+    src = tmp_path / "src1"
+    src.mkdir()
+    job, err = web.start_job({"mode": "propose", "sources": [str(src)],
+                              "task": "  "})
+    assert job is None and "태스크" in err
+    # 정상
+    job, err = web.start_job({"mode": "propose", "sources": [str(src)],
+                              "task": "위키 만들기", "seed_from_runs": True})
+    assert err is None and job["mode"] == "propose"
+    assert job["sources"] == [str(src)] and job["seed_from_runs"] is True
+    assert job["doc_names"] == ["src1"]
+
+
+def test_web_export_skeleton_uses_latest_best(tmp_path, monkeypatch):
+    import web
+    job_dir = tmp_path / "jobs" / "j1"
+    run = job_dir / "proposal-evolve-x"
+    run.mkdir(parents=True)
+    json.dump({"mode": "proposal", "best": {"pages": _pages()}},
+              open(run / "report.json", "w"))
+    job = {"id": "j1", "mode": "propose", "dir": str(job_dir)}
+    with web.JOBS_LOCK:
+        web.JOBS["j1"] = job
+    try:
+        out = tmp_path / "out"
+        res, err = web.export_skeleton("j1", str(out))
+        assert err is None and len(res["written"]) == 2
+        assert (out / "cases" / "리스크.md").exists()
+        # 잘못된 job
+        res, err = web.export_skeleton("없음", str(out))
+        assert res is None and err
+        # 빈 경로
+        res, err = web.export_skeleton("j1", "  ")
+        assert res is None and "비어" in err
+    finally:
+        with web.JOBS_LOCK:
+            web.JOBS.pop("j1", None)

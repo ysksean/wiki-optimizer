@@ -303,6 +303,24 @@
     </details>
   </div>
 
+  <div class="card">
+    <p class="panel-title" data-i18n="prop_title"></p>
+    <p class="panel-desc" data-i18n="prop_desc"></p>
+    <label data-i18n="prop_sources"></label>
+    <textarea id="propSources" rows="2" data-i18n-placeholder="prop_sources_ph"
+      onchange="savePrefs()" style="width:100%"></textarea>
+    <label style="margin-top:8px" data-i18n="prop_task"></label>
+    <textarea id="propTask" rows="5" data-i18n-placeholder="prop_task_ph"
+      onchange="savePrefs()" style="width:100%"></textarea>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px">
+      <button onclick="startPropose()" data-i18n="btn_propose"></button>
+      <label style="display:flex;align-items:center;gap:4px;margin:0">
+        <input type="checkbox" id="propSeed"> <span data-i18n="prop_seed" data-i18n-title="prop_seed_tip"></span>
+      </label>
+      <span id="msg3" class="err"></span>
+    </div>
+  </div>
+
   <div class="section-head">
     <h2 data-i18n="runs_title"></h2>
     <span class="count" id="runsCount"></span>
@@ -359,6 +377,17 @@ const I18N = {
     structure_title: d => `구조 진화 — ${d}`,
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
+    prop_title: "Stage 0 — 구조 제안 (백지에서)", mode_propose: "0 제안",
+    prop_desc: "위키가 아직 없을 때: 레포/데이터 폴더 + 태스크 설명을 넣으면 폴더 구조를 제안하고, 근거 없는 축(gap)을 알려줍니다",
+    prop_sources: "소스 폴더 (한 줄에 하나)", prop_sources_ph: "~/aipmop/PLANNING\n~/skax-docs",
+    prop_task: "태스크 설명", prop_task_ph: "이 위키의 소비자·소비 시점, 실제로 던질 질문 예시 2~3개, 데이터의 성질, 산출물 용도",
+    btn_propose: "구조 제안 실행", prop_seed: "이어서 개선", prop_seed_tip: "이전 제안 run의 best 분할 전략을 seed로 재사용합니다 (warm start)",
+    need_sources_task: "소스 폴더와 태스크 설명을 입력하세요",
+    prop_run_title: "구조 제안", prop_unscored: "채점 불가 — 소스에 정답 근거가 있는 질문이 0개 (순수 백지)",
+    prop_grounded: "근거 확보 질문", prop_gapq: "근거 없는 질문 (gap)", prop_gapq_desc: "필요한데 소스에 근거가 없는 축 — 추가로 확보할 데이터 목록입니다",
+    prop_tree: "제안 구조", prop_pages_per_gen: "세대별 페이지",
+    prop_export: "골격 내보내기", prop_export_ph: "골격을 쓸 폴더 경로", prop_export_done: (w,s) => `생성 ${w}개, 기존 파일 유지 ${s}개`,
+    th_page: "페이지", th_purpose: "purpose", th_sources: "sources",
     chart_aria: (n, best) => `세대별 held-out 점수 추이, 총 ${n}세대` + (best == null ? "" : `, best 세대 ${best}`),
   },
   en: {
@@ -404,6 +433,17 @@ const I18N = {
     structure_title: d => `Structure evolution — ${d}`,
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
+    prop_title: "Stage 0 — propose structure (blank slate)", mode_propose: "0 propose",
+    prop_desc: "No wiki yet: point at repo/data folders + a task description to get a proposed folder structure, with unbacked axes flagged as gaps",
+    prop_sources: "Source folders (one per line)", prop_sources_ph: "~/myrepo/docs\n~/notes",
+    prop_task: "Task description", prop_task_ph: "Who consumes this wiki and when, 2-3 example questions, nature of the data, intended use",
+    btn_propose: "Propose structure", prop_seed: "continue improving", prop_seed_tip: "Warm-start from the best split strategy of previous proposal runs",
+    need_sources_task: "Enter source folders and a task description",
+    prop_run_title: "Structure proposal", prop_unscored: "Unscorable — zero questions have grounded answers in the sources (pure blank slate)",
+    prop_grounded: "grounded questions", prop_gapq: "unbacked questions (gap)", prop_gapq_desc: "Needed but no evidence in sources — this is your data acquisition list",
+    prop_tree: "proposed structure", prop_pages_per_gen: "pages per generation",
+    prop_export: "Export skeleton", prop_export_ph: "folder to write skeleton into", prop_export_done: (w,s) => `wrote ${w}, kept ${s} existing`,
+    th_page: "page", th_purpose: "purpose", th_sources: "sources",
     chart_aria: (n, best) => `Held-out score by generation, ${n} generations` + (best == null ? "" : `, best generation ${best}`),
   },
   zh: {
@@ -449,6 +489,17 @@ const I18N = {
     structure_title: d => `结构进化 — ${d}`,
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
+    prop_title: "Stage 0 — 结构提案（从零开始）", mode_propose: "0 提案",
+    prop_desc: "还没有 wiki 时：指定仓库/数据文件夹 + 任务描述，即可获得文件夹结构提案，并标出缺乏依据的轴（gap）",
+    prop_sources: "源文件夹（每行一个）", prop_sources_ph: "~/myrepo/docs\n~/notes",
+    prop_task: "任务描述", prop_task_ph: "该 wiki 的使用者与使用时机、2~3 个示例问题、数据的性质、产出用途",
+    btn_propose: "运行结构提案", prop_seed: "继续改进", prop_seed_tip: "以之前提案 run 的最佳拆分策略作为 seed（warm start）",
+    need_sources_task: "请输入源文件夹和任务描述",
+    prop_run_title: "结构提案", prop_unscored: "无法评分 — 源中没有任何问题有依据答案（纯从零开始）",
+    prop_grounded: "有依据的问题", prop_gapq: "缺乏依据的问题（gap）", prop_gapq_desc: "需要但源中没有依据的轴 — 即需额外获取的数据清单",
+    prop_tree: "提案结构", prop_pages_per_gen: "每代页面",
+    prop_export: "导出骨架", prop_export_ph: "写入骨架的文件夹路径", prop_export_done: (w,s) => `生成 ${w} 个，保留已有 ${s} 个`,
+    th_page: "页面", th_purpose: "purpose", th_sources: "sources",
     chart_aria: (n, best) => `各代 held-out 分数走势，共 ${n} 代` + (best == null ? "" : `，最佳第 ${best} 代`),
   },
 };
@@ -484,6 +535,7 @@ function savePrefs() {
     localStorage.setItem("wikiopt_prefs", JSON.stringify({
       dir: $("dir").value.trim(), backend: $("backend").value,
       gens: $("gens").value, nqa: $("nqa").value,
+      propSources: $("propSources").value, propTask: $("propTask").value,
     }));
   } catch (e) {}
 }
@@ -495,6 +547,8 @@ function loadPrefs() {
   if (p.backend) $("backend").value = p.backend;
   if (p.gens) $("gens").value = p.gens;
   if (p.nqa) $("nqa").value = p.nqa;
+  if (p.propSources) $("propSources").value = p.propSources;
+  if (p.propTask) $("propTask").value = p.propTask;
 }
 
 // ---------- 데이터 로드/실행 ----------
@@ -544,6 +598,29 @@ function startApply() {
   if (!dir) { $("msg2").textContent = t("need_dir_first"); return; }
   startJobRequest({ mode:"apply", dir, n_qa:6, backend:$("backend").value,
     language:LANG, strategy: $("strategy").value.trim() }, "msg2");
+}
+
+function startPropose() {
+  const sources = $("propSources").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const task = $("propTask").value.trim();
+  if (!sources.length || !task) { $("msg3").textContent = t("need_sources_task"); return; }
+  startJobRequest({ mode:"propose", sources, task,
+    generations: +$("gens").value, n_qa: +$("nqa").value,
+    seed_from_runs: $("propSeed").checked,
+    backend: $("backend").value, language: LANG }, "msg3");
+}
+
+async function exportSkeleton(jobId, inputId, msgId) {
+  const write_dir = $(inputId).value.trim();
+  const el = $(msgId);
+  el.textContent = "";
+  if (!write_dir) { el.textContent = t("prop_export_ph"); return; }
+  const r = await fetch("/api/skeleton", { method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ job_id: jobId, write_dir }) });
+  const j = await r.json();
+  el.textContent = j.error ? j.error : t("prop_export_done", j.written.length, j.skipped.length);
+  el.className = j.error ? "err" : "muted";
 }
 
 async function startRun() {
@@ -832,6 +909,68 @@ function structureRun(run) {
   return html + "</div>";
 }
 
+function proposalTree(pages) {
+  let html = "", lastDir = null;
+  for (const p of [...pages].sort((a,b) => a.path.localeCompare(b.path))) {
+    const i = p.path.lastIndexOf("/");
+    const dir = i < 0 ? "." : p.path.slice(0, i), name = i < 0 ? p.path : p.path.slice(i+1);
+    if (dir !== lastDir) { html += `<div style="margin-top:6px"><b>${esc(dir)}/</b></div>`; lastDir = dir; }
+    const gap = p.status === "gap" ? ` <span class="badge b-error" style="height:18px">gap</span>` : "";
+    html += `<div style="padding-left:16px">${esc(name)} — <span class="muted">${esc(p.title)}</span>${gap}</div>`;
+  }
+  return html;
+}
+
+function proposalRun(run, jobId) {
+  const p = run.progress, rep = run.report;
+  if (!p && !rep) return "";
+  const done = p ? t("gen_progress", p.done_generations, p.generations) : "";
+  let html = `<div class="runbox"><h3>${t("prop_run_title")} <span class="muted">${done}</span></h3>`;
+  const best = rep?.best;
+  if (rep && !rep.scoreable) {
+    html += `<div class="note" style="color:var(--warn)">${t("prop_unscored")}</div>`;
+  } else if (p) {
+    const nG = rep ? rep.question_set.filter(x => x.a).length : null;
+    html += `<div class="kpis">
+      <div class="kpi"><b>${p.best_total ?? "—"}</b><span>best (gen ${p.best_gen})</span></div>
+      ${nG != null ? `<div class="kpi"><b>${nG}/${rep.question_set.length}</b><span>${t("prop_grounded")}</span></div>` : ""}
+    </div>`;
+    const hist = p.history.filter(h => h.score && h.score.total != null);
+    if (hist.length) html += chart(hist, "", p.best_gen);
+  }
+  if (best?.pages) {
+    html += `<details open><summary>${t("prop_tree")} (${best.pages.length})</summary>
+      <div style="font-size:13px;margin-top:8px">${proposalTree(best.pages)}</div></details>`;
+    html += `<details><summary>${t("th_page")} · ${t("th_purpose")} · ${t("th_sources")}</summary>${wrapTable(
+      `<tr><th>${t("th_page")}</th><th>${t("th_purpose")}</th><th>${t("th_sources")}</th></tr>` +
+      best.pages.map(x => `<tr><td>${esc(x.path)}</td><td>${esc(x.purpose)}</td>
+        <td>${(x.sources||[]).map(esc).join("<br>") || "—"}</td></tr>`).join(""))}
+    </details>`;
+  }
+  if (rep?.gap_questions?.length) {
+    html += `<details open><summary>${t("prop_gapq")} (${rep.gap_questions.length})</summary>
+      <div class="note">${t("prop_gapq_desc")}</div>
+      <ul style="margin:8px 0">${rep.gap_questions.map(q => `<li>${esc(q)}</li>`).join("")}</ul></details>`;
+  }
+  if (p?.history?.length) {
+    html += `<details><summary>${t("prop_pages_per_gen")}</summary>${wrapTable(
+      `<tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>${t("th_files")}</th></tr>` +
+      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
+        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+        <td>${h.score?.total ?? "—"}</td><td>${h.score?.accuracy ?? "—"}</td>
+        <td>${h.score?.efficiency ?? "—"}</td>
+        <td>${(h.page_paths||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
+    </details>`;
+  }
+  if (rep && jobId) {
+    html += `<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <input type="text" id="exp-${jobId}" placeholder="${t("prop_export_ph")}" style="max-width:340px">
+      <button class="ghost" onclick="exportSkeleton('${jobId}','exp-${jobId}','expmsg-${jobId}')">${t("prop_export")}</button>
+      <span id="expmsg-${jobId}" class="muted"></span></div>`;
+  }
+  return html + "</div>";
+}
+
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
@@ -853,7 +992,8 @@ async function renderJob(j) {
           : `<div class="runbox" style="color:var(--dim)">${t("preparing_q")}</div>`;
       } else {
         body += d.runs.map(run =>
-          (run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
+          (j.mode === "propose" ? proposalRun(run, j.id)
+           : run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
           || `<div class="runbox" style="color:var(--dim)">${t("waiting_gen")}</div>`;
       }
     }
