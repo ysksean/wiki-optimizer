@@ -26,7 +26,9 @@ import llm
 import apply as apply_mod
 import audit
 import evolve
+import evolve_proposal
 import evolve_structure
+import skeleton as skeleton_mod
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 JOBS_DIR = "runs/web"
@@ -162,6 +164,16 @@ def _run_job_locked(job, cancel):
                     generations=job["generations"], n_qa=job["n_qa"],
                     out_dir=job["dir"], files=job["files"],
                 )
+            elif job["mode"] == "propose":
+                strategy = None
+                if job.get("seed_from_runs"):
+                    prev = evolve_proposal.best_proposal_strategy_from_runs("runs")
+                    if prev:
+                        strategy = prev["strategy"]
+                evolve_proposal.run_evolve(
+                    job["sources"], job["task"], generations=job["generations"],
+                    n_qa=job["n_qa"], strategy=strategy, out_dir=job["dir"],
+                )
             elif job["mode"] == "audit":
                 def cb(done, total, partial):
                     flush_result({"type": "audit", "done": done, "total": total,
@@ -207,7 +219,7 @@ def _clamp_int(params, key, default, lo, hi):
 
 def start_job(params):
     mode = params.get("mode", "summary")
-    if mode not in ("summary", "structure", "audit", "apply"):
+    if mode not in ("summary", "structure", "audit", "apply", "propose"):
         return None, f"알 수 없는 mode: {mode}"
     backend = params.get("backend", "claude")
     if backend not in ("claude", "codex"):
@@ -217,7 +229,20 @@ def start_job(params):
         return None, f"알 수 없는 language: {language}"
 
     files, base_dir, doc_names = [], None, []
-    if mode in ("summary", "structure"):
+    sources, task = [], ""
+    if mode == "propose":
+        sources = [os.path.expanduser(str(s).strip())
+                   for s in (params.get("sources") or []) if str(s).strip()]
+        missing = [s for s in sources if not os.path.isdir(s)]
+        if not sources:
+            return None, "소스 폴더가 없습니다 (한 줄에 하나씩 입력)"
+        if missing:
+            return None, f"폴더가 없습니다: {', '.join(missing)}"
+        task = (params.get("task") or "").strip()
+        if not task:
+            return None, "태스크 설명이 비어 있습니다"
+        doc_names = [os.path.basename(s.rstrip("/")) for s in sources]
+    elif mode in ("summary", "structure"):
         files = params.get("files") or []
         files = [f for f in files if os.path.isfile(f) and f.endswith(".md")]
         if not files:
@@ -250,6 +275,9 @@ def start_job(params):
         "files": files,
         "base_dir": base_dir,
         "strategy": (params.get("strategy") or "").strip(),
+        "sources": sources,
+        "task": task,
+        "seed_from_runs": bool(params.get("seed_from_runs")),
         "doc_names": doc_names,
         "generations": generations,
         "n_qa": n_qa,
@@ -297,6 +325,33 @@ def job_detail(job):
         except (OSError, json.JSONDecodeError):
             pass
     return out
+
+
+def export_skeleton(job_id, write_dir):
+    """propose job의 best 구조를 write_dir에 골격으로 쓴다 (기존 파일 skip)."""
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job or job["mode"] != "propose":
+        return None, "없는 propose job"
+    write_dir = os.path.expanduser((write_dir or "").strip())
+    if not write_dir:
+        return None, "내보낼 폴더 경로가 비어 있습니다"
+    pages = None
+    for p in sorted(glob.glob(os.path.join(job["dir"], "*", "report.json")),
+                    reverse=True):
+        try:
+            with open(p) as f:
+                r = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        pages = (r.get("best") or {}).get("pages")
+        if pages:
+            break
+    if not pages:
+        return None, "완료된 제안이 없습니다"
+    res = skeleton_mod.write_skeleton(pages, write_dir, write=True, run_id=job_id)
+    return {"written": res["written"], "skipped": res["skipped"],
+            "dir": write_dir}, None
 
 
 def pick_dir():
@@ -387,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
             payload, code = cancel_job(parts[2])
             self._json(payload, code)
             return
-        if url.path != "/api/runs":
+        if url.path not in ("/api/runs", "/api/skeleton"):
             self.send_error(404)
             return
         try:
@@ -395,6 +450,15 @@ class Handler(BaseHTTPRequestHandler):
             params = json.loads(self.rfile.read(n) or b"{}")
         except (ValueError, json.JSONDecodeError):
             self._json({"error": "잘못된 JSON"}, 400)
+            return
+        if url.path == "/api/skeleton":
+            try:
+                res, err = export_skeleton(params.get("job_id", ""),
+                                           params.get("write_dir", ""))
+            except Exception as e:
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+            self._json({"error": err} if err else res, 400 if err else 200)
             return
         try:
             job, err = start_job(params)
