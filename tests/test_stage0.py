@@ -378,3 +378,24 @@ def test_web_export_skeleton_uses_latest_best(tmp_path, monkeypatch):
     finally:
         with web.JOBS_LOCK:
             web.JOBS.pop("j1", None)
+
+
+# ---------- web 업로드 ----------
+
+def test_save_uploads_validates_and_writes(tmp_path, monkeypatch):
+    import web
+    monkeypatch.setattr(web, "UPLOAD_DIR", str(tmp_path / "up"))
+    # 정상
+    res, err = web.save_uploads([{"name": "PRB샘플.md", "content": "# 리스크"},
+                                 {"name": "../evil.txt", "content": "x"}])
+    assert err is None and res["saved"] == ["PRB샘플.md", "evil.txt"]  # basename 강제
+    assert os.path.isfile(os.path.join(res["dir"], "PRB샘플.md"))
+    # 확장자 거부
+    res, err = web.save_uploads([{"name": "a.exe", "content": "x"}])
+    assert res is None and "확장자" in err
+    # 크기 제한
+    res, err = web.save_uploads([{"name": "big.md", "content": "x" * (2 * 1024 * 1024 + 1)}])
+    assert res is None and "2MB" in err
+    # 빈 목록
+    res, err = web.save_uploads([])
+    assert res is None
