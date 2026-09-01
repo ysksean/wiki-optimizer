@@ -149,3 +149,39 @@ def test_record_flags_parse_failed_and_no_valid_best():
               "best": {"total": -1.0, "generation": -1}, "parse_failed": True}
     rec = batch._record(report, "d", 10, 0, "evolve", 1.0)
     assert rec["parse_failed"] is True and rec["best_gen"] == 0 and rec["improvement"] == 0.0
+
+
+def test_parallel_batch_matches_sequential(tmp_path, monkeypatch, stub_evolve):
+    """--parallel 경로: 결과 레코드 집합이 순차 실행과 동일해야 한다."""
+    files = _make_docs(tmp_path, ["a", "b", "c"])
+    monkeypatch.setattr(evolve, "load_question_set",
+                        lambda *a, **k: [{"q": "Q", "a": "A"}])
+
+    records_seq, _ = batch.run_batch(
+        files, runs=2, generations=2, n_qa=1,
+        out_dir=str(tmp_path / "runs-seq"), parallel=1)
+    records_par, _ = batch.run_batch(
+        files, runs=2, generations=2, n_qa=1,
+        out_dir=str(tmp_path / "runs-par"), parallel=3)
+
+    def key(recs):
+        return sorted((r["doc"], r["run"], r["arm"], r["best_total"]) for r in recs)
+
+    assert len(records_par) == len(records_seq) == 6
+    assert key(records_par) == key(records_seq)
+
+
+def test_parallel_batch_survives_one_doc_failure(tmp_path, monkeypatch, stub_evolve):
+    files = _make_docs(tmp_path, ["bad", "good", "also"])
+
+    def fake_qs(raw_path, raw_text, n_qa):
+        if "bad" in raw_path:
+            raise RuntimeError("boom")
+        return [{"q": "Q", "a": "A"}]
+
+    monkeypatch.setattr(evolve, "load_question_set", fake_qs)
+    records, batch_dir = batch.run_batch(
+        files, runs=1, generations=2, n_qa=1,
+        out_dir=str(tmp_path / "runs"), parallel=2)
+    assert sorted({r["doc"] for r in records}) == ["also", "good"]
+    assert os.path.exists(os.path.join(batch_dir, "results.csv"))

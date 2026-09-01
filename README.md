@@ -36,6 +36,12 @@ Two experimental safeguards on top:
   seed-strategy-resampling arm alongside. Since "best of N noisy runs" is biased
   upward even with zero real improvement, the true effect is
   `evolve gain − control gain`. Both arms share the same question set per document.
+- **Significance testing** — the net effect is reported with a 95% confidence
+  interval and a p-value from a paired bootstrap (1000 resamples, fixed seed).
+  Documents are the resampling unit, not runs: runs on the same document share a
+  question set, so treating them as independent would understate the p-value.
+  With fewer than two paired documents the summary says the effect cannot be
+  judged instead of claiming an improvement.
 
 ## Two stages
 
@@ -63,6 +69,16 @@ The only CLI-exclusive feature is the statistical batch with a control arm:
 
 ```bash
 python3 src/batch.py --docs 5 --runs 2 --generations 3 --with-control
+```
+
+`--arms` picks arms explicitly. The `evolve-wiki` arm (WikiSkill-style,
+arxiv 2608.27454) feeds the reflector a structured pattern wiki
+(`runs/wiki/patterns/*.md` + `index.md`, maintained by one extra LLM call per
+generation) instead of the flat strategy history, testing whether the
+*structure* of accumulated history matters — not just its presence:
+
+```bash
+python3 src/batch.py --arms evolve,evolve-wiki,control --docs 5 --runs 2
 ```
 
 ## Requirements

@@ -20,7 +20,7 @@ log() { printf '[%s] review: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_
 now() { date '+%H:%M'; }
 
 # ── 게이트 (LLM 호출 없음) ──────────────────────────────────────────
-PRS="$(gh pr list --repo "$GH_REPO" --state open --json number,labels,title)"
+PRS="$(gh pr list --repo "$GH_REPO" --state open --json number,labels,title,updatedAt)"
 
 S1_PR="$(s1_candidate "$PRS")"
 
@@ -31,6 +31,55 @@ for n in $(s2_eligible "$PRS"); do
     S2_PR="$n"; break
   fi
 done
+
+linear_issue_id() { # $1=PR **제목** — 첫 SEA-N의 UUID 반환 (본문 금지: 2026-08-31 실사고)
+  local ident num
+  ident="$(extract_issue_ident "$TEAM_KEY" "$1")"
+  [ -z "$ident" ] && return 0
+  num="${ident#${TEAM_KEY}-}"
+  curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
+    -H "Content-Type: application/json" -H "Authorization: $(cat "$KEY_FILE")" \
+    -d "{\"query\":\"{ issues(filter: { team: { key: { eq: \\\"${TEAM_KEY}\\\" } }, number: { eq: ${num} } }) { nodes { id } } }\"}" \
+    | jq -r '.data.issues.nodes[0].id // empty'
+}
+
+linear_comment() { # $1=issue-uuid $2=코멘트 본문
+  curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
+    -H "Content-Type: application/json" -H "Authorization: $(cat "$KEY_FILE")" \
+    -d "$(jq -n --arg id "$1" --arg body "$2" \
+      '{query: "mutation($id: String!, $body: String!) { commentCreate(input: { issueId: $id, body: $body }) { success } }", variables: {id: $id, body: $body}}')" >/dev/null
+}
+
+# ── 워치독: needs-changes 교착 감지 (LLM 호출 없음, SEA-8) ─────────
+# 재작업 지시 후 라벨 제거 실패·집행 누락으로 In Review에 멈춘 PR을 Linear에 1회 경고.
+WATCHDOG_HOURS="${WATCHDOG_HOURS:-6}"
+
+watchdog() {
+  local n issue_id marker has body
+  for n in $(stalled_prs "$PRS" "$(date +%s)" "$WATCHDOG_HOURS"); do
+    issue_id="$(linear_issue_id "$(gh pr view "$n" --repo "$GH_REPO" --json title -q '.title')")" \
+      || { log "watchdog — PR#$n 이슈 조회 실패, 건너뜀"; continue; }
+    [ -z "$issue_id" ] && { log "watchdog — PR#$n 교착이나 Linear 이슈 미연결"; continue; }
+    marker="<!-- watchdog:PR#$n -->"
+    # 마커 조회가 실패하면 코멘트하지 않는다 — "경고는 1회" 보장이 중복 경고보다 우선
+    has="$(curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
+      -H "Content-Type: application/json" -H "Authorization: $(cat "$KEY_FILE")" \
+      -d "$(jq -n --arg id "$issue_id" \
+        '{query: "query($id: String!) { issue(id: $id) { comments { nodes { body } } } }", variables: {id: $id}}')" \
+      | jq -r --arg m "$marker" '[.data.issue.comments.nodes[].body | contains($m)] | any')" \
+      || { log "watchdog — PR#$n 마커 조회 실패, 건너뜀"; continue; }
+    [ "$has" = "true" ] && continue
+    body="🧿 워치독 경고 — PR #$n 이 \`needs-changes\` 상태로 ${WATCHDOG_HOURS}시간 이상 활동이 없다. 재작업이 멈췄을 수 있으니 확인 필요: https://github.com/$GH_REPO/pull/$n
+
+$marker"
+    if linear_comment "$issue_id" "$body"; then
+      log "watchdog — PR#$n 교착 경고 코멘트 등록"
+    else
+      log "watchdog — PR#$n 경고 코멘트 실패"
+    fi
+  done
+}
+watchdog || log "watchdog error (ignored)"
 
 [ -z "$S1_PR" ] && [ -z "$S2_PR" ] && { log "quiet — s1:none s2:none (no LLM call)"; exit 0; }
 
@@ -83,17 +132,6 @@ fail_label() { # $1=pr $2=stage — 실패 시 라벨 박아 재시도 폭주 �
   KEEP_WORK=1
   gh pr edit "$1" --repo "$GH_REPO" --add-label "grokbot:${2}-error" || true
   log "PR#$1 ${2} FAILED — grokbot:${2}-error 라벨, 재시도 중단. 작업물 보존: ${WORK:-?}"
-}
-
-linear_issue_id() { # PR 제목/본문에서 SEA-N 찾아 UUID 반환 (없으면 빈값)
-  local ident num
-  ident="$(extract_issue_ident "$TEAM_KEY" "$(jq -r '.title + " " + (.body // "")' "$WORK/meta.json")")"
-  [ -z "$ident" ] && return 0
-  num="${ident#${TEAM_KEY}-}"
-  curl -sf --max-time 30 -X POST https://api.linear.app/graphql \
-    -H "Content-Type: application/json" -H "Authorization: $(cat "$KEY_FILE")" \
-    -d "{\"query\":\"{ issues(filter: { team: { key: { eq: \\\"${TEAM_KEY}\\\" } }, number: { eq: ${num} } }) { nodes { id } } }\"}" \
-    | jq -r '.data.issues.nodes[0].id // empty'
 }
 
 linear_rollback() { # $1=issue-uuid $2=코멘트 본문 — 이슈를 Todo로 되돌려 Executor 재작업 유도
@@ -162,7 +200,7 @@ if [ -n "$S1_PR" ]; then
         gh pr edit "$PR" --repo "$GH_REPO" --add-label "needs-changes"
         # 재작업 횟수 = 지금 것 포함 누적 S1 리뷰 코멘트 수 (한도 초과 시 사람 개입)
         S1_RUNS="$(gh pr view "$PR" --repo "$GH_REPO" --json comments -q '[.comments[].body | select(contains("Grokbot Stage 1"))] | length')"
-        ISSUE_ID="$(linear_issue_id)"
+        ISSUE_ID="$(linear_issue_id "$(jq -r '.title' "$WORK/meta.json")")"
         if [ -n "$ISSUE_ID" ] && [ "$S1_RUNS" -le "$REWORK_LIMIT" ]; then
           SUMMARY="🧿 Grokbot 재작업 지시 ($GRADE) — PR #$PR 리뷰에서 지적사항이 나왔다. PR 코멘트의 Grokbot 리뷰를 읽고 기존 브랜치에 수정 커밋을 올려라. 수정 push 후 PR의 grokbot:s1-done, needs-changes 라벨을 제거할 것."
           linear_rollback "$ISSUE_ID" "$SUMMARY" && log "S1 — PR#$PR $GRADE → Linear 재작업 롤백 (${S1_RUNS}회차)"

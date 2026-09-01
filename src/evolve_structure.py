@@ -3,6 +3,9 @@
 진화 손잡이 = 분할 전략(자연어 지시).
 채점 = 구조에 대한 Query 성능 (정확도 x 효율).
 
+control 모드(no_evolve=True): reflect를 건너뛰고 seed 전략을 세대 수만큼
+재샘플링만 한다. A단계(evolve.py)와 같은 의미의 노이즈 max 기준선이다.
+
   세대 g:
     1. Organizer: 현재 분할 전략으로 문서들을 구조화
     2. 채점: 질문 세트로 Router가 파일 선택 -> 답 -> 정확도 + 효율(읽은 글자수)
@@ -12,6 +15,7 @@
 
 사용법:
   python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4
+  python3 src/evolve_structure.py --docs 3 --generations 2 --control
 """
 
 import argparse
@@ -22,6 +26,7 @@ import time
 from datetime import datetime
 
 import llm
+import provenance
 import structure
 
 
@@ -70,16 +75,20 @@ def reflect(strategy, result):
     return new_strategy.strip() or strategy
 
 
-def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None):
+def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
+                     no_evolve=False, question_set=None):
+    """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장)."""
     docs = load_docs(n_docs, files=files)
     total_raw = sum(len(t) for t in docs.values())
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_dir = os.path.join(out_dir, f"structure-{stamp}")
+    arm = "control" if no_evolve else "evolve"
+    run_dir = os.path.join(out_dir, f"structure-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
-    print(f"[setup] 문서 {len(docs)}개, 총 {total_raw} chars: {list(docs.keys())}")
-    print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
-    question_set = structure.build_cross_question_set(docs, n=n_qa)
+    print(f"[setup] 문서 {len(docs)}개, 총 {total_raw} chars: {list(docs.keys())}  arm={arm}")
+    if question_set is None:
+        print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
+        question_set = structure.build_cross_question_set(docs, n=n_qa)
     print(f"[setup] 질문 {len(question_set)}개 고정")
     for qa in question_set:
         print(f"   - {qa['q']}")
@@ -128,13 +137,13 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
 
         with open(os.path.join(run_dir, "progress.json"), "w") as pf:
             json.dump({
-                "mode": "structure", "docs": list(docs.keys()),
+                "mode": "structure", "arm": arm, "docs": list(docs.keys()),
                 "generations": generations, "done_generations": g + 1,
                 "best_gen": best["generation"], "best_total": best["total"],
                 "history": history,
             }, pf, ensure_ascii=False)
 
-        if g < generations - 1 and best["strategy"] is not None:
+        if not no_evolve and g < generations - 1 and best["strategy"] is not None:
             # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도
             strategy = reflect(best["strategy"], best["result"])
 
@@ -146,6 +155,12 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
 
     report = {
         "docs": list(docs.keys()),
+        "arm": arm,
+        "provenance": provenance.collect(
+            question_set=question_set,
+            params={"generations": generations, "n_qa": n_qa, "n_docs": n_docs,
+                    "no_evolve": no_evolve},
+        ),
         "total_raw_chars": total_raw,
         "generations": generations,
         "question_set": question_set,
@@ -168,5 +183,7 @@ if __name__ == "__main__":
     ap.add_argument("--docs", type=int, default=3)
     ap.add_argument("--generations", type=int, default=2)
     ap.add_argument("--n-qa", type=int, default=4)
+    ap.add_argument("--control", action="store_true", help="진화 없이 seed 재샘플링(대조군)")
     args = ap.parse_args()
-    evolve_structure(n_docs=args.docs, generations=args.generations, n_qa=args.n_qa)
+    evolve_structure(n_docs=args.docs, generations=args.generations, n_qa=args.n_qa,
+                     no_evolve=args.control)

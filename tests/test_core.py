@@ -290,3 +290,84 @@ def test_reflect_prompt_includes_history(tmp_path, monkeypatch):
     # doc 없이 부르면 이력 미포함 (하위 호환)
     evolve.reflect("현재 전략", train_result)
     assert "REJECTED-DIRECTION" not in captured["prompt"]
+
+
+def test_score_structure_parallel_preserves_question_order(monkeypatch):
+    """질문별 route→answer가 병렬이어도 details/preds는 질문 순서를 지킨다."""
+    import time as _time
+    struct = {"files": [{"title": "T", "content": "c" * 50}],
+              "index": [{"title": "T", "desc": "c"}]}
+    qs = [{"q": f"q{i}", "a": f"a{i}"} for i in range(6)]
+    monkeypatch.setattr(structure, "route", lambda q, idx: [0])
+
+    def slow_first_answer(ctx, q):
+        # 앞 질문일수록 늦게 끝나게 해 완료 순서를 뒤집는다
+        _time.sleep((6 - int(q[1:])) * 0.01)
+        return f"pred-{q}"
+
+    monkeypatch.setattr(structure, "_answer", slow_first_answer)
+    captured = {}
+
+    def spy_judge(qs_, preds):
+        captured["preds"] = list(preds)
+        return [1.0] * len(qs_), False
+
+    monkeypatch.setattr(scoring, "judge_all", spy_judge)
+    result = structure.score_structure(struct, qs, total_raw_chars=100)
+    assert [d["q"] for d in result["details"]] == [f"q{i}" for i in range(6)]
+    assert captured["preds"] == [f"pred-q{i}" for i in range(6)]
+
+
+# ---------- audit: 백링크 그래프 + Router 진단 ----------
+
+def _make_wiki(tmp_path):
+    (tmp_path / "raw").mkdir()
+    (tmp_path / "wiki").mkdir()
+    (tmp_path / "wiki" / "projects").mkdir()
+    (tmp_path / "raw" / "doc1.md").write_text("원본 doc1")
+    (tmp_path / "wiki" / "hub.md").write_text("# Hub\n[[leaf]] 그리고 [[leaf|별칭]] [[missing]]")
+    (tmp_path / "wiki" / "leaf.md").write_text("# Leaf\n[[hub#섹션]] 내용")
+    (tmp_path / "wiki" / "orphan.md").write_text("# Orphan\n링크 없음")
+    (tmp_path / "wiki" / "projects" / "secret.md").write_text("고객 정보 [[hub]]")
+    return tmp_path
+
+
+def test_parse_links_normalizes_alias_and_anchor():
+    links = audit.parse_links("[[a]] [[a|label]] [[b#sec]] [[ c ]]")
+    assert links == ["a", "b", "c"]  # 중복 제거, 별칭/앵커 제거
+
+
+def test_wiki_pages_excludes_projects(tmp_path):
+    _make_wiki(tmp_path)
+    names = [p["name"] for p in audit.wiki_pages(str(tmp_path))]
+    assert "secret" not in names and set(names) == {"hub", "leaf", "orphan"}
+
+
+def test_build_graph_counts_inlinks_and_drops_missing(tmp_path):
+    _make_wiki(tmp_path)
+    g = audit.build_graph(audit.wiki_pages(str(tmp_path)))
+    edges = {(e["source"], e["target"]) for e in g["edges"]}
+    assert edges == {("hub", "leaf"), ("leaf", "hub")}  # missing/자기링크 제외
+    inl = {n["id"]: n["inlinks"] for n in g["nodes"]}
+    assert inl == {"hub": 1, "leaf": 1, "orphan": 0}
+
+
+def test_route_batch_parses_and_falls_back(monkeypatch):
+    index = [{"title": "a", "desc": ""}, {"title": "b", "desc": ""}]
+    monkeypatch.setattr(audit.llm, "generate", lambda *a, **k: "[[2],[1,2]]")
+    assert audit.route_batch(["q1", "q2"], index) == [[1], [0, 1]]
+    # 파싱 실패 → 질문별 structure.route 폴백
+    monkeypatch.setattr(audit.llm, "generate", lambda *a, **k: "garbage")
+    monkeypatch.setattr(audit.structure, "route", lambda q, idx: [0])
+    assert audit.route_batch(["q1", "q2"], index) == [[0], [0]]
+
+
+def test_audit_auto_selects_router_for_concept_wiki(tmp_path, monkeypatch):
+    _make_wiki(tmp_path)  # raw=doc1, wiki 이름 불일치 → 커버리지 0
+    calls = {}
+    def fake_router(base_dir, **kw):
+        calls["router"] = True
+        return {"variant": "router", "n_docs": 1}
+    monkeypatch.setattr(audit, "router_audit", fake_router)
+    res = audit.audit(str(tmp_path))
+    assert calls.get("router") and res["variant"] == "router"
