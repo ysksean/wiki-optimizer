@@ -25,6 +25,15 @@ s2_eligible() {
   jq -r '.[] | select(([.labels[].name] | index("grokbot:s1-done")) and (([.labels[].name] | any(startswith("grokbot:s2") or . == "needs-changes" or . == "grokbot:p0" or . == "grokbot:p1")) | not)) | .number' <<<"$1"
 }
 
+# $1=gh pr list JSON(number,labels,updatedAt) $2=현재 epoch초 $3=임계 시간(h)
+# → needs-changes가 붙은 채 updatedAt이 임계 시간보다 오래된 PR 번호 목록 (줄바꿈 구분, 없으면 빈 출력)
+stalled_prs() {
+  jq -r --argjson now "$2" --argjson hrs "$3" \
+    '.[] | select([.labels[].name] | index("needs-changes"))
+         | select(($now - (.updatedAt | sub("\\.[0-9]+"; "") | fromdateiso8601)) >= $hrs * 3600)
+         | .number' <<<"$1"
+}
+
 # $1=verdict 파일 경로 → P0~P4 (줄 위치 무관, 범위 밖이거나 없으면 빈값)
 parse_grade() {
   grep -oE '^GRADE: P[0-4]' "$1" | head -1 | grep -oE 'P[0-4]' || true

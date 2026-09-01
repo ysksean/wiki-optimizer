@@ -66,6 +66,24 @@ assert_eq "s2_eligible: 배제 규칙" "50
 57" "$(s2_eligible "$PRS_S2")"
 assert_eq "s2_eligible: 자격 없음" "" "$(s2_eligible '[{ "number": 60, "title": "x", "labels": [] }]')"
 
+# ── 워치독: stalled_prs (SEA-8) ─────────────────────────────────────
+# 기준 시각 2026-08-31T12:00:00Z(epoch 1788177600), 임계 6h
+WD_NOW=1788177600
+PRS_STALLED='[
+  { "number": 70, "title": "stale",    "labels": [{ "name": "needs-changes" }, { "name": "grokbot:s1-done" }], "updatedAt": "2026-08-31T05:00:00Z" },
+  { "number": 71, "title": "fresh",    "labels": [{ "name": "needs-changes" }],                                "updatedAt": "2026-08-31T11:30:00Z" },
+  { "number": 72, "title": "no-label", "labels": [{ "name": "grokbot:s1-done" }],                              "updatedAt": "2026-08-30T00:00:00Z" },
+  { "number": 73, "title": "boundary", "labels": [{ "name": "needs-changes" }],                                "updatedAt": "2026-08-31T06:00:00Z" },
+  { "number": 74, "title": "frac-ts",  "labels": [{ "name": "needs-changes" }],                                "updatedAt": "2026-08-30T23:59:59.123Z" }
+]'
+# 70: 7h 경과 → 감지 / 71: 30분 → 배제 / 72: needs-changes 없음 → 배제
+# 73: 정확히 6h → 감지(경계 포함) / 74: 소수점 타임스탬프도 파싱
+assert_eq "stalled_prs: 임계·라벨 필터" "70
+73
+74" "$(stalled_prs "$PRS_STALLED" "$WD_NOW" 6)"
+assert_eq "stalled_prs: 교착 없음" "" "$(stalled_prs '[{ "number": 80, "title": "x", "labels": [], "updatedAt": "2026-08-01T00:00:00Z" }]' "$WD_NOW" 6)"
+assert_eq "stalled_prs: 빈 목록" "" "$(stalled_prs '[]' "$WD_NOW" 6)"
+
 # ── GRADE 파싱 ──────────────────────────────────────────────────────
 VD="$(mktemp "${TMPDIR:-/tmp}/verdict.XXXX")"
 trap 'rm -f "$VD"' EXIT

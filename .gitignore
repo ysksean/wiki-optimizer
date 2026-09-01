@@ -4,3 +4,4 @@ runs/
 .DS_Store
 .claude/.bc-*.json
 .claude/.bc-explain/
+.gstack/
