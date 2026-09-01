@@ -327,6 +327,48 @@ def job_detail(job):
     return out
 
 
+UPLOAD_DIR = os.path.join("runs", "uploads")
+UPLOAD_EXTS = (".md", ".txt")
+UPLOAD_MAX_FILE = 2 * 1024 * 1024   # 파일당 2MB
+UPLOAD_MAX_TOTAL = 20 * 1024 * 1024  # 요청당 20MB
+
+
+def save_uploads(files):
+    """브라우저 업로드 파일들을 runs/uploads/<id>/에 저장한다.
+
+    files: [{"name": str, "content": str}]  (content는 텍스트 그대로)
+    Stage 0 소스 root로 쓸 수 있는 (payload, error)를 반환한다.
+    """
+    if not isinstance(files, list) or not files:
+        return None, "업로드할 파일이 없습니다"
+    total = 0
+    clean = []
+    for f in files:
+        if not isinstance(f, dict):
+            return None, "잘못된 파일 항목"
+        name = os.path.basename(str(f.get("name") or "").strip())
+        content = f.get("content")
+        if not name or not isinstance(content, str):
+            return None, f"파일명/내용이 비었습니다: {name!r}"
+        if not name.lower().endswith(UPLOAD_EXTS):
+            return None, f"허용되지 않는 확장자: {name} (md/txt만)"
+        size = len(content.encode("utf-8"))
+        if size > UPLOAD_MAX_FILE:
+            return None, f"파일이 너무 큽니다 (2MB 제한): {name}"
+        total += size
+        if total > UPLOAD_MAX_TOTAL:
+            return None, "업로드 총량이 20MB를 넘습니다"
+        clean.append((name, content))
+    batch = uuid.uuid4().hex[:8]
+    dest = os.path.join(UPLOAD_DIR, batch)
+    os.makedirs(dest, exist_ok=True)
+    for name, content in clean:
+        with open(os.path.join(dest, name), "w") as fh:
+            fh.write(content)
+    return {"dir": os.path.abspath(dest),
+            "saved": [n for n, _ in clean]}, None
+
+
 def export_skeleton(job_id, write_dir):
     """propose job의 best 구조를 write_dir에 골격으로 쓴다 (기존 파일 skip)."""
     with JOBS_LOCK:
@@ -442,7 +484,7 @@ class Handler(BaseHTTPRequestHandler):
             payload, code = cancel_job(parts[2])
             self._json(payload, code)
             return
-        if url.path not in ("/api/runs", "/api/skeleton"):
+        if url.path not in ("/api/runs", "/api/skeleton", "/api/upload"):
             self.send_error(404)
             return
         try:
@@ -450,6 +492,14 @@ class Handler(BaseHTTPRequestHandler):
             params = json.loads(self.rfile.read(n) or b"{}")
         except (ValueError, json.JSONDecodeError):
             self._json({"error": "잘못된 JSON"}, 400)
+            return
+        if url.path == "/api/upload":
+            try:
+                res, err = save_uploads(params.get("files"))
+            except Exception as e:
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+            self._json({"error": err} if err else res, 400 if err else 200)
             return
         if url.path == "/api/skeleton":
             try:

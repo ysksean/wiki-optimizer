@@ -306,25 +306,79 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
   }
+
+  /* ---------- A+C 앱 셸 (design-shotgun 승인안) ---------- */
+  .shell { display: grid; grid-template-columns: 200px minmax(0,1fr); min-height: 100vh; }
+  .side { position: sticky; top: 0; align-self: start; height: 100vh;
+    display: flex; flex-direction: column; gap: 2px;
+    background: #0a0b0e; padding: 14px 8px; }
+  .brand { font-size: 13px; font-weight: 650; letter-spacing: -0.01em;
+    margin: 0; padding: 6px 10px 14px; }
+  .navitem { display: flex; align-items: center; gap: 8px; width: 100%;
+    height: 32px; padding: 0 10px; border: none; border-radius: 6px;
+    background: none; color: var(--tx-secondary); font: 550 12.5px var(--font-sans);
+    cursor: pointer; text-align: left; }
+  .navitem:hover { background: var(--hover); color: var(--tx); }
+  .navitem.on { background: var(--acc-soft); color: var(--tx); }
+  .navitem .ico { width: 14px; text-align: center; opacity: .75; font-size: 11px; }
+  .navcount { margin-left: auto; color: var(--dim); font-size: 11px;
+    font-variant-numeric: tabular-nums; }
+  .side-foot { margin-top: auto; padding: 8px 10px; }
+  .side-foot select { min-height: 30px; font-size: 12px; }
+  .shell main { padding: 24px 32px 96px; max-width: 1080px; min-width: 0; }
+  @media (max-width: 760px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; flex-direction: row; align-items: center; }
+    .side-foot { margin-top: 0; margin-left: auto; }
+    .brand { padding: 6px 10px; }
+  }
+  /* 밀도·보더 톤 (Linear) */
+  .card { border-color: var(--line-subtle); box-shadow: none; padding: 20px 22px; }
+  .panel-title { font-size: 14px; }
+  td, th { font-size: 12.5px; }
+  /* Stage 0 소스 리스트 */
+  .srclist { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .srcrow { display: flex; align-items: center; gap: 8px; height: 32px;
+    padding: 0 10px; border-radius: 6px; background: var(--card-raised);
+    font-size: 12.5px; }
+  .srcrow .kind { color: var(--dim); font-size: 11px; min-width: 34px; }
+  .srcrow .val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srcrow .x { margin-left: auto; background: none; border: none; color: var(--dim);
+    cursor: pointer; font-size: 13px; padding: 2px 4px; }
+  .srcrow .x:hover { color: var(--tx); }
+  .srcbtns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .srcbtns .ghost { height: 30px; font-size: 12px; }
+  .srcbtns input[type=text] { flex: 1; min-width: 180px; min-height: 30px; font-size: 12.5px; }
+  /* 점수 히트맵 (Braintrust) */
+  .hG { background: rgba(98, 212, 156, 0.13); }
+  .hM { background: rgba(230, 184, 92, 0.12); }
+  .hB { background: rgba(240, 120, 120, 0.13); }
+  td.hG, td.hM, td.hB { font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="topbar">
-    <div>
-      <h1>wiki-optimizer</h1>
-      <p class="sub" data-i18n="subtitle"></p>
-    </div>
-    <div class="spacer"></div>
-    <div class="language-control"><label for="lang" data-i18n="language" data-i18n-title="language_tip"></label>
+<div class="shell">
+  <nav class="side" aria-label="주 메뉴">
+    <h1 class="brand">wiki-optimizer</h1>
+    <button type="button" class="navitem" id="nav-opt" onclick="showView('opt')">
+      <span class="ico" aria-hidden="true">▤</span><span data-i18n="nav_opt"></span></button>
+    <button type="button" class="navitem" id="nav-propose" onclick="showView('propose')">
+      <span class="ico" aria-hidden="true">✦</span><span data-i18n="nav_propose"></span></button>
+    <button type="button" class="navitem" id="nav-runs" onclick="showView('runs')">
+      <span class="ico" aria-hidden="true">≡</span><span data-i18n="nav_runs"></span>
+      <span class="navcount" id="runsCountNav"></span></button>
+    <div class="side-foot">
+      <label for="lang" data-i18n="language" data-i18n-title="language_tip"></label>
       <select id="lang" onchange="setLang(this.value)">
         <option value="ko">한국어</option>
         <option value="en">English</option>
         <option value="zh">中文</option>
-      </select></div>
-  </div>
+      </select>
+    </div>
+  </nav>
 
   <main>
+  <section id="view-opt" class="view">
 
   <div class="card">
     <section aria-labelledby="setup-title">
@@ -398,37 +452,119 @@
       <textarea id="strategy" rows="3" style="margin-top:8px"></textarea>
     </details>
   </section>
+  </section>
 
+  <section id="view-propose" class="view" hidden>
   <div class="card">
     <p class="panel-title" data-i18n="prop_title"></p>
     <p class="panel-desc" data-i18n="prop_desc"></p>
-    <label for="propSources" data-i18n="prop_sources"></label>
-    <textarea id="propSources" rows="2" data-i18n-placeholder="prop_sources_ph"
-      onchange="savePrefs()" style="width:100%"></textarea>
-    <label for="propTask" style="margin-top:8px" data-i18n="prop_task"></label>
+    <label data-i18n="prop_sources" for="srcManual"></label>
+    <div id="srcList" class="srclist"></div>
+    <div class="srcbtns">
+      <button type="button" class="ghost" onclick="pickSrcDir()" data-i18n="src_add_dir"></button>
+      <button type="button" class="ghost" onclick="$('srcFile').click()" data-i18n="src_add_files"></button>
+      <input type="file" id="srcFile" multiple accept=".md,.txt" hidden
+        onchange="uploadSrcFiles(this.files)">
+      <label class="sr-only" for="srcFile" data-i18n="src_add_files"></label>
+      <input type="text" id="srcManual" data-i18n-placeholder="src_manual_ph"
+        onkeydown="if(event.key==='Enter'){addSrcPath(this.value); this.value='';}">
+    </div>
+    <label for="propTask" style="margin-top:12px" data-i18n="prop_task"></label>
     <textarea id="propTask" rows="5" data-i18n-placeholder="prop_task_ph"
       onchange="savePrefs()" style="width:100%"></textarea>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px">
       <button onclick="startPropose()" data-i18n="btn_propose"></button>
       <label for="propSeed" style="display:flex;align-items:center;gap:4px;margin:0">
         <input type="checkbox" id="propSeed"> <span data-i18n="prop_seed" data-i18n-title="prop_seed_tip"></span>
       </label>
-      <span id="msg3" class="err"></span>
+      <span id="msg3" class="err" role="status" aria-live="polite"></span>
     </div>
   </div>
+  </section>
 
+  <section id="view-runs" class="view" hidden>
   <div class="section-head">
     <h2 data-i18n="runs_title"></h2>
     <span class="count" id="runsCount"></span>
     <span class="work-status" id="workStatus" role="status" aria-live="polite"></span>
   </div>
   <div id="jobs"></div>
+  </section>
   </main>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const open_ = new Set();   // 펼쳐둔 job id
+
+// ---------- 뷰 전환 (좌측 네비) ----------
+let curView = "opt";
+function showView(v, save = true) {
+  curView = v;
+  for (const k of ["opt", "propose", "runs"]) {
+    $("view-" + k).hidden = k !== v;
+    $("nav-" + k).classList.toggle("on", k === v);
+  }
+  if (save) savePrefs();
+}
+
+// ---------- Stage 0 소스 리스트 ----------
+let srcState = [];   // [{kind:"dir"|"upload", value, label}]
+function renderSrcList() {
+  const box = $("srcList");
+  box.innerHTML = "";
+  for (let i = 0; i < srcState.length; i++) {
+    const it = srcState[i];
+    const row = document.createElement("div");
+    row.className = "srcrow";
+    const kind = document.createElement("span");
+    kind.className = "kind";
+    kind.textContent = it.kind === "upload" ? t("src_kind_file") : t("src_kind_dir");
+    const val = document.createElement("span");
+    val.className = "val";
+    val.textContent = it.label || it.value;
+    val.title = it.value;
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "✕";
+    x.setAttribute("aria-label", t("src_remove"));
+    x.onclick = () => { srcState.splice(i, 1); renderSrcList(); savePrefs(); };
+    row.append(kind, val, x);
+    box.appendChild(row);
+  }
+}
+function addSrcPath(path) {
+  path = (path || "").trim();
+  if (!path) return;
+  if (!srcState.some(x => x.value === path)) srcState.push({ kind: "dir", value: path });
+  renderSrcList(); savePrefs();
+}
+async function pickSrcDir() {
+  const r = await fetch("/api/pick-dir");
+  const j = await r.json();
+  if (j.error) { $("msg3").textContent = j.error; return; }
+  if (j.dir) addSrcPath(j.dir);
+}
+async function uploadSrcFiles(files) {
+  if (!files || !files.length) return;
+  $("msg3").textContent = "";
+  const payload = [];
+  for (const f of files) payload.push({ name: f.name, content: await f.text() });
+  const r = await fetch("/api/upload", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files: payload }) });
+  const j = await r.json();
+  if (j.error) { $("msg3").textContent = j.error; return; }
+  srcState.push({ kind: "upload", value: j.dir,
+    label: t("src_upload_label", j.saved[0], j.saved.length) });
+  renderSrcList(); savePrefs();
+  $("srcFile").value = "";
+}
+
+// ---------- 점수 히트맵 (Braintrust) ----------
+function heat(v) {
+  if (v == null || v === "—" || isNaN(v)) return "";
+  return v >= 0.75 ? ' class="hG"' : v >= 0.5 ? ' class="hM"' : ' class="hB"';
+}
 const LOCALES = { ko: "ko-KR", en: "en-US", zh: "zh-CN" };
 let loadedDir = "";
 let docsRequest = 0;
@@ -495,8 +631,13 @@ const I18N = {
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
     prop_title: "Stage 0 — 구조 제안 (백지에서)", mode_propose: "0 제안",
+    nav_opt: "위키 최적화", nav_propose: "구조 제안", nav_runs: "실행 기록",
+    src_add_dir: "＋ 폴더 선택", src_add_files: "＋ 파일 업로드",
+    src_manual_ph: "경로 직접 입력 후 Enter (예: ~/repo/docs)",
+    src_kind_dir: "폴더", src_kind_file: "파일", src_remove: "소스 제거",
+    src_upload_label: (first, n) => n > 1 ? `${first} 외 ${n - 1}개 (업로드)` : `${first} (업로드)`,
     prop_desc: "위키가 아직 없을 때: 레포/데이터 폴더 + 태스크 설명을 넣으면 폴더 구조를 제안하고, 근거 없는 축(gap)을 알려줍니다",
-    prop_sources: "소스 폴더 (한 줄에 하나)", prop_sources_ph: "~/aipmop/PLANNING\n~/skax-docs",
+    prop_sources: "소스 — 위키의 재료가 될 레포·문서", prop_sources_ph: "",
     prop_task: "태스크 설명", prop_task_ph: "이 위키의 소비자·소비 시점, 실제로 던질 질문 예시 2~3개, 데이터의 성질, 산출물 용도",
     btn_propose: "구조 제안 실행", prop_seed: "이어서 개선", prop_seed_tip: "이전 제안 run의 best 분할 전략을 seed로 재사용합니다 (warm start)",
     need_sources_task: "소스 폴더와 태스크 설명을 입력하세요",
@@ -563,8 +704,13 @@ const I18N = {
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
     prop_title: "Stage 0 — propose structure (blank slate)", mode_propose: "0 propose",
+    nav_opt: "Optimize wiki", nav_propose: "Propose structure", nav_runs: "Runs",
+    src_add_dir: "+ Choose folder", src_add_files: "+ Upload files",
+    src_manual_ph: "Type a path and press Enter (e.g. ~/repo/docs)",
+    src_kind_dir: "dir", src_kind_file: "file", src_remove: "Remove source",
+    src_upload_label: (first, n) => n > 1 ? `${first} +${n - 1} more (uploaded)` : `${first} (uploaded)`,
     prop_desc: "No wiki yet: point at repo/data folders + a task description to get a proposed folder structure, with unbacked axes flagged as gaps",
-    prop_sources: "Source folders (one per line)", prop_sources_ph: "~/myrepo/docs\n~/notes",
+    prop_sources: "Sources — repos and documents to build from", prop_sources_ph: "",
     prop_task: "Task description", prop_task_ph: "Who consumes this wiki and when, 2-3 example questions, nature of the data, intended use",
     btn_propose: "Propose structure", prop_seed: "continue improving", prop_seed_tip: "Warm-start from the best split strategy of previous proposal runs",
     need_sources_task: "Enter source folders and a task description",
@@ -631,8 +777,13 @@ const I18N = {
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
     prop_title: "Stage 0 — 结构提案（从零开始）", mode_propose: "0 提案",
+    nav_opt: "Wiki 优化", nav_propose: "结构提案", nav_runs: "运行记录",
+    src_add_dir: "＋ 选择文件夹", src_add_files: "＋ 上传文件",
+    src_manual_ph: "输入路径后回车（例：~/repo/docs）",
+    src_kind_dir: "目录", src_kind_file: "文件", src_remove: "移除源",
+    src_upload_label: (first, n) => n > 1 ? `${first} 等 ${n} 个（已上传）` : `${first}（已上传）`,
     prop_desc: "还没有 wiki 时：指定仓库/数据文件夹 + 任务描述，即可获得文件夹结构提案，并标出缺乏依据的轴（gap）",
-    prop_sources: "源文件夹（每行一个）", prop_sources_ph: "~/myrepo/docs\n~/notes",
+    prop_sources: "源 — 用作 wiki 素材的仓库·文档", prop_sources_ph: "",
     prop_task: "任务描述", prop_task_ph: "该 wiki 的使用者与使用时机、2~3 个示例问题、数据的性质、产出用途",
     btn_propose: "运行结构提案", prop_seed: "继续改进", prop_seed_tip: "以之前提案 run 的最佳拆分策略作为 seed（warm start）",
     need_sources_task: "请输入源文件夹和任务描述",
@@ -655,6 +806,7 @@ function t(key, ...args) {
 }
 
 function applyLang() {
+  if (typeof srcState !== "undefined") try { renderSrcList(); } catch (e) {}
   document.documentElement.lang = LANG;
   $("lang").value = LANG;
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
@@ -677,7 +829,7 @@ function savePrefs() {
     localStorage.setItem("wikiopt_prefs", JSON.stringify({
       dir: $("dir").value.trim(), backend: $("backend").value,
       gens: $("gens").value, nqa: $("nqa").value,
-      propSources: $("propSources").value, propTask: $("propTask").value,
+      srcState, propTask: $("propTask").value, view: curView,
     }));
   } catch (e) {}
 }
@@ -689,7 +841,8 @@ function loadPrefs() {
   if (p.backend) $("backend").value = p.backend;
   if (p.gens) $("gens").value = p.gens;
   if (p.nqa) $("nqa").value = p.nqa;
-  if (p.propSources) $("propSources").value = p.propSources;
+  if (Array.isArray(p.srcState)) { srcState = p.srcState; renderSrcList(); }
+  if (p.view) showView(p.view, false);
   if (p.propTask) $("propTask").value = p.propTask;
 }
 
@@ -817,6 +970,7 @@ async function startJobRequest(body, msgEl) {
     if (!r.ok || j.error) { $(msgEl).textContent = j.error || t("request_failed"); return; }
     open_.add(j.id);
     hasActiveJob = true;
+    showView("runs");
   } catch (e) {
     $(msgEl).textContent = t("request_failed");
   } finally {
@@ -842,7 +996,7 @@ function startApply() {
 }
 
 function startPropose() {
-  const sources = $("propSources").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const sources = srcState.map(x => x.value);
   const task = $("propTask").value.trim();
   if (!sources.length || !task) { $("msg3").textContent = t("need_sources_task"); return; }
   startJobRequest({ mode:"propose", sources, task,
@@ -882,6 +1036,7 @@ async function startRun() {
     if (!r.ok || j.error) { $("msg").textContent = j.error || t("request_failed"); return; }
     open_.add(j.id);
     hasActiveJob = true;
+    showView("runs");
   } catch (e) {
     $("msg").textContent = t("request_failed");
   } finally {
@@ -1148,7 +1303,7 @@ function structureRun(run) {
       `<tr><th>${t("generation_label")}</th><th>${t("total")}</th><th>${t("acc_short")}</th><th>${t("eff_short")}</th><th>${t("th_files")}</th></tr>` +
       p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
-        <td>${h.score.total}</td><td>${h.score.accuracy}</td><td>${h.score.efficiency}</td>
+        <td${heat(h.score.total)}>${h.score.total}</td><td${heat(h.score.accuracy)}>${h.score.accuracy}</td><td${heat(h.score.efficiency)}>${h.score.efficiency}</td>
         <td>${(h.file_titles||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
     </details>`;
   const det = rep?.best?.result?.details;
@@ -1210,8 +1365,8 @@ function proposalRun(run, jobId) {
       `<tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>${t("th_files")}</th></tr>` +
       p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
-        <td>${h.score?.total ?? "—"}</td><td>${h.score?.accuracy ?? "—"}</td>
-        <td>${h.score?.efficiency ?? "—"}</td>
+        <td${heat(h.score?.total)}>${h.score?.total ?? "—"}</td><td${heat(h.score?.accuracy)}>${h.score?.accuracy ?? "—"}</td>
+        <td${heat(h.score?.efficiency)}>${h.score?.efficiency ?? "—"}</td>
         <td>${(h.page_paths||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
     </details>`;
   }
@@ -1288,6 +1443,7 @@ async function poll() {
     const r = await fetch("/api/runs");
     if (!r.ok) throw new Error(`poll failed: ${r.status}`);
     const { jobs } = await r.json();
+    $("runsCountNav").textContent = jobs.length || "";
     const parts = await Promise.all(jobs.map(renderJob));
     const html = parts.join("") ||
       `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
