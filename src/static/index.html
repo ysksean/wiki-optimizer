@@ -75,6 +75,7 @@
   }
   .section-head h2 { margin: 0; font-size: 18px; line-height: 26px; font-weight: 650; }
   .section-head .count { color: var(--dim); font-size: 13px; }
+  .work-status { margin-left: auto; color: var(--dim); font-size: 13px; }
 
   /* ---------- 패널 / 카드 ---------- */
   .card {
@@ -396,6 +397,7 @@
   <div class="section-head">
     <h2 data-i18n="runs_title"></h2>
     <span class="count" id="runsCount"></span>
+    <span class="work-status" id="workStatus" role="status" aria-live="polite"></span>
   </div>
   <div id="jobs"></div>
   </main>
@@ -410,6 +412,7 @@ let docsRequest = 0;
 let docsController = null;
 let requestPending = false;
 let hasActiveJob = false;
+let submittingMode = null;
 
 // ---------- i18n ----------
 const I18N = {
@@ -425,7 +428,7 @@ const I18N = {
     gens: "세대 수", gens_help: "세대당 문서별 약 1–2분",
     nqa: "질문 수", nqa_help: "정답률 평가 문항 (2–12)",
     backend: "백엔드", backend_claude: "claude (Claude Code 구독)", backend_codex: "codex (ChatGPT 구독)",
-    run_exp: "실험 실행",
+    run_exp: "실험 실행", starting: "시작 중…", starting_job: "작업을 시작하는 중…", job_in_progress: "작업 실행 중 · 완료 후 새 작업을 시작할 수 있습니다",
     wiki_title: "내 위키 진단 · 최적화",
     wiki_desc: "위 폴더(raw/ + wiki/)를 기준으로 현재 요약을 채점(Before)하고, best 전략으로 다시 요약해(After) 무엇이 바뀌는지 비교합니다. 원본과 기존 wiki는 수정하지 않습니다.",
     btn_audit: "현재 위키 진단 (Before)", btn_apply: "최적화 생성 (After)",
@@ -447,7 +450,7 @@ const I18N = {
     mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
     audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${d}/${t} 문서 채점 중…`,
     avg_score: n => `평균 점수 (${n}개 채점)`,
-    th_doc: "문서", th_raw: "raw", th_summary: "요약", th_score: "점수 (total · acc · eff)", none: "없음",
+    th_doc: "문서", th_raw: "raw", th_summary: "요약", th_score: "점수 (종합 · 정확도 · 효율)", none: "없음",
     apply_title: "최적화 Before → After", generating: (d,t) => ` — ${d}/${t} 생성 중…`,
     before_avg: "Before 평균", after_avg: "After 평균",
     used_strategy: s => `사용한 전략 (${s})`,
@@ -473,7 +476,7 @@ const I18N = {
     gens: "Generations", gens_help: "About 1–2 min per document each",
     nqa: "Questions", nqa_help: "Accuracy sample size (2–12)",
     backend: "Backend", backend_claude: "claude (Claude Code subscription)", backend_codex: "codex (ChatGPT subscription)",
-    run_exp: "Run experiment",
+    run_exp: "Run experiment", starting: "Starting…", starting_job: "Starting job…", job_in_progress: "Job in progress · new actions unlock when it finishes",
     wiki_title: "Audit & optimize my wiki",
     wiki_desc: "Scores your current summaries (Before) against the folder above (raw/ + wiki/), then re-summarizes with the best strategy (After) so you can compare. Originals and existing wiki files are never modified.",
     btn_audit: "Audit current wiki (Before)", btn_apply: "Generate optimized (After)",
@@ -495,7 +498,7 @@ const I18N = {
     mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
     audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scoring ${d}/${t} documents…`,
     avg_score: n => `average score (${n} scored)`,
-    th_doc: "document", th_raw: "raw", th_summary: "summary", th_score: "score (total · acc · eff)", none: "none",
+    th_doc: "document", th_raw: "raw", th_summary: "summary", th_score: "score (total · accuracy · efficiency)", none: "none",
     apply_title: "Optimization Before → After", generating: (d,t) => ` — generating ${d}/${t}…`,
     before_avg: "Before avg", after_avg: "After avg",
     used_strategy: s => `strategy used (${s})`,
@@ -521,7 +524,7 @@ const I18N = {
     gens: "代数", gens_help: "每代每篇文档约 1–2 分钟",
     nqa: "问题数", nqa_help: "准确率评估题数（2–12）",
     backend: "后端", backend_claude: "claude（Claude Code 订阅）", backend_codex: "codex（ChatGPT 订阅）",
-    run_exp: "运行实验",
+    run_exp: "运行实验", starting: "正在启动…", starting_job: "正在启动任务…", job_in_progress: "任务运行中 · 完成后可启动新任务",
     wiki_title: "诊断并优化我的 wiki",
     wiki_desc: "以上方文件夹（raw/ + wiki/）为基准给当前摘要评分（Before），再用最佳策略重新摘要（After）进行对比。原文和现有 wiki 文件不会被修改。",
     btn_audit: "诊断当前 wiki（Before）", btn_apply: "生成优化版（After）",
@@ -543,7 +546,7 @@ const I18N = {
     mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
     audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 正在评分 ${d}/${t} 篇文档…`,
     avg_score: n => `平均分（已评 ${n} 篇）`,
-    th_doc: "文档", th_raw: "raw", th_summary: "摘要", th_score: "分数 (total · acc · eff)", none: "无",
+    th_doc: "文档", th_raw: "raw", th_summary: "摘要", th_score: "分数（总分 · 准确率 · 效率）", none: "无",
     apply_title: "优化 Before → After", generating: (d,t) => ` — 正在生成 ${d}/${t}…`,
     before_avg: "Before 平均", after_avg: "After 平均",
     used_strategy: s => `所用策略（${s}）`,
@@ -593,6 +596,15 @@ function syncActionStates() {
   $("auditBtn").disabled = !ready || busy;
   $("applyBtn").disabled = !ready || busy;
   $("go").disabled = selected === 0 || busy;
+  const actions = [["go", "run", "run_exp"], ["auditBtn", "audit", "btn_audit"], ["applyBtn", "apply", "btn_apply"]];
+  actions.forEach(([id, mode, label]) => {
+    const button = $(id);
+    const starting = requestPending && submittingMode === mode;
+    button.textContent = starting ? t("starting") : t(label);
+    if (starting) button.setAttribute("aria-busy", "true");
+    else button.removeAttribute("aria-busy");
+  });
+  $("workStatus").textContent = requestPending ? t("starting_job") : hasActiveJob ? t("job_in_progress") : "";
 }
 
 function syncDirActions() {
@@ -689,6 +701,7 @@ async function pickDir() {
 async function startJobRequest(body, msgEl) {
   if (requestPending || hasActiveJob) return;
   $(msgEl).textContent = "";
+  submittingMode = body.mode;
   requestPending = true;
   syncActionStates();
   try {
@@ -702,6 +715,7 @@ async function startJobRequest(body, msgEl) {
     $(msgEl).textContent = t("request_failed");
   } finally {
     requestPending = false;
+    submittingMode = null;
     syncActionStates();
     poll();
   }
@@ -726,6 +740,7 @@ async function startRun() {
   $("msg").textContent = "";
   const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
   if (!files.length) { $("msg").textContent = t("need_docs"); return; }
+  submittingMode = "run";
   requestPending = true;
   syncActionStates();
   try {
@@ -742,6 +757,7 @@ async function startRun() {
     $("msg").textContent = t("request_failed");
   } finally {
     requestPending = false;
+    submittingMode = null;
     syncActionStates();
     poll();
   }
@@ -772,7 +788,7 @@ function wordDiff(a, b) {
 }
 
 function fmtScore(s) {
-  return s ? `${s.total} <span style="color:var(--dim)">(acc ${s.accuracy} · eff ${s.efficiency})</span>` : "-";
+  return s ? `${s.total} <span style="color:var(--dim)">(${t("acc_short")} ${s.accuracy} · ${t("eff_short")} ${s.efficiency})</span>` : "-";
 }
 
 function auditView(res, status) {

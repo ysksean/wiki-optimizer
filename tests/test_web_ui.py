@@ -77,6 +77,20 @@ def test_job_controls_preserve_focus_and_prevent_duplicate_submissions():
     assert "expandedDetails" in HTML
 
 
+def test_busy_actions_explain_their_state_and_localize_score_labels():
+    parser = _dashboard()
+
+    assert "workStatus" in parser.ids
+    assert 'id="workStatus" role="status" aria-live="polite"' in HTML
+    assert 'button.setAttribute("aria-busy", "true")' in HTML
+    assert 't("starting_job")' in HTML
+    assert 't("job_in_progress")' in HTML
+    assert 't("acc_short")' in HTML
+    assert 't("eff_short")' in HTML
+    assert "점수 (종합 · 정확도 · 효율)" in HTML
+    assert "分数（总分 · 准确率 · 效率）" in HTML
+
+
 def test_motion_and_touch_target_contracts_are_present():
     assert "@media (prefers-reduced-motion: reduce)" in HTML
     assert ".docs-toolbar button { min-height: 44px" in HTML
