@@ -203,6 +203,9 @@ const I18N = {
     diff_legend: (b,a) => `기존 요약 대비 변경 (<del>삭제</del> / <ins>추가</ins>) · ${b} → ${a}자`,
     new_summary: "기존 요약 없음 — 신규 생성",
     gen_progress: (d,t) => `(${d}/${t}세대)`, accuracy: "정확도", efficiency: "효율",
+    "arm_evolve": "진화", "arm_control": "대조군 · 무진화", "arm_evolve-nohist": "진화 · 이력 없음", "arm_evolve-wiki": "진화 · 패턴 위키",
+    parse_failed_note: n => `${n}개 세대는 판정 파싱 실패로 점수가 무효 — 집계에서 제외`, strategy_unchanged: "변경 없음",
+    th_elapsed: "소요", provenance_title: "재현성 — 백엔드 · 모델 · 코드", strategy_diff_hint: "이전 세대 대비 바뀐 부분만 강조",
     strategy_per_gen: "세대별 전략 프롬프트", th_strategy: "전략",
     best_summary: "best 요약 보기", len_vs_raw: "원본 대비 길이",
     structure_title: d => `구조 진화 — ${d}`,
@@ -287,6 +290,9 @@ const I18N = {
     diff_legend: (b,a) => `changes vs existing summary (<del>removed</del> / <ins>added</ins>) · ${b} → ${a} chars`,
     new_summary: "no existing summary — newly generated",
     gen_progress: (d,t) => `(gen ${d}/${t})`, accuracy: "accuracy", efficiency: "efficiency",
+    "arm_evolve": "evolve", "arm_control": "control · no evolution", "arm_evolve-nohist": "evolve · no history", "arm_evolve-wiki": "evolve · pattern wiki",
+    parse_failed_note: n => `${n} generation(s) have invalid scores (judge parse failed) — excluded from aggregates`, strategy_unchanged: "unchanged",
+    th_elapsed: "elapsed", provenance_title: "Provenance — backend · model · code", strategy_diff_hint: "changes vs previous generation are highlighted",
     strategy_per_gen: "strategy prompt per generation", th_strategy: "strategy",
     best_summary: "view best summary", len_vs_raw: "length vs raw",
     structure_title: d => `Structure evolution — ${d}`,
@@ -371,6 +377,9 @@ const I18N = {
     diff_legend: (b,a) => `相对现有摘要的变化（<del>删除</del> / <ins>新增</ins>）· ${b} → ${a} 字`,
     new_summary: "无现有摘要 — 新生成",
     gen_progress: (d,t) => `（第 ${d}/${t} 代）`, accuracy: "准确率", efficiency: "效率",
+    "arm_evolve": "进化", "arm_control": "对照组 · 不进化", "arm_evolve-nohist": "进化 · 无历史", "arm_evolve-wiki": "进化 · 模式 wiki",
+    parse_failed_note: n => `${n} 代的评分无效（判定解析失败）— 已从汇总中排除`, strategy_unchanged: "无变化",
+    th_elapsed: "耗时", provenance_title: "可复现性 — 后端 · 模型 · 代码", strategy_diff_hint: "高亮相对上一代的变化",
     strategy_per_gen: "各代策略提示词", th_strategy: "策略",
     best_summary: "查看最佳摘要", len_vs_raw: "相对原文长度",
     structure_title: d => `结构进化 — ${d}`,
@@ -878,7 +887,7 @@ function applyView(res, status) {
   return html + "</div>";
 }
 
-function chart(hist, key, bestGen) {
+function chart(hist, key, bestGen, failed = new Set()) {
   const W = 640, H = 180, P = 32;
   const xs = hist.map(h => h.generation);
   const X = i => P + (W - 2*P) * (xs.length === 1 ? 0.5 : i / (xs.length - 1));
@@ -898,6 +907,8 @@ function chart(hist, key, bestGen) {
   if (hist[0][key])
     svg += line(h => (h[key]||{}).total ?? 0, "var(--line-strong)", 'stroke-width="1.5" stroke-dasharray="4 5"');
   svg += line(h => h.score.total, "var(--acc)", 'stroke-width="2.5"');
+  hist.forEach((h, i) => { if (failed.has(h.generation))
+    svg += `<circle cx="${X(i)}" cy="${Y(h.score.total)}" r="5" fill="var(--bg)" stroke="var(--line-strong)" stroke-width="1.5"/>`; });
   if (bestGen != null) {
     const bi = xs.indexOf(bestGen);
     if (bi >= 0) {
@@ -911,20 +922,53 @@ function chart(hist, key, bestGen) {
   return `<div class="chart">${legend}${svg}</div>`;
 }
 
+
+// 결과 카드 공용 — arm 뱃지 + provenance 칩 (report가 있을 때). 신뢰성 장치를 화면에 드러낸다.
+function resultMeta(p, rep) {
+  const arm = (rep && rep.arm) || (p && p.arm) || "";
+  const prov = rep && rep.provenance;
+  let html = "";
+  if (arm) html += `<span class="arm arm-${esc(arm)}">${t("arm_" + arm) || esc(arm)}</span>`;
+  if (prov) {
+    const bits = [prov.backend, prov.model, prov.code_sha].filter(Boolean).map(esc).join(" · ");
+    html += `<span class="prov" title="${esc(t("provenance_title"))}${prov.question_set_sha ? " · qs " + esc(prov.question_set_sha) : ""}">${bits}</span>`;
+  }
+  return html ? `<div class="result-meta">${html}</div>` : "";
+}
+function failedGens(rep) { return new Set((rep && rep.parse_failed_generations) || []); }
+function parseFailedNote(failed) {
+  return failed.size ? `<div class="parse-failed-note">${t("parse_failed_note", failed.size)}</div>` : "";
+}
 function summaryRun(run) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
+  const failed = failedGens(rep);
   const best = p.history[p.best_gen >= 0 ? p.best_gen : 0] || {};
   const baseline = Number(p.history[0]?.score?.total);
   const bestTotal = Number(p.best_total);
   const improvementValue = baseline > 0 && Number.isFinite(bestTotal)
     ? (bestTotal - baseline) / baseline * 100 : null;
   const improvement = improvementValue > 0 ? improvementValue.toFixed(1) : null;
-  const trail = p.history.map((h, index) => `<div class="evolution-step${h.generation===p.best_gen ? " best" : ""}">
-      <i></i><b>${h.score?.total ?? "-"}</b><span>${index === 0 ? t("baseline") : h.generation===p.best_gen ? t("best_label") : t("gen_short", h.generation)}</span></div>`).join("");
-  let html = `<div class="runbox evolution-run"><div class="result-heading"><h3>${esc(p.doc)}
-      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
+  const trail = p.history.map((h, index) => {
+    const cls = h.generation===p.best_gen ? " best" : failed.has(h.generation) ? " failed" : "";
+    return `<div class="evolution-step${cls}"><i></i><b>${h.score?.total ?? "-"}</b>
+      <span>${index === 0 ? t("baseline") : h.generation===p.best_gen ? t("best_label") : t("gen_short", h.generation)}</span></div>`;
+  }).join("");
+  // 세대별 전략: 이전 세대 대비 diff — 무엇이 바뀌어서 점수가 움직였는지
+  const rows = p.history.map((h, i) => {
+    const prev = i > 0 ? p.history[i-1].strategy : null;
+    const cell = prev == null ? esc(h.strategy)
+      : prev === h.strategy ? `<span class="muted">${t("strategy_unchanged")}</span>`
+      : wordDiff(prev, h.strategy);
+    const cls = h.generation===p.best_gen ? ' class="is-best"' : failed.has(h.generation) ? ' class="is-failed"' : "";
+    return `<tr${cls}><td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+      <td>${h.score.total}</td><td>${h.score.length_ratio}</td><td>${h.elapsed_sec != null ? h.elapsed_sec + "s" : "-"}</td>
+      <td class="strategy-cell">${cell}</td></tr>`;
+  }).join("");
+  let html = `<div class="runbox evolution-run"><div class="result-heading"><div><h3>${esc(p.doc)}
+      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>${resultMeta(p, rep)}</div>
       <div class="result-score"><b>${p.best_total}</b>${improvement == null ? "" : `<span>↑ ${t("score_improved", improvement)}</span>`}</div></div>
+    ${parseFailedNote(failed)}
     <div class="kpis">
       <div class="kpi"><b>${(best.score||{}).length_ratio ?? "-"}</b><span>${t("ratio")}</span></div>
       <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>${t("accuracy")}</span></div>
@@ -932,13 +976,9 @@ function summaryRun(run) {
     </div>
     <div class="evolution-label">${t("evolution_trail")}</div>
     <div class="evolution-steps" style="--step-count:${Math.max(1,p.history.length)}">${trail}</div>
-    ${chart(p.history, "train_score", p.best_gen)}
-    <details><summary>${t("strategy_per_gen")}</summary>${wrapTable(
-      `<tr><th>${t("generation_label")}</th><th>${t("held_out")}</th><th>${t("ratio")}</th><th>${t("th_strategy")}</th></tr>` +
-      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
-        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
-        <td>${h.score.total}</td><td>${h.score.length_ratio}</td>
-        <td>${esc(h.strategy)}</td></tr>`).join(""))}
+    ${chart(p.history, "train_score", p.best_gen, failed)}
+    <details><summary>${t("strategy_per_gen")} <span class="muted">· ${t("strategy_diff_hint")}</span></summary>${wrapTable(
+      `<tr><th>${t("generation_label")}</th><th>${t("held_out")}</th><th>${t("ratio")}</th><th>${t("th_elapsed")}</th><th>${t("th_strategy")}</th></tr>` + rows)}
     </details>`;
   if (rep && rep.best && rep.best.summary) {
     const ratio = (rep.history[rep.best.generation]||{}).score?.length_ratio;
@@ -950,17 +990,17 @@ function summaryRun(run) {
   }
   return html + "</div>";
 }
-
 function structureRun(run) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
+  const failed = failedGens(rep);
   let html = `<div class="runbox"><h3>${t("structure_title", p.docs.map(esc).join(", "))}
-      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
+      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>${resultMeta(p, rep)}${parseFailedNote(failed)}
     <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>${t("best_gen", p.best_gen)}</span></div></div>
-    ${chart(p.history, "", p.best_gen)}
+    ${chart(p.history, "", p.best_gen, failed)}
     <details><summary>${t("files_per_gen")}</summary>${wrapTable(
       `<tr><th>${t("generation_label")}</th><th>${t("total")}</th><th>${t("acc_short")}</th><th>${t("eff_short")}</th><th>${t("th_files")}</th></tr>` +
-      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
+      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':failed.has(h.generation)?' class="is-failed"':''}>
         <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
         <td${heat(h.score.total)}>${h.score.total}</td><td${heat(h.score.accuracy)}>${h.score.accuracy}</td><td${heat(h.score.efficiency)}>${h.score.efficiency}</td>
         <td>${(h.file_titles||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
