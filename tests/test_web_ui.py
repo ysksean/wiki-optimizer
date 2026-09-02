@@ -124,3 +124,9 @@ def test_result_cards_expose_trust_signals_and_strategy_diff():
     assert "parse_failed_generations" in JS
     assert JS.count('"arm_control":') == 3  # 3개 언어
     assert ".arm-control" in CSS and ".parse-failed-note" in CSS
+
+
+def test_runs_view_has_filters_and_list_level_chips():
+    assert 'id="runsModeFilter"' in HTML and 'id="runsStatus"' in HTML and 'id="runsSearch"' in HTML
+    assert "function jobMatches(j)" in JS and "j.result_summary" in JS
+    assert ".chip-score" in CSS

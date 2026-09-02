@@ -394,3 +394,28 @@ def test_static_route_serves_css_js_and_blocks_traversal():
                 assert e.code == 404
     finally:
         srv.shutdown()
+
+
+def test_run_job_writes_result_summary_from_reports(web_env, monkeypatch):
+    """완료 시 run 리포트를 목록용 result_summary로 요약한다 (판정 실패 run은 best에서 제외)."""
+    job = _make_job(status="queued", job_id="rs1", files=["a.md"])
+    web.JOBS["rs1"] = job
+    web.CANCEL_EVENTS["rs1"] = threading.Event()
+    for name, best, failed in (("r1", 0.41, False), ("r2", 0.99, True), ("r3", 0.62, False)):
+        d = os.path.join(job["dir"], name); os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "report.json"), "w") as f:
+            json.dump({"arm": "evolve", "parse_failed": failed, "best": {"total": best},
+                       "provenance": {"backend": "claude", "model": "m-1", "code_sha": "abc1234"}}, f)
+    monkeypatch.setattr(web.evolve, "evolve", lambda *a, **kw: None)
+
+    web._run_job(job)
+
+    rs = job["result_summary"]
+    assert rs["n_runs"] == 3 and rs["parse_failed_runs"] == 1
+    assert rs["best_total"] == 0.62  # 0.99는 parse_failed run — 제외
+    assert rs["model"] == "m-1" and rs["code_sha"] == "abc1234" and rs["arms"] == ["evolve"]
+
+
+def test_result_summary_none_without_reports(web_env):
+    job = _make_job(status="done", job_id="rs2")
+    assert web._result_summary(job) is None

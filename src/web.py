@@ -133,6 +133,37 @@ def _run_job(job):
         CANCEL_EVENTS.pop(job["id"], None)  # 종료된 job의 Event 누수 방지
 
 
+def _result_summary(job):
+    """완료된 job의 run 리포트들을 목록용 한 줄로 요약한다 — 열지 않아도 점수·출처가 보이게.
+
+    best_total은 판정 파싱 실패가 없는 run 중 최댓값. provenance는 첫 리포트 기준.
+    리포트가 없거나 깨져 있으면 None (구 job·audit/apply 등).
+    """
+    reports = []
+    for run_dir in sorted(glob.glob(os.path.join(job["dir"], "*"))):
+        p = os.path.join(run_dir, "report.json")
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p) as f:
+                reports.append(json.load(f))
+        except (OSError, json.JSONDecodeError):
+            continue
+    if not reports:
+        return None
+    valid = [r for r in reports if not r.get("parse_failed")]
+    totals = [r.get("best", {}).get("total") for r in valid]
+    totals = [x for x in totals if isinstance(x, (int, float))]
+    prov = next((r.get("provenance") for r in reports if r.get("provenance")), None) or {}
+    return {
+        "n_runs": len(reports),
+        "parse_failed_runs": len(reports) - len(valid),
+        "best_total": max(totals) if totals else None,
+        "arms": sorted({r.get("arm") for r in reports if r.get("arm")}),
+        "backend": prov.get("backend"), "model": prov.get("model"), "code_sha": prov.get("code_sha"),
+    }
+
+
 def _run_job_locked(job, cancel):
     with RUN_LOCK:
         if cancel.is_set():  # 락 대기 중(queued) 취소됨
@@ -202,6 +233,10 @@ def _run_job_locked(job, cancel):
             job["error"] = f"{type(e).__name__}: {e}"
         finally:
             job["finished_at"] = time.time()
+            try:
+                job["result_summary"] = _result_summary(job)
+            except Exception:  # 요약은 부가 정보 — 실패해도 job 종료를 막지 않는다
+                job["result_summary"] = None
             _save_job(job)
 
 
