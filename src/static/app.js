@@ -207,6 +207,8 @@ const I18N = {
     gen_progress: (d,t) => `(${d}/${t}세대)`, accuracy: "정확도", efficiency: "효율",
     "arm_evolve": "진화", "arm_control": "대조군 · 무진화", "arm_evolve-nohist": "진화 · 이력 없음", "arm_evolve-wiki": "진화 · 패턴 위키",
     parse_failed_note: n => `${n}개 세대는 판정 파싱 실패로 점수가 무효 — 집계에서 제외`, strategy_unchanged: "변경 없음",
+    vs_baseline: "vs 기준", delta_flat: "= 기준", tile_best: "best held-out", tile_gain: "개선폭", tile_gens: "세대", tile_judge: "판정",
+    tile_failed: n => `${n} 실패`, tile_valid: "전부 유효", tile_excluded: "집계 제외", tile_parse_ok: "판정 정상", baseline_val: n => `기준 ${n}`, best_gen_short: n => `best ${n}세대`, and_more: n => `외 ${n}`,
     th_elapsed: "소요", provenance_title: "재현성 — 백엔드 · 모델 · 코드", strategy_diff_hint: "이전 세대 대비 바뀐 부분만 강조",
     strategy_per_gen: "세대별 전략 프롬프트", th_strategy: "전략",
     best_summary: "best 요약 보기", len_vs_raw: "원본 대비 길이",
@@ -296,6 +298,8 @@ const I18N = {
     gen_progress: (d,t) => `(gen ${d}/${t})`, accuracy: "accuracy", efficiency: "efficiency",
     "arm_evolve": "evolve", "arm_control": "control · no evolution", "arm_evolve-nohist": "evolve · no history", "arm_evolve-wiki": "evolve · pattern wiki",
     parse_failed_note: n => `${n} generation(s) have invalid scores (judge parse failed) — excluded from aggregates`, strategy_unchanged: "unchanged",
+    vs_baseline: "vs baseline", delta_flat: "= baseline", tile_best: "best held-out", tile_gain: "Gain", tile_gens: "Generations", tile_judge: "Judge",
+    tile_failed: n => `${n} failed`, tile_valid: "all valid", tile_excluded: "excluded", tile_parse_ok: "parse ok", baseline_val: n => `baseline ${n}`, best_gen_short: n => `best gen ${n}`, and_more: n => `+${n} more`,
     th_elapsed: "elapsed", provenance_title: "Provenance — backend · model · code", strategy_diff_hint: "changes vs previous generation are highlighted",
     strategy_per_gen: "strategy prompt per generation", th_strategy: "strategy",
     best_summary: "view best summary", len_vs_raw: "length vs raw",
@@ -385,6 +389,8 @@ const I18N = {
     gen_progress: (d,t) => `（第 ${d}/${t} 代）`, accuracy: "准确率", efficiency: "效率",
     "arm_evolve": "进化", "arm_control": "对照组 · 不进化", "arm_evolve-nohist": "进化 · 无历史", "arm_evolve-wiki": "进化 · 模式 wiki",
     parse_failed_note: n => `${n} 代的评分无效（判定解析失败）— 已从汇总中排除`, strategy_unchanged: "无变化",
+    vs_baseline: "vs 基准", delta_flat: "= 基准", tile_best: "best held-out", tile_gain: "提升", tile_gens: "代数", tile_judge: "判定",
+    tile_failed: n => `${n} 次失败`, tile_valid: "全部有效", tile_excluded: "已排除", tile_parse_ok: "判定正常", baseline_val: n => `基准 ${n}`, best_gen_short: n => `最佳第 ${n} 代`, and_more: n => `等 ${n} 个`,
     th_elapsed: "耗时", provenance_title: "可复现性 — 后端 · 模型 · 代码", strategy_diff_hint: "高亮相对上一代的变化",
     strategy_per_gen: "各代策略提示词", th_strategy: "策略",
     best_summary: "查看最佳摘要", len_vs_raw: "相对原文长度",
@@ -912,6 +918,12 @@ function chart(hist, key, bestGen, failed = new Set()) {
   }
   if (hist[0][key])
     svg += line(h => (h[key]||{}).total ?? 0, "var(--line-strong)", 'stroke-width="1.5" stroke-dasharray="4 5"');
+  {
+    const gid = "g" + Math.random().toString(36).slice(2, 8);
+    const pts = hist.map((h, i) => `${X(i)},${Y(h.score.total)}`).join(" ");
+    svg += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--acc)" stop-opacity=".28"/><stop offset="1" stop-color="var(--acc)" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="${X(0)},${H-P} ${pts} ${X(xs.length-1)},${H-P}" fill="url(#${gid})"/>`;
+  }
   svg += line(h => h.score.total, "var(--acc)", 'stroke-width="2.5"');
   hist.forEach((h, i) => { if (failed.has(h.generation))
     svg += `<circle cx="${X(i)}" cy="${Y(h.score.total)}" r="5" fill="var(--bg)" stroke="var(--line-strong)" stroke-width="1.5"/>`; });
@@ -945,6 +957,24 @@ function failedGens(rep) { return new Set((rep && rep.parse_failed_generations) 
 function parseFailedNote(failed) {
   return failed.size ? `<div class="parse-failed-note">${t("parse_failed_note", failed.size)}</div>` : "";
 }
+// 스파크라인 — KPI 카드 안의 세대 추이 (그라데이션 영역 + 마지막 점)
+function spark(values, best = -1) {
+  const W = 96, H = 28, n = values.length;
+  if (!n) return "";
+  const X = i => n === 1 ? W / 2 : 4 + (W - 8) * i / (n - 1);
+  const Y = v => H - 3 - (H - 8) * Math.max(0, Math.min(1, v));
+  const pts = values.map((v, i) => `${X(i)},${Y(v)}`).join(" ");
+  const gid = "s" + Math.random().toString(36).slice(2, 8);
+  const bi = best >= 0 && best < n ? best : n - 1;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--acc)" stop-opacity=".35"/><stop offset="1" stop-color="var(--acc)" stop-opacity="0"/></linearGradient></defs>
+    <polygon points="${X(0)},${H} ${pts} ${X(n-1)},${H}" fill="url(#${gid})"/><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.5"/>
+    <circle cx="${X(bi)}" cy="${Y(values[bi])}" r="2.5" fill="var(--acc)"/></svg>`;
+}
+function deltaChip(cur, base, digits = 2) {
+  if (!Number.isFinite(cur) || !Number.isFinite(base)) return "";
+  const d = cur - base; if (Math.abs(d) < 1e-9) return `<span class="delta flat">${t("delta_flat")}</span>`;
+  return `<span class="delta ${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(digits)} <em>${t("vs_baseline")}</em></span>`;
+}
 function summaryRun(run) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
@@ -975,10 +1005,18 @@ function summaryRun(run) {
       <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>${resultMeta(p, rep)}</div>
       <div class="result-score"><b>${p.best_total}</b>${improvement == null ? "" : `<span>↑ ${t("score_improved", improvement)}</span>`}</div></div>
     ${parseFailedNote(failed)}
+    <div class="bento">
+      <div class="tile tile-hero"><span>${t("tile_best")}</span><b>${p.best_total}</b>${deltaChip(bestTotal, baseline, 3)}${spark(p.history.map(h => h.score?.total ?? 0), p.best_gen)}</div>
+      <div class="tile"><span>${t("tile_gain")}</span><b>${improvement == null ? "—" : "+" + improvement + "%"}</b><small>${t("baseline_val", baseline)}</small></div>
+      <div class="tile"><span>${t("tile_gens")}</span><b>${p.done_generations}<small>/${p.generations}</small></b><small>${t("best_gen_short", p.best_gen)}</small></div>
+      <div class="tile ${failed.size ? "tile-warn" : "tile-ok"}"><span>${t("tile_judge")}</span><b>${failed.size ? t("tile_failed", failed.size) : t("tile_valid")}</b><small>${failed.size ? t("tile_excluded") : t("tile_parse_ok")}</small></div>
+    </div>
     <div class="kpis">
-      <div class="kpi"><b>${(best.score||{}).length_ratio ?? "-"}</b><span>${t("ratio")}</span></div>
-      <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>${t("accuracy")}</span></div>
-      <div class="kpi"><b>${(best.score||{}).efficiency ?? "-"}</b><span>${t("efficiency")}</span></div>
+      ${[["length_ratio", t("ratio")], ["accuracy", t("accuracy")], ["efficiency", t("efficiency")]].map(([k, label]) => {
+        const vals = p.history.map(h => Number((h.score||{})[k] ?? 0));
+        const cur = Number((best.score||{})[k]), base = vals[0];
+        return `<div class="kpi"><div class="kpi-top"><span>${label}</span>${deltaChip(cur, base)}</div><b>${(best.score||{})[k] ?? "-"}</b>${spark(vals, p.best_gen)}</div>`;
+      }).join("")}
     </div>
     <div class="evolution-label">${t("evolution_trail")}</div>
     <div class="evolution-steps" style="--step-count:${Math.max(1,p.history.length)}">${trail}</div>
@@ -1170,16 +1208,24 @@ async function cancelRun(id) {
 }
 
 let timer = null, lastHtml = "";
-let lastTimelineHtml = "";
+let lastTimelineHtml = "", autoOpenedLatest = false;
 // 위키 최적화 화면의 실행 타임라인 — 가장 최근 실행 1건. 실행 기록과 같은 카드를 쓰되 id는 tl- 접두로 분리
 function renderTimeline(jobs, parts) {
   const el = $("optTimeline");
   if (!el) return;
+  // 첫 로드에 최신 실행은 펼쳐진 채로 — 결과가 주인공이라는 레이아웃 원칙
+  if (jobs.length && !autoOpenedLatest) { autoOpenedLatest = true; if (!open_.has(jobs[0].id)) { open_.add(jobs[0].id); setTimeout(poll, 50); } }
   const expanded = [...el.querySelectorAll("details")].flatMap((d, i) => d.open ? [i] : []);
   const html = jobs.length
     ? parts[0].replaceAll(`id="job-${jobs[0].id}-body"`, `id="tl-job-${jobs[0].id}-body"`)
                .replaceAll(`aria-controls="job-${jobs[0].id}-body"`, `aria-controls="tl-job-${jobs[0].id}-body"`)
     : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t("no_jobs_hint")}</span></div>`;
+  const ls = $("liveStatus");
+  if (ls) {
+    const j = jobs[0];
+    ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span>${t("status_" + j.status)} · ${t("mode_" + j.mode)} · ${esc(j.doc_names[0] || "")}${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
+      (j.result_summary && j.result_summary.best_total != null ? ` · best <b>${j.result_summary.best_total}</b>` : "");
+  }
   if (html === lastTimelineHtml) return;
   el.innerHTML = html; lastTimelineHtml = html;
   const details = el.querySelectorAll("details");

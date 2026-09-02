@@ -130,3 +130,11 @@ def test_runs_view_has_filters_and_list_level_chips():
     assert 'id="runsModeFilter"' in HTML and 'id="runsStatus"' in HTML and 'id="runsSearch"' in HTML
     assert "function jobMatches(j)" in JS and "j.result_summary" in JS
     assert ".chip-score" in CSS
+
+
+def test_quiet_saas_result_summary_and_live_status():
+    """⑤: 벤토 요약 타일·스파크 KPI·델타 칩·상태 알약이 있고, 카피는 3개 언어 i18n."""
+    assert "function spark(values" in JS and "function deltaChip(" in JS
+    assert 'class="bento"' in JS and 'id="liveStatus"' in HTML
+    assert JS.count("tile_best:") == 3 and JS.count("vs_baseline:") == 3
+    assert ".tile-hero" in CSS and ".delta.up" in CSS
