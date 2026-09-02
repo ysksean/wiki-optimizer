@@ -178,6 +178,8 @@ const I18N = {
     request_failed: "요청에 실패했습니다. 잠시 후 다시 시도하세요.",
     no_jobs: "아직 실행한 실험이 없습니다", no_jobs_hint: "문서를 불러오고 실험을 실행하면 세대별 점수와 전략 변화가 여기에 표시됩니다.",
     waiting_gen: "아직 첫 세대 결과 대기 중…",
+    filter_all: "전체", filter_mode: "모드 필터", filter_status: "상태 필터", filter_active: "진행 중", runs_search: "문서 이름으로 찾기",
+    runs_filtered: (n, total) => `${n} / ${total}건`, chip_best: "best", chip_failed: n => `판정 실패 ${n}`,
     stop: "중지", stopping: "중지 요청됨…",
     preparing_q: "질문 세트 준비 중…", failed: "실패",
     status_running: "실행 중", status_done: "완료", status_error: "오류", status_queued: "대기 중", status_cancelled: "중지됨", status_interrupted: "중단됨",
@@ -265,6 +267,8 @@ const I18N = {
     request_failed: "The request failed. Please try again.",
     no_jobs: "No experiments yet", no_jobs_hint: "Load documents and run an experiment to see generation scores and strategy changes here.",
     waiting_gen: "Waiting for the first generation…",
+    filter_all: "All", filter_mode: "Filter by mode", filter_status: "Filter by status", filter_active: "Active", runs_search: "Search by document",
+    runs_filtered: (n, total) => `${n} / ${total}`, chip_best: "best", chip_failed: n => `${n} parse failed`,
     stop: "Stop", stopping: "Stop requested…",
     preparing_q: "Preparing question set…", failed: "Failed",
     status_running: "Running", status_done: "Done", status_error: "Error", status_queued: "Queued", status_cancelled: "Stopped", status_interrupted: "Interrupted",
@@ -352,6 +356,8 @@ const I18N = {
     request_failed: "请求失败，请稍后重试。",
     no_jobs: "还没有运行过实验", no_jobs_hint: "加载文档并运行实验后，这里将显示各代评分和策略变化。",
     waiting_gen: "等待第一代结果…",
+    filter_all: "全部", filter_mode: "按模式筛选", filter_status: "按状态筛选", filter_active: "进行中", runs_search: "按文档名搜索",
+    runs_filtered: (n, total) => `${n} / ${total} 条`, chip_best: "best", chip_failed: n => `${n} 个判定失败`,
     stop: "停止", stopping: "已请求停止…",
     preparing_q: "正在准备问题集…", failed: "失败",
     status_running: "运行中", status_done: "已完成", status_error: "错误", status_queued: "等待中", status_cancelled: "已停止", status_interrupted: "已中断",
@@ -1081,6 +1087,37 @@ function proposalRun(run, jobId) {
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
+// 목록 레벨 칩 — 서버가 완료 시 요약한 result_summary (열지 않아도 점수·출처가 보인다)
+function jobChips(j) {
+  const r = j.result_summary;
+  if (!r) return "";
+  let html = "";
+  if (r.best_total != null) html += `<span class="chip chip-score"><b>${r.best_total}</b>${t("chip_best")}</span>`;
+  if (r.parse_failed_runs) html += `<span class="chip chip-warn">${t("chip_failed", r.parse_failed_runs)}</span>`;
+  const prov = [r.model, r.code_sha].filter(Boolean).map(esc).join(" · ");
+  if (prov) html += `<span class="chip chip-prov" title="${esc(t("provenance_title"))}">${prov}</span>`;
+  return html ? `<span class="job-chips">${html}</span>` : "";
+}
+
+// 실행 기록 필터 — 모드/상태/문서명. 타임라인(최신 1건)에는 적용하지 않는다
+const runsFilter = { mode: "all", status: "all", q: "" };
+function setRunsFilter(key, value, btn) {
+  runsFilter[key] = key === "q" ? value.trim().toLowerCase() : value;
+  if (btn) {
+    for (const b of btn.parentElement.querySelectorAll("button")) {
+      const on = b === btn; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+    }
+  }
+  lastHtml = ""; poll();
+}
+function jobMatches(j) {
+  if (runsFilter.mode !== "all" && j.mode !== runsFilter.mode) return false;
+  if (runsFilter.status === "active" && !["running", "queued"].includes(j.status)) return false;
+  if (runsFilter.status !== "all" && runsFilter.status !== "active" && j.status !== runsFilter.status) return false;
+  if (runsFilter.q && !j.doc_names.some(n => n.toLowerCase().includes(runsFilter.q))) return false;
+  return true;
+}
+
 async function renderJob(j) {
   const isOpen = open_.has(j.id);
   const badge = `<span class="badge b-${j.status}">${t("status_" + j.status)}</span>`;
@@ -1119,6 +1156,7 @@ async function renderJob(j) {
       aria-expanded="${isOpen}" aria-controls="job-${j.id}-body">
       ${badge} <span class="mode">${t("mode_" + j.mode)}</span>
       <span class="docs-list">${j.doc_names.map(esc).join(", ")}</span>
+      ${jobChips(j)}
       <span class="meta">${t("run_meta", j.mode, j.backend, j.generations, when)}</span>
       <span class="chev${isOpen ? " open" : ""}" aria-hidden="true">▾</span>
     </button>${stopUi}</div>${inner}</div>`;
@@ -1159,9 +1197,11 @@ async function poll() {
     const { jobs } = await r.json();
     $("runsCountNav").textContent = jobs.length || "";
     const parts = await Promise.all(jobs.map(renderJob));
-    const html = parts.join("") ||
+    const shown = parts.filter((_, i) => jobMatches(jobs[i]));
+    const html = shown.join("") ||
       `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
-    $("runsCount").textContent = jobs.length ? t("runs_count", jobs.length) : "";
+    $("runsCount").textContent = !jobs.length ? ""
+      : shown.length === jobs.length ? t("runs_count", jobs.length) : t("runs_filtered", shown.length, jobs.length);
     hasActiveJob = jobs.some(j => j.status === "running" || j.status === "queued");
     delay = hasActiveJob ? 2000 : 10000;
     renderTimeline(jobs, parts);

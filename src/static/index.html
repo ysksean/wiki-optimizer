@@ -97,6 +97,18 @@
 
   <section id="view-runs" class="view view-shell" hidden>
   <div class="page-intro"><div><div class="eyebrow" data-i18n="runs_eyebrow"></div><h2 data-i18n="runs_title"></h2><p data-i18n="runs_desc"></p></div></div>
+  <div class="runs-filters">
+    <div class="doc-filter" role="group" data-i18n-aria-label="filter_mode" id="runsModeFilter">
+      <button type="button" class="on" data-mode="all" aria-pressed="true" onclick="setRunsFilter('mode','all',this)" data-i18n="filter_all"></button>
+      <button type="button" data-mode="summary" aria-pressed="false" onclick="setRunsFilter('mode','summary',this)" data-i18n="mode_summary"></button>
+      <button type="button" data-mode="structure" aria-pressed="false" onclick="setRunsFilter('mode','structure',this)" data-i18n="mode_structure"></button>
+      <button type="button" data-mode="audit" aria-pressed="false" onclick="setRunsFilter('mode','audit',this)" data-i18n="mode_audit"></button>
+      <button type="button" data-mode="apply" aria-pressed="false" onclick="setRunsFilter('mode','apply',this)" data-i18n="mode_apply"></button>
+    </div>
+    <label class="sr-only" for="runsStatus" data-i18n="filter_status"></label>
+    <select id="runsStatus" onchange="setRunsFilter('status',this.value)"><option value="all" data-i18n="filter_all"></option><option value="active" data-i18n="filter_active"></option><option value="done" data-i18n="status_done"></option><option value="error" data-i18n="status_error"></option></select>
+    <label class="doc-search runs-search" for="runsSearch"><span class="sr-only" data-i18n="runs_search"></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="text" id="runsSearch" data-i18n-placeholder="runs_search" oninput="setRunsFilter('q',this.value)"></label>
+  </div>
   <div class="section-head">
     <span class="count" id="runsCount"></span>
     <span class="work-status" id="workStatus" role="status" aria-live="polite"></span>

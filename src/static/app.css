@@ -602,3 +602,17 @@
   td.strategy-cell { min-width: 320px; max-width: 560px; white-space: normal; line-height: 1.55; }
   td.strategy-cell .diff { margin: 0; padding: 0; border: 0; background: transparent; max-height: none; font: inherit; }
   .result-heading > div:first-child { min-width: 0; }
+
+  /* ---------- 실행 기록 (④) — 필터 + 목록 레벨 칩 ---------- */
+  .runs-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .runs-filters select { width: auto; min-height: 36px; padding: 5px 28px 5px 10px; font-size: var(--fs-secondary); }
+  .runs-search { flex: 1 1 220px; min-width: 180px; }
+  .runs-search input { min-height: 36px; font-size: var(--fs-secondary); }
+  .job-head { flex-wrap: wrap; row-gap: 6px; }
+  .job-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 0 8px; border-radius: 99px;
+    border: 1px solid var(--line); color: var(--dim); font: 500 var(--fs-caption) var(--font-mono); white-space: nowrap; }
+  .chip-score { border-color: transparent; background: var(--ok-soft); color: var(--ok); }
+  .chip-score b { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip-warn { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+  @media (max-width: 760px) { .job-head .meta { margin-left: 0; } }
