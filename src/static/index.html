@@ -197,12 +197,24 @@
     height: 22px; padding: 0 9px; border-radius: 999px;
     font-size: 12px; font-weight: 600;
   }
-  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
+  .badge::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
   .b-running { background: var(--acc-soft); color: var(--acc); }
+  .b-running::before {
+    width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent;
+    background: transparent; animation: status-spin .75s linear infinite;
+  }
   .b-done { background: var(--ok-soft); color: var(--ok); }
+  .b-done::before {
+    width: 4px; height: 8px; margin: -2px 1px 0 2px; border: solid currentColor;
+    border-width: 0 2px 2px 0; border-radius: 0; background: transparent; transform: rotate(45deg);
+  }
   .b-error { background: var(--bad-soft); color: var(--bad); }
   .b-queued { background: var(--hover); color: var(--dim); }
   .b-cancelled, .b-interrupted { background: var(--hover); color: var(--dim); }
+  @keyframes status-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .b-running::before { animation: none; border-right-color: currentColor; opacity: .72; }
+  }
 
   .runbox { margin-top: 16px; padding: 16px; border: 1px solid var(--line-subtle);
             border-radius: var(--radius-sm); background: var(--control); }
@@ -1658,7 +1670,8 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
 
 async function renderJob(j) {
   const isOpen = open_.has(j.id);
-  const badge = `<span class="badge b-${j.status}">${t("status_" + j.status)}</span>`;
+  const statusLabel = t("status_" + j.status);
+  const badge = `<span class="badge b-${j.status}" role="status" aria-label="${esc(statusLabel)}">${esc(statusLabel)}</span>`;
   const when = new Date(j.created_at*1000).toLocaleTimeString(LOCALES[LANG]);
   let inner = `<div class="job-body" id="job-${j.id}-body" hidden></div>`;
   if (isOpen) {
