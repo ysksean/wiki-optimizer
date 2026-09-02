@@ -4,7 +4,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 
-HTML = (Path(__file__).parents[1] / "src" / "static" / "index.html").read_text()
+STATIC = Path(__file__).parents[1] / "src" / "static"
+HTML = (STATIC / "index.html").read_text()
+JS = (STATIC / "app.js").read_text()
+CSS = (STATIC / "app.css").read_text()
 
 
 class DashboardParser(HTMLParser):
@@ -56,25 +59,25 @@ def test_every_visible_form_field_has_an_accessible_label():
 
 
 def test_document_results_are_rendered_with_dom_text_apis():
-    assert "function renderDocs(docs)" in HTML
-    assert "document.createTextNode(d.name)" in HTML
-    assert "input.value = d.path" in HTML
-    assert "innerHTML = j.docs.map" not in HTML
+    assert "function renderDocs(docs)" in JS
+    assert "document.createTextNode(d.name)" in JS
+    assert "input.value = d.path" in JS
+    assert "innerHTML = j.docs.map" not in JS
 
 
 def test_folder_changes_invalidate_selection_and_sequence_requests():
     assert 'oninput="handleDirInput()"' in HTML
-    assert "docsController?.abort()" in HTML
-    assert "const requestId = ++docsRequest" in HTML
-    assert "requestId !== docsRequest" in HTML
-    assert '$("docs").innerHTML = ""' in HTML
+    assert "docsController?.abort()" in JS
+    assert "const requestId = ++docsRequest" in JS
+    assert "requestId !== docsRequest" in JS
+    assert '$("docs").innerHTML = ""' in JS
 
 
 def test_job_controls_preserve_focus_and_prevent_duplicate_submissions():
-    assert 'data-job-id="${j.id}"' in HTML
-    assert "focusedJobId" in HTML
-    assert "requestPending || hasActiveJob" in HTML
-    assert "expandedDetails" in HTML
+    assert 'data-job-id="${j.id}"' in JS
+    assert "focusedJobId" in JS
+    assert "requestPending || hasActiveJob" in JS
+    assert "expandedDetails" in JS
 
 
 def test_busy_actions_explain_their_state_and_localize_score_labels():
@@ -82,16 +85,33 @@ def test_busy_actions_explain_their_state_and_localize_score_labels():
 
     assert "workStatus" in parser.ids
     assert 'id="workStatus" role="status" aria-live="polite"' in HTML
-    assert 'button.setAttribute("aria-busy", "true")' in HTML
-    assert 't("starting_job")' in HTML
-    assert 't("job_in_progress")' in HTML
-    assert 't("acc_short")' in HTML
-    assert 't("eff_short")' in HTML
-    assert "점수 (종합 · 정확도 · 효율)" in HTML
-    assert "分数（总分 · 准确率 · 效率）" in HTML
+    assert 'button.setAttribute("aria-busy", "true")' in JS
+    assert 't("starting_job")' in JS
+    assert 't("job_in_progress")' in JS
+    assert 't("acc_short")' in JS
+    assert 't("eff_short")' in JS
+    assert "점수 (종합 · 정확도 · 효율)" in JS
+    assert "分数（总分 · 准确率 · 效率）" in JS
 
 
 def test_motion_and_touch_target_contracts_are_present():
-    assert "@media (prefers-reduced-motion: reduce)" in HTML
-    assert ".docs-toolbar button { min-height: 44px" in HTML
-    assert "min-height: 44px; border-radius: 8px" in HTML
+    assert "@media (prefers-reduced-motion: reduce)" in CSS
+    assert ".docs-toolbar button { min-height: 44px" in CSS
+    assert "min-height: 44px; border-radius: 8px" in CSS
+
+
+def test_markup_links_split_assets_and_boots_theme_before_paint():
+    """CSS/JS는 분리 파일, 테마는 첫 페인트 전 동기 스크립트로 적용 (flash 방지)."""
+    assert '<link rel="stylesheet" href="/static/app.css">' in HTML
+    assert '<script src="/static/app.js"></script>' in HTML
+    head = HTML.split("<body", 1)[0]
+    assert "wikiopt_theme" in head and "<script>" in head
+    assert 'id="theme"' in HTML and "setTheme(" in JS
+
+
+def test_css_tokens_define_both_themes():
+    css = (STATIC / "app.css").read_text()
+    assert css.count(":root {") == 1  # 토큰 정의는 한 곳
+    assert '@media (prefers-color-scheme: dark)' in css
+    assert ':root[data-theme="dark"]' in css
+    assert "font-size: 10px" not in css and "font-size: 11px" not in css and "font-size: 9px" not in css

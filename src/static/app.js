@@ -1,0 +1,1124 @@
+const $ = id => document.getElementById(id);
+const open_ = new Set();   // 펼쳐둔 job id
+
+// ---------- 뷰 전환 (좌측 네비) ----------
+let curView = "opt";
+function showView(v, save = true) {
+  curView = v;
+  for (const k of ["opt", "propose", "runs"]) {
+    $("view-" + k).hidden = k !== v;
+    $("nav-" + k).classList.toggle("on", k === v);
+    $("mobile-" + k).classList.toggle("on", k === v);
+    for (const prefix of ["nav-", "mobile-"]) {
+      const item = $(prefix + k);
+      if (k === v) item.setAttribute("aria-current", "page");
+      else item.removeAttribute("aria-current");
+    }
+  }
+  $("topCurrent").textContent = t("nav_" + v);
+  window.scrollTo(0, 0);
+  if (save) savePrefs();
+}
+
+function focusFolder() {
+  showView("opt");
+  $("dir").focus();
+}
+
+let selectedDocsOnly = false;
+function setDocFilter(selectedOnly) {
+  selectedDocsOnly = selectedOnly;
+  $("filterAll").classList.toggle("on", !selectedOnly);
+  $("filterSelected").classList.toggle("on", selectedOnly);
+  $("filterAll").setAttribute("aria-pressed", String(!selectedOnly));
+  $("filterSelected").setAttribute("aria-pressed", String(selectedOnly));
+  filterDocs();
+}
+
+function filterDocs() {
+  const query = $("docSearch").value.trim().toLocaleLowerCase(LANG);
+  document.querySelectorAll("#docs label").forEach(label => {
+    const matchesQuery = !query || label.dataset.name.includes(query);
+    const matchesSelection = !selectedDocsOnly || label.querySelector("input").checked;
+    label.hidden = !(matchesQuery && matchesSelection);
+  });
+}
+
+function selectMode(mode) {
+  $("mode").value = mode;
+  syncModeCards();
+  savePrefs();
+}
+
+function syncModeCards() {
+  const summary = $("mode").value === "summary";
+  $("modeSummary").classList.toggle("on", summary);
+  $("modeStructure").classList.toggle("on", !summary);
+  $("modeSummary").setAttribute("aria-pressed", String(summary));
+  $("modeStructure").setAttribute("aria-pressed", String(!summary));
+}
+
+function syncExperimentSummary() {
+  $("gensSummary").textContent = $("gens").value;
+  $("nqaSummary").textContent = $("nqa").value;
+  $("backendSummary").textContent = $("backend").value === "claude" ? "Claude" : "Codex";
+}
+
+function syncWorkspaceSummary() {
+  const dir = $("dir").value.trim();
+  const boxes = [...document.querySelectorAll("#docs input[type=checkbox]")];
+  const ready = Boolean(loadedDir) && dir === loadedDir;
+  const name = dir.split("/").filter(Boolean).pop() || "—";
+  $("currentPath").textContent = dir || t("path_not_set");
+  $("pathChip").classList.toggle("ready", ready);
+  $("currentWorkspaceName").textContent = name;
+  $("currentWorkspaceMeta").textContent = ready ? t("docs_selected", boxes.filter(x => x.checked).length, boxes.length) : t("workspace_empty");
+  $("topWorkspace").textContent = ready ? name : "wiki-optimizer";
+}
+
+// ---------- Stage 0 소스 리스트 ----------
+let srcState = [];   // [{kind:"dir"|"upload", value, label}]
+function renderSrcList() {
+  const box = $("srcList");
+  box.innerHTML = "";
+  for (let i = 0; i < srcState.length; i++) {
+    const it = srcState[i];
+    const row = document.createElement("div");
+    row.className = "srcrow";
+    const kind = document.createElement("span");
+    kind.className = "kind";
+    kind.textContent = it.kind === "upload" ? t("src_kind_file") : t("src_kind_dir");
+    const val = document.createElement("span");
+    val.className = "val";
+    val.textContent = it.label || it.value;
+    val.title = it.value;
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "✕";
+    x.setAttribute("aria-label", t("src_remove"));
+    x.onclick = () => { srcState.splice(i, 1); renderSrcList(); savePrefs(); };
+    row.append(kind, val, x);
+    box.appendChild(row);
+  }
+}
+function addSrcPath(path) {
+  path = (path || "").trim();
+  if (!path) return;
+  if (!srcState.some(x => x.value === path)) srcState.push({ kind: "dir", value: path });
+  renderSrcList(); savePrefs();
+}
+async function pickSrcDir() {
+  const r = await fetch("/api/pick-dir");
+  const j = await r.json();
+  if (j.error) { $("msg3").textContent = j.error; return; }
+  if (j.dir) addSrcPath(j.dir);
+}
+async function uploadSrcFiles(files) {
+  if (!files || !files.length) return;
+  $("msg3").textContent = "";
+  const payload = [];
+  for (const f of files) payload.push({ name: f.name, content: await f.text() });
+  const r = await fetch("/api/upload", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files: payload }) });
+  const j = await r.json();
+  if (j.error) { $("msg3").textContent = j.error; return; }
+  srcState.push({ kind: "upload", value: j.dir,
+    label: t("src_upload_label", j.saved[0], j.saved.length) });
+  renderSrcList(); savePrefs();
+  $("srcFile").value = "";
+}
+
+// ---------- 점수 히트맵 (Braintrust) ----------
+function heat(v) {
+  if (v == null || v === "—" || isNaN(v)) return "";
+  return v >= 0.75 ? ' class="hG"' : v >= 0.5 ? ' class="hM"' : ' class="hB"';
+}
+const LOCALES = { ko: "ko-KR", en: "en-US", zh: "zh-CN" };
+let loadedDir = "";
+let docsRequest = 0;
+let docsController = null;
+let requestPending = false;
+let hasActiveJob = false;
+let submittingMode = null;
+
+// ---------- i18n ----------
+const I18N = {
+  ko: {
+    workbench_eyebrow: "Knowledge Workbench", opt_title: "어떤 지식을 더 선명하게 만들까요?", opt_desc: "문서를 고르고 실험 방식을 선택하세요. 원본은 변경하지 않습니다.",
+    current_wiki: "현재 위키", workspace_empty: "폴더를 연결해 시작하세요", path_not_set: "연결된 폴더 없음", change_folder: "폴더 변경",
+    docs_title: "실험할 문서", docs_hint: "핵심 자료만 선택할수록 결과를 빠르게 비교할 수 있어요.", docs_empty: "위키 폴더를 연결하면 문서가 여기에 표시됩니다.",
+    doc_search: "문서 이름 검색", filter_all: "전체", filter_selected: "선택됨", experiment_friendly_desc: "목표만 고르면 나머지는 추천값으로 시작합니다.",
+    mode_summary_title: "A · 요약 개선", mode_summary_desc: "문서별 요약 전략을 진화시킵니다", mode_structure_title: "B · 구조 개선", mode_structure_desc: "폴더와 문서 구성을 재설계합니다",
+    advanced_settings: "고급 설정 열기", safe_note: "원본과 기존 wiki 파일은 그대로 유지됩니다.", next_actions_desc: "현재 상태를 진단하거나 검증된 전략으로 새 파일을 만듭니다.",
+    mobile_menu: "모바일 메뉴", new_wiki_eyebrow: "New wiki", prop_friendly_title: "새 위키 구조를 설계하세요", prop_friendly_desc: "자료와 사용 목적을 바탕으로 폴더와 문서 구조를 제안합니다.",
+    runs_eyebrow: "Experiment history", runs_desc: "점수 변화와 세대별 전략을 비교하고 원하는 결과만 적용하세요.",
+    score_improved: n => `${n}% 개선`, evolution_trail: "Evolution Trail", baseline: "기준", best_label: "최고",
+    subtitle: "wiki 폴더를 지정하고 요약(A) / 구조(B) 최적화를 돌려 결과 변화를 확인합니다",
+    theme: "테마", theme_system: "시스템", theme_light: "라이트", theme_dark: "다크",
+    language: "언어", language_tip: "화면과 LLM 출력(요약·질문·답변) 언어를 함께 바꿉니다",
+    setup_title: "위키 불러오기", setup_desc: "최적화할 원본 마크다운이 있는 폴더를 선택하세요.",
+    experiment_title: "실험 설정", experiment_desc: "진화 방식과 반복 횟수를 정한 뒤 선택한 문서로 실험을 시작합니다.",
+    folder_label: "wiki 폴더 경로 (.md 모음 — raw/ 하위 폴더가 있으면 그쪽을 읽음)",
+    folder_ph: "~/dev/llm_wiki  또는  data/raw",
+    pick_dir: "폴더 선택…", load_docs: "문서 불러오기",
+    mode: "모드", mode_a: "A — 요약 전략 진화 (문서별)", mode_b: "B — 폴더 구조 진화 (선택 문서 전체)",
+    gens: "세대 수", gens_help: "세대당 문서별 약 1–2분",
+    nqa: "질문 수", nqa_help: "정답률 평가 문항 (2–12)",
+    backend: "백엔드", backend_claude: "claude (Claude Code 구독)", backend_codex: "codex (ChatGPT 구독)",
+    run_exp: "실험 실행", starting: "시작 중…", starting_job: "작업을 시작하는 중…", job_in_progress: "작업 실행 중 · 완료 후 새 작업을 시작할 수 있습니다",
+    wiki_title: "내 위키 진단 · 최적화",
+    wiki_desc: "위 폴더(raw/ + wiki/)를 기준으로 현재 요약을 채점(Before)하고, best 전략으로 다시 요약해(After) 무엇이 바뀌는지 비교합니다. 원본과 기존 wiki는 수정하지 않습니다.",
+    btn_audit: "현재 위키 진단 (Before)", btn_apply: "최적화 생성 (After)",
+    strategy_custom: "전략 직접 지정 (비우면 실험 결과의 best 전략 사용)",
+    strategy_label: "직접 지정할 최적화 전략",
+    docs_selected: (n,t) => `${t}개 문서 중 ${n}개 선택`, select_all: "모두 선택", clear_all: "선택 해제",
+    runs_title: "실험 기록", runs_count: n => `${n}건`,
+    need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
+    no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요", load_failed: "문서를 불러오지 못했습니다. 경로와 서버 상태를 확인하세요.",
+    request_failed: "요청에 실패했습니다. 잠시 후 다시 시도하세요.",
+    no_jobs: "아직 실행한 실험이 없습니다", no_jobs_hint: "문서를 불러오고 실험을 실행하면 세대별 점수와 전략 변화가 여기에 표시됩니다.",
+    waiting_gen: "아직 첫 세대 결과 대기 중…",
+    stop: "중지", stopping: "중지 요청됨…",
+    preparing_q: "질문 세트 준비 중…", failed: "실패",
+    status_running: "실행 중", status_done: "완료", status_error: "오류", status_queued: "대기 중", status_cancelled: "중지됨", status_interrupted: "중단됨",
+    run_meta: (mode,backend,gens,time) => [backend, ...(mode === "summary" || mode === "structure" ? [`${gens}세대`] : []), time].join(" · "),
+    best_gen: n => `최고 점수 (${n}세대)`, held_out: "검증", train: "학습", gen_short: n => `${n}세대`,
+    generation_label: "세대", ratio: "비율", total: "종합", acc_short: "정확도", eff_short: "효율",
+    chart_label: n => `세대별 검증 점수 추세${n == null ? "" : `, 최고 점수 ${n}세대`}`,
+    mode_summary: "A 요약", mode_structure: "B 구조", mode_audit: "진단", mode_apply: "최적화",
+    audit_title: "현재 위키 진단", scoring_docs: (d,t) => ` — ${t}개 문서 중 ${d}개 채점 중…`,
+    r_kpi_acc: "정확도", r_kpi_eff: "효율", r_kpi_read: "평균 읽은 글자",
+    r_kpi_cov: "페이지 커버리지",
+    r_graph: "백링크 그래프 — 색 = 정답률 · 크기 = 인링크 · 회색 테두리 = 미사용",
+    r_pages: "페이지별 진단", th_page: "페이지", th_inlinks: "인링크",
+    th_uses: "읽힘", th_rate: "정답률", r_unused: "미사용",
+    r_questions: "질문별 라우팅 상세", th_src_doc: "출처 문서",
+    r_parse_warn: d => `judge 파싱 실패 문서: ${d} — 해당 점수는 신뢰 불가`,
+    avg_score: n => `평균 점수 (${n}개 채점)`,
+    th_doc: "문서", th_raw: "raw", th_summary: "요약", th_score: "점수 (종합 · 정확도 · 효율)", none: "없음",
+    apply_title: "최적화 Before → After", generating: (d,t) => ` — ${d}/${t} 생성 중…`,
+    before_avg: "Before 평균", after_avg: "After 평균",
+    used_strategy: s => `사용한 전략 (${s})`,
+    after_files: p => `After 파일: ${p}/ (원본·기존 wiki는 그대로)`,
+    diff_legend: (b,a) => `기존 요약 대비 변경 (<del>삭제</del> / <ins>추가</ins>) · ${b} → ${a}자`,
+    new_summary: "기존 요약 없음 — 신규 생성",
+    gen_progress: (d,t) => `(${d}/${t}세대)`, accuracy: "정확도", efficiency: "효율",
+    strategy_per_gen: "세대별 전략 프롬프트", th_strategy: "전략",
+    best_summary: "best 요약 보기", len_vs_raw: "원본 대비 길이",
+    structure_title: d => `구조 진화 — ${d}`,
+    files_per_gen: "세대별 파일 구성", th_files: "파일",
+    routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
+    prop_title: "Stage 0 — 구조 제안 (백지에서)", mode_propose: "0 제안",
+    nav_opt: "위키 최적화", nav_propose: "구조 제안", nav_runs: "실행 기록",
+    src_add_dir: "＋ 폴더 선택", src_add_files: "＋ 파일 업로드",
+    src_manual_ph: "경로 직접 입력 후 Enter (예: ~/repo/docs)",
+    src_kind_dir: "폴더", src_kind_file: "파일", src_remove: "소스 제거",
+    src_upload_label: (first, n) => n > 1 ? `${first} 외 ${n - 1}개 (업로드)` : `${first} (업로드)`,
+    prop_desc: "위키가 아직 없을 때: 레포/데이터 폴더 + 태스크 설명을 넣으면 폴더 구조를 제안하고, 근거 없는 축(gap)을 알려줍니다",
+    prop_sources: "소스 — 위키의 재료가 될 레포·문서", prop_sources_ph: "",
+    prop_task: "태스크 설명", prop_task_ph: "이 위키의 소비자·소비 시점, 실제로 던질 질문 예시 2~3개, 데이터의 성질, 산출물 용도",
+    btn_propose: "구조 제안 실행", prop_seed: "이어서 개선", prop_seed_tip: "이전 제안 run의 best 분할 전략을 seed로 재사용합니다 (warm start)",
+    need_sources_task: "소스 폴더와 태스크 설명을 입력하세요",
+    prop_run_title: "구조 제안", prop_unscored: "채점 불가 — 소스에 정답 근거가 있는 질문이 0개 (순수 백지)",
+    prop_grounded: "근거 확보 질문", prop_gapq: "근거 없는 질문 (gap)", prop_gapq_desc: "필요한데 소스에 근거가 없는 축 — 추가로 확보할 데이터 목록입니다",
+    prop_tree: "제안 구조", prop_pages_per_gen: "세대별 페이지",
+    prop_export: "골격 내보내기", prop_export_ph: "골격을 쓸 폴더 경로", prop_export_done: (w,s) => `생성 ${w}개, 기존 파일 유지 ${s}개`,
+    th_page: "페이지", th_purpose: "purpose", th_sources: "sources",
+    chart_aria: (n, best) => `세대별 검증 점수 추이, 총 ${n}세대` + (best == null ? "" : `, 최고 점수 ${best}세대`),
+  },
+  en: {
+    workbench_eyebrow: "Knowledge Workbench", opt_title: "Which knowledge should become clearer?", opt_desc: "Choose documents and an experiment. Your originals stay untouched.",
+    current_wiki: "Current wiki", workspace_empty: "Connect a folder to begin", path_not_set: "No folder connected", change_folder: "Change folder",
+    docs_title: "Documents to experiment on", docs_hint: "A focused selection makes results faster to compare.", docs_empty: "Connect a wiki folder to see its documents here.",
+    doc_search: "Search document names", filter_all: "All", filter_selected: "Selected", experiment_friendly_desc: "Choose a goal and start with recommended settings.",
+    mode_summary_title: "A · Improve summaries", mode_summary_desc: "Evolve a summary strategy for each document", mode_structure_title: "B · Improve structure", mode_structure_desc: "Redesign folders and document organization",
+    advanced_settings: "Open advanced settings", safe_note: "Original and existing wiki files remain untouched.", next_actions_desc: "Audit the current state or create new files with a proven strategy.",
+    mobile_menu: "Mobile menu", new_wiki_eyebrow: "New wiki", prop_friendly_title: "Design a new wiki structure", prop_friendly_desc: "Use source material and intent to propose folders and documents.",
+    runs_eyebrow: "Experiment history", runs_desc: "Compare score and strategy changes, then apply only the result you want.",
+    score_improved: n => `${n}% improved`, evolution_trail: "Evolution Trail", baseline: "Baseline", best_label: "Best",
+    subtitle: "Point at a wiki folder, run summary (A) / structure (B) optimization, and watch results evolve",
+    theme: "Theme", theme_system: "System", theme_light: "Light", theme_dark: "Dark",
+    language: "Language", language_tip: "Switches both the UI and LLM outputs (summaries, questions, answers)",
+    setup_title: "Load your wiki", setup_desc: "Choose the folder containing the source Markdown you want to optimize.",
+    experiment_title: "Configure experiment", experiment_desc: "Choose an evolution mode and iteration count, then run it on the selected documents.",
+    folder_label: "Wiki folder path (.md files — raw/ subfolder is used if present)",
+    folder_ph: "~/dev/llm_wiki  or  data/raw",
+    pick_dir: "Choose folder…", load_docs: "Load documents",
+    mode: "Mode", mode_a: "A — evolve summary strategy (per document)", mode_b: "B — evolve folder structure (all selected)",
+    gens: "Generations", gens_help: "About 1–2 min per document each",
+    nqa: "Questions", nqa_help: "Accuracy sample size (2–12)",
+    backend: "Backend", backend_claude: "claude (Claude Code subscription)", backend_codex: "codex (ChatGPT subscription)",
+    run_exp: "Run experiment", starting: "Starting…", starting_job: "Starting job…", job_in_progress: "Job in progress · new actions unlock when it finishes",
+    wiki_title: "Audit & optimize my wiki",
+    wiki_desc: "Scores your current summaries (Before) against the folder above (raw/ + wiki/), then re-summarizes with the best strategy (After) so you can compare. Originals and existing wiki files are never modified.",
+    btn_audit: "Audit current wiki (Before)", btn_apply: "Generate optimized (After)",
+    strategy_custom: "Custom strategy (leave empty to use the best strategy from experiments)",
+    strategy_label: "Custom optimization strategy",
+    docs_selected: (n,t) => `${n} of ${t} document${t === 1 ? "" : "s"} selected`, select_all: "Select all", clear_all: "Clear selection",
+    runs_title: "Runs", runs_count: n => `${n} total`,
+    need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
+    no_md: "No md files found", need_docs: "Select at least one document", load_failed: "Documents could not be loaded. Check the path and server status.",
+    request_failed: "The request failed. Please try again.",
+    no_jobs: "No experiments yet", no_jobs_hint: "Load documents and run an experiment to see generation scores and strategy changes here.",
+    waiting_gen: "Waiting for the first generation…",
+    stop: "Stop", stopping: "Stop requested…",
+    preparing_q: "Preparing question set…", failed: "Failed",
+    status_running: "Running", status_done: "Done", status_error: "Error", status_queued: "Queued", status_cancelled: "Stopped", status_interrupted: "Interrupted",
+    run_meta: (mode,backend,gens,time) => [backend, ...(mode === "summary" || mode === "structure" ? [`${gens} gen`] : []), time].join(" · "),
+    best_gen: n => `Best score (gen ${n})`, held_out: "Held-out", train: "Train", gen_short: n => `gen ${n}`,
+    generation_label: "Generation", ratio: "Ratio", total: "Total", acc_short: "Accuracy", eff_short: "Efficiency",
+    chart_label: n => `Validation score by generation${n == null ? "" : `, best at generation ${n}`}`,
+    mode_summary: "A summary", mode_structure: "B structure", mode_audit: "Audit", mode_apply: "Optimize",
+    audit_title: "Current wiki audit", scoring_docs: (d,t) => ` — scored ${d} of ${t} documents…`,
+    r_kpi_acc: "accuracy", r_kpi_eff: "efficiency", r_kpi_read: "avg chars read",
+    r_kpi_cov: "page coverage",
+    r_graph: "Backlink graph — color = correct rate · size = inlinks · gray outline = unused",
+    r_pages: "Per-page results", th_page: "page", th_inlinks: "inlinks",
+    th_uses: "reads", th_rate: "correct", r_unused: "unused",
+    r_questions: "Per-question routing", th_src_doc: "source doc",
+    r_parse_warn: d => `judge parse failed for: ${d} — those scores are unreliable`,
+    avg_score: n => `average score (${n} scored)`,
+    th_doc: "document", th_raw: "raw", th_summary: "summary", th_score: "score (total · accuracy · efficiency)", none: "none",
+    apply_title: "Optimization Before → After", generating: (d,t) => ` — generating ${d}/${t}…`,
+    before_avg: "Before avg", after_avg: "After avg",
+    used_strategy: s => `strategy used (${s})`,
+    after_files: p => `After files: ${p}/ (originals & existing wiki untouched)`,
+    diff_legend: (b,a) => `changes vs existing summary (<del>removed</del> / <ins>added</ins>) · ${b} → ${a} chars`,
+    new_summary: "no existing summary — newly generated",
+    gen_progress: (d,t) => `(gen ${d}/${t})`, accuracy: "accuracy", efficiency: "efficiency",
+    strategy_per_gen: "strategy prompt per generation", th_strategy: "strategy",
+    best_summary: "view best summary", len_vs_raw: "length vs raw",
+    structure_title: d => `Structure evolution — ${d}`,
+    files_per_gen: "files per generation", th_files: "files",
+    routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
+    prop_title: "Stage 0 — propose structure (blank slate)", mode_propose: "0 propose",
+    nav_opt: "Optimize wiki", nav_propose: "Propose structure", nav_runs: "Runs",
+    src_add_dir: "+ Choose folder", src_add_files: "+ Upload files",
+    src_manual_ph: "Type a path and press Enter (e.g. ~/repo/docs)",
+    src_kind_dir: "dir", src_kind_file: "file", src_remove: "Remove source",
+    src_upload_label: (first, n) => n > 1 ? `${first} +${n - 1} more (uploaded)` : `${first} (uploaded)`,
+    prop_desc: "No wiki yet: point at repo/data folders + a task description to get a proposed folder structure, with unbacked axes flagged as gaps",
+    prop_sources: "Sources — repos and documents to build from", prop_sources_ph: "",
+    prop_task: "Task description", prop_task_ph: "Who consumes this wiki and when, 2-3 example questions, nature of the data, intended use",
+    btn_propose: "Propose structure", prop_seed: "continue improving", prop_seed_tip: "Warm-start from the best split strategy of previous proposal runs",
+    need_sources_task: "Enter source folders and a task description",
+    prop_run_title: "Structure proposal", prop_unscored: "Unscorable — zero questions have grounded answers in the sources (pure blank slate)",
+    prop_grounded: "grounded questions", prop_gapq: "unbacked questions (gap)", prop_gapq_desc: "Needed but no evidence in sources — this is your data acquisition list",
+    prop_tree: "proposed structure", prop_pages_per_gen: "pages per generation",
+    prop_export: "Export skeleton", prop_export_ph: "folder to write skeleton into", prop_export_done: (w,s) => `wrote ${w}, kept ${s} existing`,
+    th_page: "page", th_purpose: "purpose", th_sources: "sources",
+    chart_aria: (n, best) => `Held-out score by generation, ${n} generations` + (best == null ? "" : `, best generation ${best}`),
+  },
+  zh: {
+    workbench_eyebrow: "Knowledge Workbench", opt_title: "要让哪些知识更清晰？", opt_desc: "选择文档和实验方式，原始文件不会被修改。",
+    current_wiki: "当前 wiki", workspace_empty: "连接文件夹后开始", path_not_set: "尚未连接文件夹", change_folder: "更换文件夹",
+    docs_title: "实验文档", docs_hint: "聚焦核心资料，可以更快比较结果。", docs_empty: "连接 wiki 文件夹后，文档会显示在这里。",
+    doc_search: "搜索文档名称", filter_all: "全部", filter_selected: "已选择", experiment_friendly_desc: "只需选择目标，其余使用推荐设置。",
+    mode_summary_title: "A · 改进摘要", mode_summary_desc: "为每篇文档进化摘要策略", mode_structure_title: "B · 改进结构", mode_structure_desc: "重新设计文件夹与文档组织",
+    advanced_settings: "打开高级设置", safe_note: "原文和现有 wiki 文件保持不变。", next_actions_desc: "诊断当前状态，或用验证过的策略生成新文件。",
+    mobile_menu: "移动菜单", new_wiki_eyebrow: "New wiki", prop_friendly_title: "设计新的 wiki 结构", prop_friendly_desc: "根据资料和使用目的提出文件夹与文档结构。",
+    runs_eyebrow: "Experiment history", runs_desc: "比较分数和各代策略变化，只应用需要的结果。",
+    score_improved: n => `提升 ${n}%`, evolution_trail: "Evolution Trail", baseline: "基准", best_label: "最高",
+    subtitle: "指定 wiki 文件夹，运行摘要（A）/ 结构（B）优化，查看结果如何演化",
+    theme: "主题", theme_system: "跟随系统", theme_light: "浅色", theme_dark: "深色",
+    language: "语言", language_tip: "同时切换界面语言和 LLM 输出（摘要、问题、答案）",
+    setup_title: "加载 wiki", setup_desc: "选择包含待优化 Markdown 原文的文件夹。",
+    experiment_title: "配置实验", experiment_desc: "选择进化模式和迭代次数，然后对所选文档运行实验。",
+    folder_label: "wiki 文件夹路径（.md 文件 — 如有 raw/ 子文件夹则读取该目录）",
+    folder_ph: "~/dev/llm_wiki  或  data/raw",
+    pick_dir: "选择文件夹…", load_docs: "加载文档",
+    mode: "模式", mode_a: "A — 摘要策略进化（按文档）", mode_b: "B — 文件夹结构进化（所选全部文档）",
+    gens: "代数", gens_help: "每代每篇文档约 1–2 分钟",
+    nqa: "问题数", nqa_help: "准确率评估题数（2–12）",
+    backend: "后端", backend_claude: "claude（Claude Code 订阅）", backend_codex: "codex（ChatGPT 订阅）",
+    run_exp: "运行实验", starting: "正在启动…", starting_job: "正在启动任务…", job_in_progress: "任务运行中 · 完成后可启动新任务",
+    wiki_title: "诊断并优化我的 wiki",
+    wiki_desc: "以上方文件夹（raw/ + wiki/）为基准给当前摘要评分（Before），再用最佳策略重新摘要（After）进行对比。原文和现有 wiki 文件不会被修改。",
+    btn_audit: "诊断当前 wiki（Before）", btn_apply: "生成优化版（After）",
+    strategy_custom: "自定义策略（留空则使用实验得出的最佳策略）",
+    strategy_label: "自定义优化策略",
+    docs_selected: (n,t) => `已选择 ${n}/${t} 篇文档`, select_all: "全选", clear_all: "清除选择",
+    runs_title: "运行记录", runs_count: n => `共 ${n} 条`,
+    need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
+    no_md: "未找到 md 文件", need_docs: "请至少选择一个文档", load_failed: "无法加载文档。请检查路径和服务器状态。",
+    request_failed: "请求失败，请稍后重试。",
+    no_jobs: "还没有运行过实验", no_jobs_hint: "加载文档并运行实验后，这里将显示各代评分和策略变化。",
+    waiting_gen: "等待第一代结果…",
+    stop: "停止", stopping: "已请求停止…",
+    preparing_q: "正在准备问题集…", failed: "失败",
+    status_running: "运行中", status_done: "已完成", status_error: "错误", status_queued: "等待中", status_cancelled: "已停止", status_interrupted: "已中断",
+    run_meta: (mode,backend,gens,time) => [backend, ...(mode === "summary" || mode === "structure" ? [`${gens}代`] : []), time].join(" · "),
+    best_gen: n => `最高分（第 ${n} 代）`, held_out: "验证", train: "训练", gen_short: n => `第 ${n} 代`,
+    generation_label: "代", ratio: "比例", total: "总分", acc_short: "准确率", eff_short: "效率",
+    chart_label: n => `各代验证分数趋势${n == null ? "" : `，最高分在第 ${n} 代`}`,
+    mode_summary: "A 摘要", mode_structure: "B 结构", mode_audit: "诊断", mode_apply: "优化",
+    audit_title: "当前 wiki 诊断", scoring_docs: (d,t) => ` — 共 ${t} 篇文档，已评 ${d} 篇…`,
+    r_kpi_acc: "准确率", r_kpi_eff: "效率", r_kpi_read: "平均阅读字数",
+    r_kpi_cov: "页面覆盖率",
+    r_graph: "反向链接图 — 颜色 = 正确率 · 大小 = 入链数 · 灰色描边 = 未使用",
+    r_pages: "按页面诊断", th_page: "页面", th_inlinks: "入链",
+    th_uses: "被读", th_rate: "正确率", r_unused: "未使用",
+    r_questions: "逐题路由详情", th_src_doc: "来源文档",
+    r_parse_warn: d => `judge 解析失败的文档：${d} — 相关分数不可信`,
+    avg_score: n => `平均分（已评 ${n} 篇）`,
+    th_doc: "文档", th_raw: "raw", th_summary: "摘要", th_score: "分数（总分 · 准确率 · 效率）", none: "无",
+    apply_title: "优化 Before → After", generating: (d,t) => ` — 正在生成 ${d}/${t}…`,
+    before_avg: "Before 平均", after_avg: "After 平均",
+    used_strategy: s => `所用策略（${s}）`,
+    after_files: p => `After 文件：${p}/（原文与现有 wiki 保持不变）`,
+    diff_legend: (b,a) => `相对现有摘要的变化（<del>删除</del> / <ins>新增</ins>）· ${b} → ${a} 字`,
+    new_summary: "无现有摘要 — 新生成",
+    gen_progress: (d,t) => `（第 ${d}/${t} 代）`, accuracy: "准确率", efficiency: "效率",
+    strategy_per_gen: "各代策略提示词", th_strategy: "策略",
+    best_summary: "查看最佳摘要", len_vs_raw: "相对原文长度",
+    structure_title: d => `结构进化 — ${d}`,
+    files_per_gen: "各代文件构成", th_files: "文件",
+    routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
+    prop_title: "Stage 0 — 结构提案（从零开始）", mode_propose: "0 提案",
+    nav_opt: "Wiki 优化", nav_propose: "结构提案", nav_runs: "运行记录",
+    src_add_dir: "＋ 选择文件夹", src_add_files: "＋ 上传文件",
+    src_manual_ph: "输入路径后回车（例：~/repo/docs）",
+    src_kind_dir: "目录", src_kind_file: "文件", src_remove: "移除源",
+    src_upload_label: (first, n) => n > 1 ? `${first} 等 ${n} 个（已上传）` : `${first}（已上传）`,
+    prop_desc: "还没有 wiki 时：指定仓库/数据文件夹 + 任务描述，即可获得文件夹结构提案，并标出缺乏依据的轴（gap）",
+    prop_sources: "源 — 用作 wiki 素材的仓库·文档", prop_sources_ph: "",
+    prop_task: "任务描述", prop_task_ph: "该 wiki 的使用者与使用时机、2~3 个示例问题、数据的性质、产出用途",
+    btn_propose: "运行结构提案", prop_seed: "继续改进", prop_seed_tip: "以之前提案 run 的最佳拆分策略作为 seed（warm start）",
+    need_sources_task: "请输入源文件夹和任务描述",
+    prop_run_title: "结构提案", prop_unscored: "无法评分 — 源中没有任何问题有依据答案（纯从零开始）",
+    prop_grounded: "有依据的问题", prop_gapq: "缺乏依据的问题（gap）", prop_gapq_desc: "需要但源中没有依据的轴 — 即需额外获取的数据清单",
+    prop_tree: "提案结构", prop_pages_per_gen: "每代页面",
+    prop_export: "导出骨架", prop_export_ph: "写入骨架的文件夹路径", prop_export_done: (w,s) => `生成 ${w} 个，保留已有 ${s} 个`,
+    th_page: "页面", th_purpose: "purpose", th_sources: "sources",
+    chart_aria: (n, best) => `各代验证分数走势，共 ${n} 代` + (best == null ? "" : `，最高分在第 ${best} 代`),
+  },
+};
+
+let LANG = "ko";
+try { LANG = localStorage.getItem("wikiopt_lang") || "ko"; } catch (e) {}
+if (!I18N[LANG]) LANG = "ko";
+
+function t(key, ...args) {
+  const v = (I18N[LANG] || I18N.ko)[key] ?? I18N.ko[key] ?? key;
+  return typeof v === "function" ? v(...args) : v;
+}
+
+function applyLang() {
+  if (typeof srcState !== "undefined") try { renderSrcList(); } catch (e) {}
+  document.documentElement.lang = LANG;
+  $("lang").value = LANG;
+  $("mobileLang").value = LANG;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach(el => { el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel)); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  syncDocSelection();
+  syncModeCards();
+  syncExperimentSummary();
+  syncWorkspaceSummary();
+  $("topCurrent").textContent = t("nav_" + curView);
+}
+
+function setLang(lang) {
+  LANG = I18N[lang] ? lang : "ko";
+  try { localStorage.setItem("wikiopt_lang", LANG); } catch (e) {}
+  applyLang();
+  lastHtml = "";   // job 카드도 새 언어로 다시 그린다
+  poll();
+}
+
+// ---------- 테마 (system | light | dark) — <head> 부트스트랩 스크립트와 짝 ----------
+function setTheme(mode) {
+  var root = document.documentElement;
+  root.classList.add("theme-switching");
+  if (mode === "light" || mode === "dark") root.setAttribute("data-theme", mode);
+  else { mode = "system"; root.removeAttribute("data-theme"); }
+  try { localStorage.setItem("wikiopt_theme", mode); } catch (e) {}
+  var sel = document.getElementById("theme"); if (sel) sel.value = mode;
+  requestAnimationFrame(function () { requestAnimationFrame(function () { root.classList.remove("theme-switching"); }); });
+}
+(function () {
+  var t = "system";
+  try { t = localStorage.getItem("wikiopt_theme") || "system"; } catch (e) {}
+  var sel = document.getElementById("theme"); if (sel) sel.value = t;
+})();
+
+// ---------- 폼 값 저장/복원 (wikiopt_lang 저장 로직의 확장) ----------
+function savePrefs() {
+  try {
+    localStorage.setItem("wikiopt_prefs", JSON.stringify({
+      dir: $("dir").value.trim(), backend: $("backend").value,
+      gens: $("gens").value, nqa: $("nqa").value,
+      mode: $("mode").value, srcState, propTask: $("propTask").value, view: curView,
+    }));
+  } catch (e) {}
+}
+
+function loadPrefs() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem("wikiopt_prefs") || "{}"); } catch (e) {}
+  if (p.dir) $("dir").value = p.dir;
+  if (p.backend) $("backend").value = p.backend;
+  if (p.gens) $("gens").value = p.gens;
+  if (p.nqa) $("nqa").value = p.nqa;
+  if (p.mode) $("mode").value = p.mode;
+  if (Array.isArray(p.srcState)) { srcState = p.srcState; renderSrcList(); }
+  if (p.view) showView(p.view, false);
+  if (p.propTask) $("propTask").value = p.propTask;
+  syncModeCards();
+  syncExperimentSummary();
+  syncWorkspaceSummary();
+}
+
+// ---------- 데이터 로드/실행 ----------
+function syncActionStates() {
+  const ready = Boolean(loadedDir) && $("dir").value.trim() === loadedDir;
+  const selected = document.querySelectorAll("#docs input[type=checkbox]:checked").length;
+  const busy = requestPending || hasActiveJob;
+  $("auditBtn").disabled = !ready || busy;
+  $("applyBtn").disabled = !ready || busy;
+  $("go").disabled = selected === 0 || busy;
+  const actions = [["go", "run", "run_exp"], ["auditBtn", "audit", "btn_audit"], ["applyBtn", "apply", "btn_apply"]];
+  actions.forEach(([id, mode, label]) => {
+    const button = $(id);
+    const starting = requestPending && submittingMode === mode;
+    button.textContent = starting ? t("starting") : t(label);
+    if (starting) button.setAttribute("aria-busy", "true");
+    else button.removeAttribute("aria-busy");
+  });
+  $("workStatus").textContent = requestPending ? t("starting_job") : hasActiveJob ? t("job_in_progress") : "";
+}
+
+function syncDirActions() {
+  syncActionStates();
+}
+
+function clearDocs() {
+  loadedDir = "";
+  $("docs").innerHTML = "";
+  const empty = document.createElement("div");
+  empty.className = "docs-empty";
+  empty.textContent = t("docs_empty");
+  $("docs").append(empty);
+  syncDocSelection();
+  syncDirActions();
+}
+
+function handleDirInput() {
+  docsController?.abort();
+  if ($("dir").value.trim() !== loadedDir) clearDocs();
+  else syncDirActions();
+  syncWorkspaceSummary();
+}
+
+function syncDocSelection() {
+  const boxes = [...document.querySelectorAll("#docs input[type=checkbox]")];
+  const selected = boxes.filter(x => x.checked).length;
+  $("docsToolbar").hidden = boxes.length === 0;
+  $("docsStatus").textContent = boxes.length ? t("docs_selected", selected, boxes.length) : "";
+  $("toggleDocs").textContent = selected === boxes.length ? t("clear_all") : t("select_all");
+  $("docCount").textContent = `${selected} / ${boxes.length}`;
+  $("filterSelected").textContent = `${t("filter_selected")} ${selected}`;
+  filterDocs();
+  syncWorkspaceSummary();
+  syncActionStates();
+}
+
+function toggleAllDocs() {
+  const boxes = [...document.querySelectorAll("#docs input[type=checkbox]")];
+  const shouldSelect = boxes.some(x => !x.checked);
+  boxes.forEach(x => { x.checked = shouldSelect; });
+  syncDocSelection();
+}
+
+function renderDocs(docs) {
+  const fragment = document.createDocumentFragment();
+  docs.forEach(d => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    const copy = document.createElement("span");
+    const name = document.createElement("strong");
+    const hint = document.createElement("small");
+    const size = document.createElement("span");
+    input.type = "checkbox";
+    input.value = d.path;
+    input.addEventListener("change", syncDocSelection);
+    label.dataset.name = d.name.toLocaleLowerCase(LANG);
+    copy.className = "doc-copy";
+    name.append(document.createTextNode(d.name));
+    hint.textContent = d.path.endsWith(".md") ? "Markdown" : d.path.split(".").pop().toUpperCase();
+    copy.append(name, hint);
+    size.className = "sz";
+    size.textContent = `${(d.size/1000).toFixed(1)}k`;
+    label.append(input, copy, size);
+    fragment.append(label);
+  });
+  $("docs").replaceChildren(fragment);
+}
+
+async function loadDocs() {
+  $("msg").textContent = "";
+  const dir = $("dir").value.trim();
+  if (!dir) { $("msg").textContent = t("need_dir"); return; }
+  const requestId = ++docsRequest;
+  docsController?.abort();
+  docsController = new AbortController();
+  clearDocs();
+  $("loadDocsBtn").disabled = true;
+  $("loadDocsBtn").setAttribute("aria-busy", "true");
+  try {
+    const r = await fetch(`/api/docs?dir=${encodeURIComponent(dir)}`, {signal: docsController.signal});
+    const j = await r.json();
+    if (requestId !== docsRequest || $("dir").value.trim() !== dir) return;
+    if (!r.ok || j.error) { $("msg").textContent = j.error || t("load_failed"); return; }
+    if (!j.docs.length) { $("msg").textContent = t("no_md"); return; }
+    renderDocs(j.docs);
+    loadedDir = dir;
+    syncDocSelection();
+    syncDirActions();
+    syncWorkspaceSummary();
+  } catch (e) {
+    if (requestId === docsRequest && e.name !== "AbortError") $("msg").textContent = t("load_failed");
+  } finally {
+    if (requestId === docsRequest) {
+      $("loadDocsBtn").disabled = false;
+      $("loadDocsBtn").removeAttribute("aria-busy");
+    }
+  }
+}
+
+async function pickDir() {
+  $("msg").textContent = "";
+  const r = await fetch("/api/pick-dir");
+  const j = await r.json();
+  if (j.error) { $("msg").textContent = j.error; return; }
+  if (j.cancelled) return;
+  $("dir").value = j.dir;
+  syncDirActions();
+  savePrefs();
+  loadDocs();
+}
+
+async function startJobRequest(body, msgEl) {
+  if (requestPending || hasActiveJob) return;
+  $(msgEl).textContent = "";
+  submittingMode = body.mode;
+  requestPending = true;
+  syncActionStates();
+  try {
+    const r = await fetch("/api/runs", { method:"POST",
+      headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok || j.error) { $(msgEl).textContent = j.error || t("request_failed"); return; }
+    open_.add(j.id);
+    hasActiveJob = true;
+    showView("runs");
+  } catch (e) {
+    $(msgEl).textContent = t("request_failed");
+  } finally {
+    requestPending = false;
+    submittingMode = null;
+    syncActionStates();
+    poll();
+  }
+}
+
+function startAudit() {
+  const dir = $("dir").value.trim();
+  if (!dir) { $("msg2").textContent = t("need_dir_first"); return; }
+  startJobRequest({ mode:"audit", dir, n_qa:6, backend:$("backend").value,
+    language:LANG }, "msg2");
+}
+
+function startApply() {
+  const dir = $("dir").value.trim();
+  if (!dir) { $("msg2").textContent = t("need_dir_first"); return; }
+  startJobRequest({ mode:"apply", dir, n_qa:6, backend:$("backend").value,
+    language:LANG, strategy: $("strategy").value.trim() }, "msg2");
+}
+
+function startPropose() {
+  const sources = srcState.map(x => x.value);
+  const task = $("propTask").value.trim();
+  if (!sources.length || !task) { $("msg3").textContent = t("need_sources_task"); return; }
+  startJobRequest({ mode:"propose", sources, task,
+    generations: +$("gens").value, n_qa: +$("nqa").value,
+    seed_from_runs: $("propSeed").checked,
+    backend: $("backend").value, language: LANG }, "msg3");
+}
+
+async function exportSkeleton(jobId, inputId, msgId) {
+  const write_dir = $(inputId).value.trim();
+  const el = $(msgId);
+  el.textContent = "";
+  if (!write_dir) { el.textContent = t("prop_export_ph"); return; }
+  const r = await fetch("/api/skeleton", { method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ job_id: jobId, write_dir }) });
+  const j = await r.json();
+  el.textContent = j.error ? j.error : t("prop_export_done", j.written.length, j.skipped.length);
+  el.className = j.error ? "err" : "muted";
+}
+
+async function startRun() {
+  if (requestPending || hasActiveJob) return;
+  $("msg").textContent = "";
+  const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
+  if (!files.length) { $("msg").textContent = t("need_docs"); return; }
+  submittingMode = "run";
+  requestPending = true;
+  syncActionStates();
+  try {
+    const r = await fetch("/api/runs", { method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ files, mode: $("mode").value,
+        generations: +$("gens").value, n_qa: +$("nqa").value,
+        backend: $("backend").value, language: LANG }) });
+    const j = await r.json();
+    if (!r.ok || j.error) { $("msg").textContent = j.error || t("request_failed"); return; }
+    open_.add(j.id);
+    hasActiveJob = true;
+    showView("runs");
+  } catch (e) {
+    $("msg").textContent = t("request_failed");
+  } finally {
+    requestPending = false;
+    submittingMode = null;
+    syncActionStates();
+    poll();
+  }
+}
+
+// ---------- 뷰 ----------
+function wrapTable(inner) { return `<div class="table-wrap"><table>${inner}</table></div>`; }
+
+// 단어 단위 unified diff (LCS). 너무 길면 하이라이트 생략.
+function wordDiff(a, b) {
+  const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+  if (A.length * B.length > 500000)
+    return `<div class="diff">${esc(b)}</div>`;
+  const n = A.length, m = B.length;
+  const dp = Array.from({length: n+1}, () => new Uint16Array(m+1));
+  for (let i = n-1; i >= 0; i--)
+    for (let j = m-1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+  let i = 0, j = 0, out = "";
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out += esc(A[i]); i++; j++; }
+    else if (dp[i+1][j] >= dp[i][j+1]) { if (A[i].trim()) out += `<del>${esc(A[i])}</del>`; i++; }
+    else { if (B[j].trim()) out += `<ins>${esc(B[j])}</ins>`; else out += esc(B[j]); j++; }
+  }
+  while (i < n) { if (A[i].trim()) out += `<del>${esc(A[i])}</del>`; i++; }
+  while (j < m) { out += B[j].trim() ? `<ins>${esc(B[j])}</ins>` : esc(B[j]); j++; }
+  return `<div class="diff">${out}</div>`;
+}
+
+function fmtScore(s) {
+  return s ? `${s.total} <span style="color:var(--dim)">(${t("acc_short")} ${s.accuracy} · ${t("eff_short")} ${s.efficiency})</span>` : "-";
+}
+
+// ---------- 백링크 그래프 (결정적 force layout — poll 재렌더 캐시 안정성) ----------
+function layoutGraph(nodes, edges, W, H) {
+  const n = nodes.length;
+  if (!n) return [];
+  const pos = nodes.map((nd, i) => {
+    const a = (2 * Math.PI * i) / n;
+    return { id: nd.id, x: W/2 + Math.cos(a) * W * 0.34, y: H/2 + Math.sin(a) * H * 0.34 };
+  });
+  const idx = Object.fromEntries(pos.map((p, i) => [p.id, i]));
+  const k = Math.sqrt((W * H) / n) * 0.8;
+  for (let it = 0; it < 160; it++) {
+    const fx = new Float64Array(n), fy = new Float64Array(n);
+    for (let i = 0; i < n; i++) for (let j = i+1; j < n; j++) {
+      let dx = pos[i].x - pos[j].x, dy = pos[i].y - pos[j].y;
+      let d2 = dx*dx + dy*dy || 1, d = Math.sqrt(d2);
+      const rep = (k*k) / d2;
+      fx[i] += dx/d * rep * d; fy[i] += dy/d * rep * d;
+      fx[j] -= dx/d * rep * d; fy[j] -= dy/d * rep * d;
+    }
+    for (const e of edges) {
+      const a = idx[e.source], b = idx[e.target];
+      if (a == null || b == null) continue;
+      let dx = pos[a].x - pos[b].x, dy = pos[a].y - pos[b].y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const att = (d*d) / k * 0.02;
+      fx[a] -= dx/d * att; fy[a] -= dy/d * att;
+      fx[b] += dx/d * att; fy[b] += dy/d * att;
+    }
+    const cool = 1 - it/160;
+    for (let i = 0; i < n; i++) {
+      const disp = Math.sqrt(fx[i]*fx[i] + fy[i]*fy[i]) || 1;
+      const step = Math.min(disp, 14 * cool);
+      pos[i].x += fx[i]/disp * step + (W/2 - pos[i].x) * 0.012;
+      pos[i].y += fy[i]/disp * step + (H/2 - pos[i].y) * 0.012;
+      pos[i].x = Math.max(50, Math.min(W-50, pos[i].x));
+      pos[i].y = Math.max(26, Math.min(H-16, pos[i].y));
+    }
+  }
+  return pos;
+}
+
+function nodeColor(rate, uses) {
+  if (!uses) return null;                       // 미사용 — 회색 테두리만
+  if (rate >= 0.75) return "var(--ok)";
+  if (rate >= 0.4) return "var(--warn)";
+  return "var(--bad)";
+}
+
+function graphSVG(graph, pageRows) {
+  const W = 940, H = 560;
+  const byName = Object.fromEntries(pageRows.map(r => [r.name, r]));
+  const pos = layoutGraph(graph.nodes, graph.edges, W, H);
+  const at = Object.fromEntries(pos.map(p => [p.id, p]));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t("r_graph"))}">`;
+  for (const e of graph.edges) {
+    const a = at[e.source], b = at[e.target];
+    if (!a || !b) continue;
+    svg += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+  }
+  for (const nd of graph.nodes) {
+    const p = at[nd.id], row = byName[nd.id] || {};
+    if (!p) continue;
+    const r = 6 + Math.min(10, nd.inlinks * 1.4);
+    const fill = nodeColor(row.correct_rate ?? 0, row.uses);
+    const circle = fill
+      ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${fill}" fill-opacity="0.85"/>`
+      : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="var(--control)" stroke="var(--line-strong)" stroke-width="1.5"/>`;
+    const label = nd.id.length > 22 ? nd.id.slice(0, 21) + "…" : nd.id;
+    svg += `<g>${circle}<text x="${p.x.toFixed(1)}" y="${(p.y + r + 11).toFixed(1)}" text-anchor="middle" font-size="10">${esc(label)}</text>
+      <title>${esc(nd.id)} — inlinks ${nd.inlinks}, ${row.uses ? `reads ${row.uses}, correct ${row.correct_rate}` : t("r_unused")}</title></g>`;
+  }
+  svg += "</svg>";
+  return `<div class="chart"><div class="chart-head">${t("r_graph")}</div>${svg}</div>`;
+}
+
+function routerAuditView(res, status) {
+  const done = res.done ?? res.n_docs, total = res.total ?? res.n_docs;
+  const prog = done < total || status === "running"
+    ? `<span class="muted">${t("scoring_docs", done ?? 0, total ?? "?")}</span>` : "";
+  let html = `<div class="runbox"><h3>${t("audit_title")}${prog}</h3>`;
+  if (res.accuracy != null)
+    html += `<div class="kpis">
+      <div class="kpi"><b>${res.accuracy}</b><span>${t("r_kpi_acc")} (${res.n_questions ?? "-"} Q)</span></div>
+      <div class="kpi"><b>${res.efficiency ?? "-"}</b><span>${t("r_kpi_eff")}</span></div>
+      <div class="kpi"><b>${res.avg_read ?? "-"}</b><span>${t("r_kpi_read")}</span></div>
+      <div class="kpi"><b>${res.n_pages_used ?? "-"}/${res.n_pages ?? "-"}</b><span>${t("r_kpi_cov")}</span></div>
+    </div>`;
+  if (res.graph?.nodes?.length && res.pages)
+    html += graphSVG(res.graph, res.pages);
+  if (res.parse_failed_docs?.length)
+    html += `<div class="err" style="margin-top:8px">${t("r_parse_warn", res.parse_failed_docs.join(", "))}</div>`;
+  if (res.pages?.length) {
+    html += `<details open><summary>${t("r_pages")}</summary>${wrapTable(
+      `<tr><th>${t("th_page")}</th><th>chars</th><th>${t("th_inlinks")}</th><th>${t("th_uses")}</th><th>${t("th_rate")}</th></tr>` +
+      res.pages.map(r => `<tr>
+        <td>${esc(r.name)}</td><td>${(r.chars/1000).toFixed(1)}k</td>
+        <td>${r.inlinks}</td><td>${r.uses}</td>
+        <td>${r.uses ? `<span class="${r.correct_rate >= 0.75 ? "up" : r.correct_rate < 0.4 ? "down" : ""}">${r.correct_rate}</span>` : `<span class="muted">${t("r_unused")}</span>`}</td>
+      </tr>`).join(""))}</details>`;
+  }
+  if (res.questions?.length) {
+    html += `<details><summary>${t("r_questions")}</summary>${wrapTable(
+      `<tr><th>${t("th_src_doc")}</th><th>${t("th_q")}</th><th>${t("th_picked")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
+      res.questions.map(d => `<tr><td>${esc(d.doc)}</td><td>${esc(d.q)}</td>
+        <td>${(d.picked||[]).map(esc).join(", ")}</td><td>${d.read_chars}</td>
+        <td>${d.score != null ? (d.score ? "⭕" : "❌") : "-"}</td></tr>`).join(""))}</details>`;
+  }
+  return html + "</div>";
+}
+
+function auditView(res, status) {
+  if (res.variant === "router") return routerAuditView(res, status);
+  const prog = res.done < res.total ? `<span class="muted">${t("scoring_docs", res.done, res.total)}</span>` : "";
+  let html = `<div class="runbox"><h3>${t("audit_title")}${prog}</h3>`;
+  if (res.avg_total != null)
+    html += `<div class="kpis"><div class="kpi"><b>${res.avg_total}</b><span>${t("avg_score", res.n_scored)}</span></div></div>`;
+  html += wrapTable(`<tr><th>${t("th_doc")}</th><th>${t("th_raw")}</th><th>${t("th_summary")}</th><th>${t("th_score")}</th></tr>` +
+    (res.docs||[]).map(d => `<tr><td>${esc(d.name)}</td>
+      <td>${(d.raw_chars/1000).toFixed(1)}k</td>
+      <td>${d.has_summary ? `${((d.wiki_chars||0)/1000).toFixed(1)}k` : `<span class="err">${t("none")}</span>`}</td>
+      <td>${fmtScore(d.score)}</td></tr>`).join(""));
+  return html + "</div>";
+}
+
+function applyView(res, status) {
+  const prog = res.done < res.total || status === "running" ? `<span class="muted">${t("generating", res.done||0, res.total||"?")}</span>` : "";
+  let html = `<div class="runbox"><h3>${t("apply_title")}${prog}</h3>`;
+  if (res.avg_after != null) {
+    const b = res.avg_before, a = res.avg_after;
+    const dir_ = b == null ? "" : a > b ? "up" : a < b ? "down" : "";
+    html += `<div class="kpis">
+      <div class="kpi"><b>${b ?? "-"}</b><span>${t("before_avg")}</span></div>
+      <div class="kpi"><b class="${dir_}">${a}</b><span>${t("after_avg")}</span></div></div>`;
+  }
+  if (res.strategy)
+    html += `<details><summary>${t("used_strategy", esc(res.strategy_source||""))}</summary>
+      <pre>${esc(res.strategy)}</pre></details>`;
+  if (res.out_dir)
+    html += `<div class="note">${t("after_files", esc(res.out_dir))}</div>`;
+  html += (res.docs||[]).map(d => {
+    const bs = d.before?.score, as_ = d.after?.score;
+    const head = `${esc(d.name)} &nbsp; ${fmtScore(bs)}<span class="arrow">→</span>${fmtScore(as_)}`;
+    let body = "";
+    if (d.before?.content && d.after?.content)
+      body = `<div class="note">${t("diff_legend", d.before.content.length, d.after.content.length)}</div>` +
+        wordDiff(d.before.content, d.after.content);
+    else if (d.after?.content)
+      body = `<div class="note">${t("new_summary")}</div>
+        <pre>${esc(d.after.content)}</pre>`;
+    return `<details><summary>${head}</summary>${body}</details>`;
+  }).join("");
+  return html + "</div>";
+}
+
+function chart(hist, key, bestGen) {
+  const W = 640, H = 180, P = 32;
+  const xs = hist.map(h => h.generation);
+  const X = i => P + (W - 2*P) * (xs.length === 1 ? 0.5 : i / (xs.length - 1));
+  const Y = v => H - P - (H - 2*P) * Math.max(0, Math.min(1, v));
+  const line = (get, stroke, extra="") => {
+    const pts = hist.map((h, i) => `${X(i)},${Y(get(h))}`);
+    return `<polyline points="${pts.join(" ")}" fill="none" stroke="${stroke}" ${extra}/>` +
+      hist.map((h, i) => `<circle cx="${X(i)}" cy="${Y(get(h))}" r="3" fill="${stroke}"/>`).join("");
+  };
+  const ariaBest = bestGen != null && xs.indexOf(bestGen) >= 0 ? bestGen : null;
+  const chartLabel = t("chart_aria", xs.length, ariaBest);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(chartLabel)}"><title>${esc(chartLabel)}</title>`;
+  for (const v of [0, .5, 1]) {
+    svg += `<line x1="${P}" y1="${Y(v)}" x2="${W-P}" y2="${Y(v)}" stroke="var(--line-subtle)" stroke-dasharray="3 5"/>
+            <text x="4" y="${Y(v)+4}">${v}</text>`;
+  }
+  if (hist[0][key])
+    svg += line(h => (h[key]||{}).total ?? 0, "var(--line-strong)", 'stroke-width="1.5" stroke-dasharray="4 5"');
+  svg += line(h => h.score.total, "var(--acc)", 'stroke-width="2.5"');
+  if (bestGen != null) {
+    const bi = xs.indexOf(bestGen);
+    if (bi >= 0) {
+      svg += `<circle cx="${X(bi)}" cy="${Y(hist[bi].score.total)}" r="6" fill="none" stroke="var(--acc)" stroke-width="1.5"/>`;
+    }
+  }
+  xs.forEach((g, i) => { svg += `<text x="${X(i)-12}" y="${H-8}">${t("gen_short", g)}</text>`; });
+  svg += `</svg>`;
+  const legend = `<div class="chart-head"><span><i></i>${t("held_out")}</span>` +
+    (hist[0][key] ? `<span><i class="train"></i>${t("train")}</span>` : "") + `</div>`;
+  return `<div class="chart">${legend}${svg}</div>`;
+}
+
+function summaryRun(run) {
+  const p = run.progress, rep = run.report;
+  if (!p) return "";
+  const best = p.history[p.best_gen >= 0 ? p.best_gen : 0] || {};
+  const baseline = Number(p.history[0]?.score?.total);
+  const bestTotal = Number(p.best_total);
+  const improvementValue = baseline > 0 && Number.isFinite(bestTotal)
+    ? (bestTotal - baseline) / baseline * 100 : null;
+  const improvement = improvementValue > 0 ? improvementValue.toFixed(1) : null;
+  const trail = p.history.map((h, index) => `<div class="evolution-step${h.generation===p.best_gen ? " best" : ""}">
+      <i></i><b>${h.score?.total ?? "-"}</b><span>${index === 0 ? t("baseline") : h.generation===p.best_gen ? t("best_label") : t("gen_short", h.generation)}</span></div>`).join("");
+  let html = `<div class="runbox evolution-run"><div class="result-heading"><h3>${esc(p.doc)}
+      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
+      <div class="result-score"><b>${p.best_total}</b>${improvement == null ? "" : `<span>↑ ${t("score_improved", improvement)}</span>`}</div></div>
+    <div class="kpis">
+      <div class="kpi"><b>${(best.score||{}).length_ratio ?? "-"}</b><span>${t("ratio")}</span></div>
+      <div class="kpi"><b>${(best.score||{}).accuracy ?? "-"}</b><span>${t("accuracy")}</span></div>
+      <div class="kpi"><b>${(best.score||{}).efficiency ?? "-"}</b><span>${t("efficiency")}</span></div>
+    </div>
+    <div class="evolution-label">${t("evolution_trail")}</div>
+    <div class="evolution-steps" style="--step-count:${Math.max(1,p.history.length)}">${trail}</div>
+    ${chart(p.history, "train_score", p.best_gen)}
+    <details><summary>${t("strategy_per_gen")}</summary>${wrapTable(
+      `<tr><th>${t("generation_label")}</th><th>${t("held_out")}</th><th>${t("ratio")}</th><th>${t("th_strategy")}</th></tr>` +
+      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
+        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+        <td>${h.score.total}</td><td>${h.score.length_ratio}</td>
+        <td>${esc(h.strategy)}</td></tr>`).join(""))}
+    </details>`;
+  if (rep && rep.best && rep.best.summary) {
+    const ratio = (rep.history[rep.best.generation]||{}).score?.length_ratio;
+    html += `<details><summary>${t("best_summary")}</summary>
+      <div class="note">${t("len_vs_raw")}
+        <span class="lenbar"><i style="width:${Math.min(100,(ratio||0)*100)}%"></i></span>
+        ${ratio!=null ? (ratio*100).toFixed(0)+"%" : ""}</div>
+      <pre>${esc(rep.best.summary)}</pre></details>`;
+  }
+  return html + "</div>";
+}
+
+function structureRun(run) {
+  const p = run.progress, rep = run.report;
+  if (!p) return "";
+  let html = `<div class="runbox"><h3>${t("structure_title", p.docs.map(esc).join(", "))}
+      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>
+    <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>${t("best_gen", p.best_gen)}</span></div></div>
+    ${chart(p.history, "", p.best_gen)}
+    <details><summary>${t("files_per_gen")}</summary>${wrapTable(
+      `<tr><th>${t("generation_label")}</th><th>${t("total")}</th><th>${t("acc_short")}</th><th>${t("eff_short")}</th><th>${t("th_files")}</th></tr>` +
+      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
+        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+        <td${heat(h.score.total)}>${h.score.total}</td><td${heat(h.score.accuracy)}>${h.score.accuracy}</td><td${heat(h.score.efficiency)}>${h.score.efficiency}</td>
+        <td>${(h.file_titles||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
+    </details>`;
+  const det = rep?.best?.result?.details;
+  if (det) {
+    html += `<details><summary>${t("routing")}</summary>${wrapTable(
+      `<tr><th>${t("th_q")}</th><th>${t("th_picked")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
+      det.map(d => `<tr><td>${esc(d.q)}</td><td>${(d.picked||[]).map(esc).join(", ")}</td>
+        <td>${d.read_chars}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}
+    </details>`;
+  }
+  return html + "</div>";
+}
+
+function proposalTree(pages) {
+  let html = "", lastDir = null;
+  for (const p of [...pages].sort((a,b) => a.path.localeCompare(b.path))) {
+    const i = p.path.lastIndexOf("/");
+    const dir = i < 0 ? "." : p.path.slice(0, i), name = i < 0 ? p.path : p.path.slice(i+1);
+    if (dir !== lastDir) { html += `<div style="margin-top:6px"><b>${esc(dir)}/</b></div>`; lastDir = dir; }
+    const gap = p.status === "gap" ? ` <span class="badge b-error" style="height:18px">gap</span>` : "";
+    html += `<div style="padding-left:16px">${esc(name)} — <span class="muted">${esc(p.title)}</span>${gap}</div>`;
+  }
+  return html;
+}
+
+function proposalRun(run, jobId) {
+  const p = run.progress, rep = run.report;
+  if (!p && !rep) return "";
+  const done = p ? t("gen_progress", p.done_generations, p.generations) : "";
+  let html = `<div class="runbox"><h3>${t("prop_run_title")} <span class="muted">${done}</span></h3>`;
+  const best = rep?.best;
+  if (rep && !rep.scoreable) {
+    html += `<div class="note" style="color:var(--warn)">${t("prop_unscored")}</div>`;
+  } else if (p) {
+    const nG = rep ? rep.question_set.filter(x => x.a).length : null;
+    html += `<div class="kpis">
+      <div class="kpi"><b>${p.best_total ?? "—"}</b><span>best (gen ${p.best_gen})</span></div>
+      ${nG != null ? `<div class="kpi"><b>${nG}/${rep.question_set.length}</b><span>${t("prop_grounded")}</span></div>` : ""}
+    </div>`;
+    const hist = p.history.filter(h => h.score && h.score.total != null);
+    if (hist.length) html += chart(hist, "", p.best_gen);
+  }
+  if (best?.pages) {
+    html += `<details open><summary>${t("prop_tree")} (${best.pages.length})</summary>
+      <div style="font-size:13px;margin-top:8px">${proposalTree(best.pages)}</div></details>`;
+    html += `<details><summary>${t("th_page")} · ${t("th_purpose")} · ${t("th_sources")}</summary>${wrapTable(
+      `<tr><th>${t("th_page")}</th><th>${t("th_purpose")}</th><th>${t("th_sources")}</th></tr>` +
+      best.pages.map(x => `<tr><td>${esc(x.path)}</td><td>${esc(x.purpose)}</td>
+        <td>${(x.sources||[]).map(esc).join("<br>") || "—"}</td></tr>`).join(""))}
+    </details>`;
+  }
+  if (rep?.gap_questions?.length) {
+    html += `<details open><summary>${t("prop_gapq")} (${rep.gap_questions.length})</summary>
+      <div class="note">${t("prop_gapq_desc")}</div>
+      <ul style="margin:8px 0">${rep.gap_questions.map(q => `<li>${esc(q)}</li>`).join("")}</ul></details>`;
+  }
+  if (p?.history?.length) {
+    html += `<details><summary>${t("prop_pages_per_gen")}</summary>${wrapTable(
+      `<tr><th>gen</th><th>total</th><th>acc</th><th>eff</th><th>${t("th_files")}</th></tr>` +
+      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':''}>
+        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
+        <td${heat(h.score?.total)}>${h.score?.total ?? "—"}</td><td${heat(h.score?.accuracy)}>${h.score?.accuracy ?? "—"}</td>
+        <td${heat(h.score?.efficiency)}>${h.score?.efficiency ?? "—"}</td>
+        <td>${(h.page_paths||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
+    </details>`;
+  }
+  if (rep && jobId) {
+    html += `<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <input type="text" id="exp-${jobId}" placeholder="${t("prop_export_ph")}" style="max-width:340px">
+      <button class="ghost" onclick="exportSkeleton('${jobId}','exp-${jobId}','expmsg-${jobId}')">${t("prop_export")}</button>
+      <span id="expmsg-${jobId}" class="muted"></span></div>`;
+  }
+  return html + "</div>";
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function renderJob(j) {
+  const isOpen = open_.has(j.id);
+  const badge = `<span class="badge b-${j.status}">${t("status_" + j.status)}</span>`;
+  const when = new Date(j.created_at*1000).toLocaleTimeString(LOCALES[LANG]);
+  let inner = `<div class="job-body" id="job-${j.id}-body" hidden></div>`;
+  if (isOpen) {
+    const r = await fetch(`/api/runs/${j.id}`);
+    const d = await r.json();
+    let body = "";
+    if (d.error && !d.result && !d.runs?.length) body = `<div class="err">${esc(d.error)}</div>`;
+    else {
+      if (d.status === "error") body += `<div class="err runbox">${t("failed")}: ${esc(d.error)}</div>`;
+      if (j.mode === "audit" || j.mode === "apply") {
+        body += d.result
+          ? (j.mode === "audit" ? auditView(d.result, d.status) : applyView(d.result, d.status))
+          : `<div class="runbox" style="color:var(--dim)">${t("preparing_q")}</div>`;
+      } else {
+        body += d.runs.map(run =>
+          (j.mode === "propose" ? proposalRun(run, j.id)
+           : run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
+          || `<div class="runbox" style="color:var(--dim)">${t("waiting_gen")}</div>`;
+      }
+    }
+    inner = `<div class="job-body" id="job-${j.id}-body">${body}</div>`;
+  }
+  // summary만 실행 중 취소 지점이 있다 — 다른 모드는 대기 중(queued)에만 중지 가능
+  const stoppable = j.status === "queued" ||
+    (j.status === "running" && j.mode === "summary");
+  const stopUi = !stoppable ? ""
+    : j.cancel_requested
+      ? `<span class="job-stop">${t("stopping")}</span>`
+      : `<button type="button" class="ghost job-stop" onclick="cancelRun('${j.id}')">${t("stop")}</button>`;
+  return `<div class="card">
+    <div class="job-actions">
+    <button type="button" class="job-head" data-job-id="${j.id}" onclick="toggle('${j.id}')"
+      aria-expanded="${isOpen}" aria-controls="job-${j.id}-body">
+      ${badge} <span class="mode">${t("mode_" + j.mode)}</span>
+      <span class="docs-list">${j.doc_names.map(esc).join(", ")}</span>
+      <span class="meta">${t("run_meta", j.mode, j.backend, j.generations, when)}</span>
+      <span class="chev${isOpen ? " open" : ""}" aria-hidden="true">▾</span>
+    </button>${stopUi}</div>${inner}</div>`;
+}
+
+function toggle(id) { open_.has(id) ? open_.delete(id) : open_.add(id); poll(); }
+
+async function cancelRun(id) {
+  await fetch(`/api/runs/${id}/cancel`, { method: "POST" });
+  poll();
+}
+
+let timer = null, lastHtml = "";
+async function poll() {
+  clearTimeout(timer);
+  const focusedJobId = document.activeElement?.dataset?.jobId;
+  const expandedDetails = [...document.querySelectorAll("#jobs details")]
+    .flatMap((el, index) => el.open ? [index] : []);
+  let delay = 10000;
+  try {
+    const r = await fetch("/api/runs");
+    if (!r.ok) throw new Error(`poll failed: ${r.status}`);
+    const { jobs } = await r.json();
+    $("runsCountNav").textContent = jobs.length || "";
+    const parts = await Promise.all(jobs.map(renderJob));
+    const html = parts.join("") ||
+      `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
+    $("runsCount").textContent = jobs.length ? t("runs_count", jobs.length) : "";
+    hasActiveJob = jobs.some(j => j.status === "running" || j.status === "queued");
+    delay = hasActiveJob ? 2000 : 10000;
+    if (html !== lastHtml) {
+      $("jobs").innerHTML = html;
+      lastHtml = html;
+      const details = document.querySelectorAll("#jobs details");
+      expandedDetails.forEach(index => { if (details[index]) details[index].open = true; });
+      if (focusedJobId)
+        document.querySelector(`[data-job-id="${focusedJobId}"]`)?.focus();
+    }
+  } catch (e) {
+    delay = 3000;
+  } finally {
+    syncActionStates();
+    timer = setTimeout(poll, delay);
+  }
+}
+
+applyLang();
+loadPrefs();
+syncDirActions();
+poll();

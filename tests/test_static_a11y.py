@@ -7,11 +7,13 @@ chart_aria i18n 키가 지원 언어(ko/en/zh) 전부에 있는지 확인한다.
 import re
 from pathlib import Path
 
-INDEX = Path(__file__).resolve().parent.parent / "src" / "static" / "index.html"
+STATIC = Path(__file__).resolve().parent.parent / "src" / "static"
+INDEX = STATIC / "index.html"
+APP_JS = STATIC / "app.js"
 
 
 def test_chart_svg_has_aria_label():
-    html = INDEX.read_text(encoding="utf-8")
+    html = INDEX.read_text(encoding="utf-8") + APP_JS.read_text(encoding="utf-8")
     svg_tags = re.findall(r'<svg[^>]*role="img"[^>]*>', html)
     assert svg_tags, 'role="img" SVG 템플릿이 없다'
     for tag in svg_tags:
@@ -19,7 +21,7 @@ def test_chart_svg_has_aria_label():
 
 
 def test_chart_aria_key_in_all_languages():
-    html = INDEX.read_text(encoding="utf-8")
+    html = INDEX.read_text(encoding="utf-8") + APP_JS.read_text(encoding="utf-8")
     langs = re.findall(r"^  (\w+): \{", html, flags=re.MULTILINE)
     assert html.count("chart_aria:") == len(langs) == 3
     assert 't("chart_aria"' in html
