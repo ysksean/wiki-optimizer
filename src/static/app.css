@@ -16,7 +16,7 @@
     --fs-heading: 22px;
     --fs-display: 28px;
 
-    --bg: #f5f6f9;
+    --bg: #f1f4f9;
     --card: #ffffff;
     --card-raised: #fbfcfe;
     --control: #ffffff;
@@ -45,7 +45,7 @@
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
-    --shadow-panel: 0 1px 1px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .06);
+    --shadow-panel: 0 1px 2px rgba(16, 24, 40, .05), 0 10px 30px rgba(16, 24, 40, .07);
     --chrome-glass: rgba(245, 246, 249, .88);
   }
   @media (prefers-color-scheme: dark) {
@@ -616,3 +616,36 @@
   .chip-score b { font-weight: 700; font-variant-numeric: tabular-nums; }
   .chip-warn { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
   @media (max-width: 760px) { .job-head .meta { margin-left: 0; } }
+
+  /* ---------- ⑤ quiet SaaS — 상태 알약 · 벤토 요약 · 스파크 KPI · 그라데이션 차트 ---------- */
+  .workspace-panel, .experiment-panel, .next-panel, .propose-panel, #jobs .card, #optTimeline .card { border-color: var(--line-subtle); box-shadow: var(--shadow-panel); border-radius: 14px; }
+  .live-status { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 7px 12px; width: fit-content; border-radius: 99px;
+    background: var(--card); border: 1px solid var(--line-subtle); box-shadow: var(--shadow-panel); color: var(--tx-secondary); font-size: var(--fs-secondary); }
+  .live-status b { color: var(--tx); font-variant-numeric: tabular-nums; }
+  .live-status .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--dim); }
+  .live-status .dot.done { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+  .live-status .dot.running { background: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px transparent; } }
+  .bento { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 10px; margin: 16px 0 12px; }
+  .tile { position: relative; padding: 14px 16px; border: 1px solid var(--line-subtle); border-radius: 12px; background: var(--card); box-shadow: var(--shadow-panel); min-height: 96px; }
+  .tile > span { display: block; color: var(--dim); font-size: var(--fs-caption); font-weight: 600; letter-spacing: .01em; }
+  .tile > b { display: block; margin-top: 6px; font: 650 26px/1.1 var(--font-sans); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tile > b small { font-size: 16px; color: var(--dim); font-weight: 500; }
+  .tile > small { display: block; margin-top: 6px; color: var(--dim); font-size: var(--fs-caption); }
+  .tile-hero { background: linear-gradient(135deg, var(--acc-soft), transparent 60%), var(--card); }
+  .tile-hero > b { font-size: 40px; }
+  .tile-hero .spark { position: absolute; right: 14px; top: 16px; width: 120px; height: 36px; }
+  .tile-warn { border-color: var(--warn-soft); background: linear-gradient(135deg, var(--warn-soft), transparent 70%), var(--card); }
+  .tile-ok { background: linear-gradient(135deg, var(--ok-soft), transparent 70%), var(--card); }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
+  .kpi { min-width: 0; padding: 12px 14px; border-color: var(--line-subtle); box-shadow: var(--shadow-panel); border-radius: 12px; }
+  .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .kpi-top > span { color: var(--dim); font-size: var(--fs-caption); font-weight: 600; }
+  .kpi b { font-size: 26px; line-height: 30px; margin-top: 4px; }
+  .kpi .spark { display: block; width: 100%; height: 28px; margin-top: 8px; }
+  .delta { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 99px; font: 600 11px/16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .delta em { font-style: normal; font-weight: 500; opacity: .7; }
+  .delta.up { background: var(--ok-soft); color: var(--ok); } .delta.down { background: var(--bad-soft); color: var(--bad); } .delta.flat { background: var(--hover); color: var(--dim); }
+  .tile-hero .delta { margin-top: 8px; }
+  .chart { border-color: var(--line-subtle); box-shadow: var(--shadow-panel); border-radius: 12px; }
+  @media (max-width: 900px) { .bento { grid-template-columns: 1fr 1fr; } .tile-hero { grid-column: 1 / -1; } }
