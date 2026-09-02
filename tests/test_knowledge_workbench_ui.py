@@ -65,6 +65,8 @@ def test_mobile_layout_guards_against_horizontal_overflow():
     assert "@media (max-width: 360px)" in HTML
     assert ".mode-cards { grid-template-columns: 1fr; }" in HTML
     assert ".doc-filter button { min-height: 44px" in HTML
+    assert ".doc-search input { min-height: 44px; }" in HTML
+    assert ".advanced-grid input, .advanced-grid select { min-height: 44px; }" in HTML
     assert ".docs { max-height: 360px; }" in HTML
     assert ".docs-toolbar { position: fixed; left: 16px; right: 16px; bottom: 76px; }" in HTML
 
