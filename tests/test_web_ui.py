@@ -115,3 +115,12 @@ def test_css_tokens_define_both_themes():
     assert '@media (prefers-color-scheme: dark)' in css
     assert ':root[data-theme="dark"]' in css
     assert "font-size: 10px" not in css and "font-size: 11px" not in css and "font-size: 9px" not in css
+
+
+def test_result_cards_expose_trust_signals_and_strategy_diff():
+    """③: arm 뱃지·provenance 칩·parse_failed 표시·세대 간 전략 diff가 결과 카드에 있다."""
+    assert "function resultMeta(p, rep)" in JS and "rep.provenance" in JS
+    assert "wordDiff(prev, h.strategy)" in JS
+    assert "parse_failed_generations" in JS
+    assert JS.count('"arm_control":') == 3  # 3개 언어
+    assert ".arm-control" in CSS and ".parse-failed-note" in CSS

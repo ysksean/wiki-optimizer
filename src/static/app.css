@@ -585,3 +585,20 @@
   @media (max-width: 360px) {
     .mode-cards { grid-template-columns: 1fr; }
   }
+
+  /* ---------- 결과 카드 (③) — 신뢰성 장치를 화면에 ---------- */
+  .result-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+  .arm { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 99px;
+    font-size: var(--fs-caption); font-weight: 600; background: var(--hover); color: var(--tx-secondary); }
+  .arm-evolve, .arm-evolve-wiki { background: var(--acc-soft); color: var(--acc); }
+  .arm-control { background: var(--hover); color: var(--dim); }
+  .arm-evolve-nohist { background: var(--warn-soft); color: var(--warn); }
+  .prov { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border: 1px solid var(--line);
+    border-radius: 99px; color: var(--dim); font: 500 var(--fs-caption) var(--font-mono); cursor: help; }
+  .parse-failed-note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: var(--fs-secondary); }
+  .evolution-step.failed i { background: var(--bg); box-shadow: 0 0 0 1px var(--line-strong); }
+  .evolution-step.failed b { color: var(--dim); text-decoration: line-through; }
+  tr.is-failed td { color: var(--dim); }
+  td.strategy-cell { min-width: 320px; max-width: 560px; white-space: normal; line-height: 1.55; }
+  td.strategy-cell .diff { margin: 0; padding: 0; border: 0; background: transparent; max-height: none; font: inherit; }
+  .result-heading > div:first-child { min-width: 0; }
