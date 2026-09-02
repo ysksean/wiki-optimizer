@@ -144,7 +144,7 @@ let submittingMode = null;
 // ---------- i18n ----------
 const I18N = {
   ko: {
-    workbench_eyebrow: "Knowledge Workbench", opt_title: "어떤 지식을 더 선명하게 만들까요?", opt_desc: "문서를 고르고 실험 방식을 선택하세요. 원본은 변경하지 않습니다.",
+    workbench_eyebrow: "Knowledge Workbench", opt_title: "위키 최적화", opt_desc: "문서를 고르고 실행하면 세대별 점수와 전략 변화가 오른쪽에 쌓입니다. 원본은 바뀌지 않아요.",
     current_wiki: "현재 위키", workspace_empty: "폴더를 연결해 시작하세요", path_not_set: "연결된 폴더 없음", change_folder: "폴더 변경",
     docs_title: "실험할 문서", docs_hint: "핵심 자료만 선택할수록 결과를 빠르게 비교할 수 있어요.", docs_empty: "위키 폴더를 연결하면 문서가 여기에 표시됩니다.",
     doc_search: "문서 이름 검색", filter_all: "전체", filter_selected: "선택됨", experiment_friendly_desc: "목표만 고르면 나머지는 추천값으로 시작합니다.",
@@ -209,6 +209,7 @@ const I18N = {
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
     prop_title: "Stage 0 — 구조 제안 (백지에서)", mode_propose: "0 제안",
+    timeline_title: "실행", timeline_desc: "가장 최근 실행이 여기 표시됩니다.",
     nav_opt: "위키 최적화", nav_propose: "구조 제안", nav_runs: "실행 기록",
     src_add_dir: "＋ 폴더 선택", src_add_files: "＋ 파일 업로드",
     src_manual_ph: "경로 직접 입력 후 Enter (예: ~/repo/docs)",
@@ -227,7 +228,7 @@ const I18N = {
     chart_aria: (n, best) => `세대별 검증 점수 추이, 총 ${n}세대` + (best == null ? "" : `, 최고 점수 ${best}세대`),
   },
   en: {
-    workbench_eyebrow: "Knowledge Workbench", opt_title: "Which knowledge should become clearer?", opt_desc: "Choose documents and an experiment. Your originals stay untouched.",
+    workbench_eyebrow: "Knowledge Workbench", opt_title: "Optimize wiki", opt_desc: "Pick documents and run — generation scores and strategy changes stack up on the right. Originals stay untouched.",
     current_wiki: "Current wiki", workspace_empty: "Connect a folder to begin", path_not_set: "No folder connected", change_folder: "Change folder",
     docs_title: "Documents to experiment on", docs_hint: "A focused selection makes results faster to compare.", docs_empty: "Connect a wiki folder to see its documents here.",
     doc_search: "Search document names", filter_all: "All", filter_selected: "Selected", experiment_friendly_desc: "Choose a goal and start with recommended settings.",
@@ -292,6 +293,7 @@ const I18N = {
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
     prop_title: "Stage 0 — propose structure (blank slate)", mode_propose: "0 propose",
+    timeline_title: "Run", timeline_desc: "The latest run shows up here.",
     nav_opt: "Optimize wiki", nav_propose: "Propose structure", nav_runs: "Runs",
     src_add_dir: "+ Choose folder", src_add_files: "+ Upload files",
     src_manual_ph: "Type a path and press Enter (e.g. ~/repo/docs)",
@@ -310,7 +312,7 @@ const I18N = {
     chart_aria: (n, best) => `Held-out score by generation, ${n} generations` + (best == null ? "" : `, best generation ${best}`),
   },
   zh: {
-    workbench_eyebrow: "Knowledge Workbench", opt_title: "要让哪些知识更清晰？", opt_desc: "选择文档和实验方式，原始文件不会被修改。",
+    workbench_eyebrow: "Knowledge Workbench", opt_title: "Wiki 优化", opt_desc: "选择文档并运行，各代评分与策略变化会显示在右侧。原文不会被修改。",
     current_wiki: "当前 wiki", workspace_empty: "连接文件夹后开始", path_not_set: "尚未连接文件夹", change_folder: "更换文件夹",
     docs_title: "实验文档", docs_hint: "聚焦核心资料，可以更快比较结果。", docs_empty: "连接 wiki 文件夹后，文档会显示在这里。",
     doc_search: "搜索文档名称", filter_all: "全部", filter_selected: "已选择", experiment_friendly_desc: "只需选择目标，其余使用推荐设置。",
@@ -375,6 +377,7 @@ const I18N = {
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
     prop_title: "Stage 0 — 结构提案（从零开始）", mode_propose: "0 提案",
+    timeline_title: "运行", timeline_desc: "这里显示最近一次运行。",
     nav_opt: "Wiki 优化", nav_propose: "结构提案", nav_runs: "运行记录",
     src_add_dir: "＋ 选择文件夹", src_add_files: "＋ 上传文件",
     src_manual_ph: "输入路径后回车（例：~/repo/docs）",
@@ -612,7 +615,9 @@ async function startJobRequest(body, msgEl) {
     if (!r.ok || j.error) { $(msgEl).textContent = j.error || t("request_failed"); return; }
     open_.add(j.id);
     hasActiveJob = true;
-    showView("runs");
+    // 실행 기록으로 이동하지 않는다 — 결과는 이 화면의 타임라인에 바로 쌓인다
+    if (curView !== "opt") showView("opt");
+    $("timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     $(msgEl).textContent = t("request_failed");
   } finally {
@@ -678,7 +683,9 @@ async function startRun() {
     if (!r.ok || j.error) { $("msg").textContent = j.error || t("request_failed"); return; }
     open_.add(j.id);
     hasActiveJob = true;
-    showView("runs");
+    // 실행 기록으로 이동하지 않는다 — 결과는 이 화면의 타임라인에 바로 쌓인다
+    if (curView !== "opt") showView("opt");
+    $("timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     $("msg").textContent = t("request_failed");
   } finally {
@@ -1085,6 +1092,21 @@ async function cancelRun(id) {
 }
 
 let timer = null, lastHtml = "";
+let lastTimelineHtml = "";
+// 위키 최적화 화면의 실행 타임라인 — 가장 최근 실행 1건. 실행 기록과 같은 카드를 쓰되 id는 tl- 접두로 분리
+function renderTimeline(jobs, parts) {
+  const el = $("optTimeline");
+  if (!el) return;
+  const expanded = [...el.querySelectorAll("details")].flatMap((d, i) => d.open ? [i] : []);
+  const html = jobs.length
+    ? parts[0].replaceAll(`id="job-${jobs[0].id}-body"`, `id="tl-job-${jobs[0].id}-body"`)
+               .replaceAll(`aria-controls="job-${jobs[0].id}-body"`, `aria-controls="tl-job-${jobs[0].id}-body"`)
+    : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t("no_jobs_hint")}</span></div>`;
+  if (html === lastTimelineHtml) return;
+  el.innerHTML = html; lastTimelineHtml = html;
+  const details = el.querySelectorAll("details");
+  expanded.forEach(i => { if (details[i]) details[i].open = true; });
+}
 async function poll() {
   clearTimeout(timer);
   const focusedJobId = document.activeElement?.dataset?.jobId;
@@ -1102,6 +1124,7 @@ async function poll() {
     $("runsCount").textContent = jobs.length ? t("runs_count", jobs.length) : "";
     hasActiveJob = jobs.some(j => j.status === "running" || j.status === "queued");
     delay = hasActiveJob ? 2000 : 10000;
+    renderTimeline(jobs, parts);
     if (html !== lastHtml) {
       $("jobs").innerHTML = html;
       lastHtml = html;
