@@ -440,6 +440,26 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if url.path.startswith("/static/"):
+            # CSS/JS만, 파일명 하나만 — 경로 탈출 차단
+            name = os.path.basename(url.path)
+            if name != url.path[len("/static/"):] or not name.endswith((".css", ".js")):
+                self.send_error(404)
+                return
+            try:
+                with open(os.path.join(STATIC_DIR, name), "rb") as f:
+                    body = f.read()
+            except OSError:
+                self.send_error(404)
+                return
+            ctype = "text/css" if name.endswith(".css") else "application/javascript"
+            self.send_response(200)
+            self.send_header("Content-Type", f"{ctype}; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if url.path == "/api/docs":
             q = parse_qs(url.query)
             wiki_dir = (q.get("dir") or [""])[0]

@@ -373,3 +373,24 @@ def test_post_null_generations_uses_default_but_bad_mode_400(server):
     code, body = _post(server, {"mode": "없는모드", "generations": None})
     assert code == 400
     assert "mode" in body["error"]
+
+
+def test_static_route_serves_css_js_and_blocks_traversal():
+    """/static/app.css·app.js는 서빙, 경로 탈출·다른 확장자는 404."""
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        for name, ctype in (("app.css", "text/css"), ("app.js", "application/javascript")):
+            with urllib.request.urlopen(f"{base}/static/{name}") as r:
+                assert r.status == 200
+                assert r.headers["Content-Type"].startswith(ctype)
+                assert len(r.read()) > 1000
+        for bad in ("../web.py", "index.html", "x.py", "a/b.css"):
+            try:
+                urllib.request.urlopen(f"{base}/static/{bad}")
+                raise AssertionError(f"{bad} 가 서빙됨")
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+    finally:
+        srv.shutdown()
