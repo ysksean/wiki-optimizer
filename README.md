@@ -58,7 +58,7 @@ Two experimental safeguards on top:
 ## Run
 
 ```bash
-python3 src/web.py            # → http://localhost:8765
+make dev                      # → http://localhost:8765  (PORT=9000 make dev)
 ```
 
 Everything happens in the dashboard: point it at a wiki folder, pick documents,
@@ -101,9 +101,17 @@ pip install ruff pytest
 Then run exactly what CI runs (`.github/workflows/ci.yml`, Python 3.12):
 
 ```bash
+make check                    # lint + compile + tests, all in one
+```
+
+`make lint` / `make test` run the halves separately; `make help` lists every
+target. Under the hood these are the same commands CI runs:
+
+```bash
 ruff check --select E9,F src tests   # lint — syntax errors + pyflakes only
 python -m py_compile src/*.py        # compile every module
 pytest tests -q                      # unit tests (pure logic, no LLM calls)
+bash tests/test_harness.sh           # harness shell-logic tests
 ```
 
 Tests live in `tests/` (`conftest.py` puts `src/` on `sys.path`, so no package
