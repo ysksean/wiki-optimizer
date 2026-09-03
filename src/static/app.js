@@ -217,6 +217,7 @@ const I18N = {
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
     prop_title: "Stage 0 — 구조 제안 (백지에서)", mode_propose: "0 제안",
+    rail_title: "설정", rail_desc: "문서와 실험 방식을 고릅니다.",
     timeline_title: "실행", timeline_desc: "가장 최근 실행이 여기 표시됩니다.",
     nav_opt: "위키 최적화", nav_propose: "구조 제안", nav_runs: "실행 기록",
     src_add_dir: "＋ 폴더 선택", src_add_files: "＋ 파일 업로드",
@@ -309,6 +310,7 @@ const I18N = {
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
     prop_title: "Stage 0 — propose structure (blank slate)", mode_propose: "0 propose",
+    rail_title: "Setup", rail_desc: "Pick documents and an experiment.",
     timeline_title: "Run", timeline_desc: "The latest run shows up here.",
     nav_opt: "Optimize wiki", nav_propose: "Propose structure", nav_runs: "Runs",
     src_add_dir: "+ Choose folder", src_add_files: "+ Upload files",
@@ -401,6 +403,7 @@ const I18N = {
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
     prop_title: "Stage 0 — 结构提案（从零开始）", mode_propose: "0 提案",
+    rail_title: "设置", rail_desc: "选择文档与实验方式。",
     timeline_title: "运行", timeline_desc: "这里显示最近一次运行。",
     nav_opt: "Wiki 优化", nav_propose: "结构提案", nav_runs: "运行记录",
     src_add_dir: "＋ 选择文件夹", src_add_files: "＋ 上传文件",
@@ -1224,8 +1227,8 @@ function renderTimeline(jobs, parts) {
   const ls = $("liveStatus");
   if (ls) {
     const j = jobs[0];
-    ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span>${t("status_" + j.status)} · ${t("mode_" + j.mode)} · <span class="ls-doc">${esc(j.doc_names[0] || "")}</span>${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
-      (j.result_summary && j.result_summary.best_total != null ? ` · best <b>${j.result_summary.best_total}</b>` : "");
+    ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span><span class="ls-text">${t("status_" + j.status)} · ${t("mode_" + j.mode)} · ${esc(j.doc_names[0] || "")}${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
+      (j.result_summary && j.result_summary.best_total != null ? ` · best <b>${j.result_summary.best_total}</b>` : "") + `</span>`;
   }
 }
 const _timelineCache = {};

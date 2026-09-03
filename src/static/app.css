@@ -438,8 +438,11 @@
   .path-chip button:hover { background: transparent; color: var(--acc-hover); }
   .workbench-grid { display: grid; grid-template-columns: 372px minmax(0,1fr); gap: 20px; align-items: start; }
   .setup-rail { display: grid; gap: 14px; min-width: 0; }
+  .setup-rail > .rail-head { margin-bottom: 0; }
   .timeline-panel { min-width: 0; }
-  .timeline-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; }
+  .timeline-head, .rail-head { display: flex; align-items: center; gap: 10px; min-height: 32px; margin: 0 0 14px; }
+  .rail-head h2 { margin: 0; font-size: var(--fs-title); font-weight: 650; }
+  .rail-head p { margin: 0; color: var(--dim); font-size: var(--fs-secondary); }
   .timeline-head h2 { margin: 0; font-size: var(--fs-title); font-weight: 650; }
   .timeline-head p { margin: 0; color: var(--dim); font-size: var(--fs-secondary); }
   .timeline-head .timeline-all { margin-left: auto; min-height: 32px; padding: 0 12px; font-size: var(--fs-caption); }
@@ -655,5 +658,6 @@
   .doc-list-details { margin: 6px 0 10px; }
   .doc-list-details > summary { color: var(--dim); font-size: var(--fs-caption); cursor: pointer; }
   .doc-list { margin-top: 6px; color: var(--tx-secondary); font-size: var(--fs-caption); line-height: 1.6; word-break: break-word; }
-  .ls-doc { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .live-status { max-width: 100%; }
+  .ls-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .propose-timeline { margin-top: 20px; }
