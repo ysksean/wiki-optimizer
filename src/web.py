@@ -164,6 +164,22 @@ def _result_summary(job):
     }
 
 
+def _backfill_result_summaries():
+    """리뉴얼 전에 끝난 job(result_summary 키 자체가 없음)을 목록 조회 시 1회 요약해 저장한다.
+
+    None으로라도 키를 박아 두어 매 폴링마다 다시 계산하지 않는다.
+    """
+    with JOBS_LOCK:
+        todo = [j for j in JOBS.values()
+                if j.get("status") in ("done", "cancelled", "error") and "result_summary" not in j]
+    for job in todo:
+        try:
+            job["result_summary"] = _result_summary(job)
+        except Exception:
+            job["result_summary"] = None
+        _save_job(job)
+
+
 def _run_job_locked(job, cancel):
     with RUN_LOCK:
         if cancel.is_set():  # 락 대기 중(queued) 취소됨
@@ -514,6 +530,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"dir": path})
             return
         if url.path == "/api/runs":
+            _backfill_result_summaries()
             with JOBS_LOCK:
                 jobs = [
                     {k: v for k, v in j.items() if k not in ("dir", "files")}

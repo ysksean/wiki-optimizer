@@ -138,3 +138,12 @@ def test_quiet_saas_result_summary_and_live_status():
     assert 'class="bento"' in JS and 'id="liveStatus"' in HTML
     assert JS.count("tile_best:") == 3 and JS.count("vs_baseline:") == 3
     assert ".tile-hero" in CSS and ".delta.up" in CSS
+
+
+def test_audit_fixes_structure_title_autoload_propose_timeline():
+    """검수 반영: 구조 카드 제목 축약+문서 접기(F1), 저장 폴더 자동 로드(F2), eyebrow 제거(F6), 구조 제안 타임라인(F7)."""
+    assert JS.count("structure_title_n:") == 3 and 'class="doc-list-details"' in JS
+    assert "if (p.dir) loadDocs();" in JS
+    assert 'class="eyebrow"' not in HTML
+    assert 'id="proposeTimeline"' in HTML and '_renderTimelineInto("proposeTimeline"' in JS
+    assert ".ls-doc {" in CSS

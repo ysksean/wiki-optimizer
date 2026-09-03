@@ -67,7 +67,7 @@
   </section>
 
   <section id="view-propose" class="view view-shell" hidden>
-  <div class="page-intro"><div><div class="eyebrow" data-i18n="new_wiki_eyebrow"></div><h2 data-i18n="prop_friendly_title"></h2><p data-i18n="prop_friendly_desc"></p></div></div>
+  <div class="page-intro"><div><h2 data-i18n="prop_friendly_title"></h2><p data-i18n="prop_friendly_desc"></p></div></div>
   <div class="propose-panel">
     <h2 class="panel-title" data-i18n="prop_title"></h2>
     <p class="panel-desc" data-i18n="prop_desc"></p>
@@ -93,10 +93,14 @@
       <span id="msg3" class="err" role="status" aria-live="polite"></span>
     </div>
   </div>
+  <section class="timeline-panel propose-timeline" id="propose-timeline-panel" aria-labelledby="propose-timeline-title">
+    <div class="timeline-head"><h2 id="propose-timeline-title" data-i18n="timeline_title"></h2><p data-i18n="timeline_desc"></p><button type="button" class="ghost timeline-all" onclick="showView('runs')" data-i18n="nav_runs"></button></div>
+    <div id="proposeTimeline"><div class="card empty-state timeline-empty"><strong data-i18n="no_jobs"></strong><span data-i18n="no_jobs_hint"></span></div></div>
+  </section>
   </section>
 
   <section id="view-runs" class="view view-shell" hidden>
-  <div class="page-intro"><div><div class="eyebrow" data-i18n="runs_eyebrow"></div><h2 data-i18n="runs_title"></h2><p data-i18n="runs_desc"></p></div></div>
+  <div class="page-intro"><div><h2 data-i18n="runs_title"></h2><p data-i18n="runs_desc"></p></div></div>
   <div class="runs-filters">
     <div class="doc-filter" role="group" data-i18n-aria-label="filter_mode" id="runsModeFilter">
       <button type="button" class="on" data-mode="all" aria-pressed="true" onclick="setRunsFilter('mode','all',this)" data-i18n="filter_all"></button>

@@ -212,6 +212,7 @@ const I18N = {
     th_elapsed: "소요", provenance_title: "재현성 — 백엔드 · 모델 · 코드", strategy_diff_hint: "이전 세대 대비 바뀐 부분만 강조",
     strategy_per_gen: "세대별 전략 프롬프트", th_strategy: "전략",
     best_summary: "best 요약 보기", len_vs_raw: "원본 대비 길이",
+    structure_title_n: n => `구조 진화 · 문서 ${n}개`, doc_list: "문서 목록",
     structure_title: d => `구조 진화 — ${d}`,
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
@@ -303,6 +304,7 @@ const I18N = {
     th_elapsed: "elapsed", provenance_title: "Provenance — backend · model · code", strategy_diff_hint: "changes vs previous generation are highlighted",
     strategy_per_gen: "strategy prompt per generation", th_strategy: "strategy",
     best_summary: "view best summary", len_vs_raw: "length vs raw",
+    structure_title_n: n => `Structure evolution · ${n} documents`, doc_list: "Documents",
     structure_title: d => `Structure evolution — ${d}`,
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
@@ -394,6 +396,7 @@ const I18N = {
     th_elapsed: "耗时", provenance_title: "可复现性 — 后端 · 模型 · 代码", strategy_diff_hint: "高亮相对上一代的变化",
     strategy_per_gen: "各代策略提示词", th_strategy: "策略",
     best_summary: "查看最佳摘要", len_vs_raw: "相对原文长度",
+    structure_title_n: n => `结构进化 · ${n} 篇文档`, doc_list: "文档列表",
     structure_title: d => `结构进化 — ${d}`,
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
@@ -492,6 +495,8 @@ function loadPrefs() {
   syncModeCards();
   syncExperimentSummary();
   syncWorkspaceSummary();
+  // 저장된 폴더가 있으면 문서 목록도 바로 복원 — 새로고침마다 다시 불러오지 않게
+  if (p.dir) loadDocs();
 }
 
 // ---------- 데이터 로드/실행 ----------
@@ -637,8 +642,9 @@ async function startJobRequest(body, msgEl) {
     open_.add(j.id);
     hasActiveJob = true;
     // 실행 기록으로 이동하지 않는다 — 결과는 이 화면의 타임라인에 바로 쌓인다
-    if (curView !== "opt") showView("opt");
-    $("timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
+    const target = body.mode === "propose" ? "propose" : "opt";
+    if (curView !== target) showView(target);
+    $(target === "propose" ? "propose-timeline-panel" : "timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     $(msgEl).textContent = t("request_failed");
   } finally {
@@ -1038,8 +1044,8 @@ function structureRun(run) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
   const failed = failedGens(rep);
-  let html = `<div class="runbox"><h3>${t("structure_title", p.docs.map(esc).join(", "))}
-      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3>${resultMeta(p, rep)}${parseFailedNote(failed)}
+  let html = `<div class="runbox"><h3>${t("structure_title_n", p.docs.length)}
+      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3><details class="doc-list-details"><summary>${t("doc_list")} · ${p.docs.length}</summary><div class="doc-list">${p.docs.map(esc).join(", ")}</div></details>${resultMeta(p, rep)}${parseFailedNote(failed)}
     <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>${t("best_gen", p.best_gen)}</span></div></div>
     ${chart(p.history, "", p.best_gen, failed)}
     <details><summary>${t("files_per_gen")}</summary>${wrapTable(
@@ -1208,26 +1214,33 @@ async function cancelRun(id) {
 }
 
 let timer = null, lastHtml = "";
-let lastTimelineHtml = "", autoOpenedLatest = false;
+let autoOpenedLatest = false;
 // 위키 최적화 화면의 실행 타임라인 — 가장 최근 실행 1건. 실행 기록과 같은 카드를 쓰되 id는 tl- 접두로 분리
 function renderTimeline(jobs, parts) {
-  const el = $("optTimeline");
-  if (!el) return;
   // 첫 로드에 최신 실행은 펼쳐진 채로 — 결과가 주인공이라는 레이아웃 원칙
   if (jobs.length && !autoOpenedLatest) { autoOpenedLatest = true; if (!open_.has(jobs[0].id)) { open_.add(jobs[0].id); setTimeout(poll, 50); } }
-  const expanded = [...el.querySelectorAll("details")].flatMap((d, i) => d.open ? [i] : []);
-  const html = jobs.length
-    ? parts[0].replaceAll(`id="job-${jobs[0].id}-body"`, `id="tl-job-${jobs[0].id}-body"`)
-               .replaceAll(`aria-controls="job-${jobs[0].id}-body"`, `aria-controls="tl-job-${jobs[0].id}-body"`)
-    : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t("no_jobs_hint")}</span></div>`;
+  _renderTimelineInto("optTimeline", jobs, parts, 0);
+  _renderTimelineInto("proposeTimeline", jobs, parts, jobs.findIndex(j => j.mode === "propose"));
   const ls = $("liveStatus");
   if (ls) {
     const j = jobs[0];
-    ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span>${t("status_" + j.status)} · ${t("mode_" + j.mode)} · ${esc(j.doc_names[0] || "")}${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
+    ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span>${t("status_" + j.status)} · ${t("mode_" + j.mode)} · <span class="ls-doc">${esc(j.doc_names[0] || "")}</span>${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
       (j.result_summary && j.result_summary.best_total != null ? ` · best <b>${j.result_summary.best_total}</b>` : "");
   }
-  if (html === lastTimelineHtml) return;
-  el.innerHTML = html; lastTimelineHtml = html;
+}
+const _timelineCache = {};
+// 특정 화면의 타임라인에 job 1건 렌더 — 실행 기록과 같은 카드, id는 tl-<컨테이너> 접두로 충돌 방지
+function _renderTimelineInto(elId, jobs, parts, idx) {
+  const el = $(elId);
+  if (!el) return;
+  const expanded = [...el.querySelectorAll("details")].flatMap((d, i) => d.open ? [i] : []);
+  const j = idx >= 0 ? jobs[idx] : null;
+  const html = j
+    ? parts[idx].replaceAll(`id="job-${j.id}-body"`, `id="tl-${elId}-${j.id}-body"`)
+                .replaceAll(`aria-controls="job-${j.id}-body"`, `aria-controls="tl-${elId}-${j.id}-body"`)
+    : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t("no_jobs_hint")}</span></div>`;
+  if (html === _timelineCache[elId]) return;
+  el.innerHTML = html; _timelineCache[elId] = html;
   const details = el.querySelectorAll("details");
   expanded.forEach(i => { if (details[i]) details[i].open = true; });
 }

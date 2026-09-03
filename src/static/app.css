@@ -554,7 +554,8 @@
     .page-intro p { font-size: 12px; }
     .path-chip { margin-top: 16px; width: 100%; }
     .path-chip code { flex: 1; max-width: none; }
-    .folder-tools { grid-template-columns: 1fr 1fr; }
+    .folder-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .folder-tools button { min-width: 0; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; }
     .folder-tools input { grid-column: 1 / -1; min-height: 44px; }
     .folder-tools button { width: 100%; min-height: 44px; font-size: 12px; }
     .docs-tools { display: grid; }
@@ -649,3 +650,10 @@
   .tile-hero .delta { margin-top: 8px; }
   .chart { border-color: var(--line-subtle); box-shadow: var(--shadow-panel); border-radius: 12px; }
   @media (max-width: 900px) { .bento { grid-template-columns: 1fr 1fr; } .tile-hero { grid-column: 1 / -1; } }
+
+  /* ---------- 검수 반영 (F1·F4·F7) ---------- */
+  .doc-list-details { margin: 6px 0 10px; }
+  .doc-list-details > summary { color: var(--dim); font-size: var(--fs-caption); cursor: pointer; }
+  .doc-list { margin-top: 6px; color: var(--tx-secondary); font-size: var(--fs-caption); line-height: 1.6; word-break: break-word; }
+  .ls-doc { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .propose-timeline { margin-top: 20px; }

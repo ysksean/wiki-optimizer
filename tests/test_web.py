@@ -419,3 +419,22 @@ def test_run_job_writes_result_summary_from_reports(web_env, monkeypatch):
 def test_result_summary_none_without_reports(web_env):
     job = _make_job(status="done", job_id="rs2")
     assert web._result_summary(job) is None
+
+
+def test_backfill_result_summaries_runs_once_for_legacy_jobs(web_env):
+    """리뉴얼 전 job(result_summary 키 없음)은 목록 조회 때 1회 요약되고, 없으면 None으로 고정된다."""
+    legacy = _make_job(status="done", job_id="old1")
+    legacy.pop("result_summary", None)
+    d = os.path.join(legacy["dir"], "r1"); os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "report.json"), "w") as f:
+        json.dump({"arm": "evolve", "best": {"total": 0.5}, "provenance": {"model": "m"}}, f)
+    empty = _make_job(status="done", job_id="old2"); empty.pop("result_summary", None)
+    web.JOBS.update({"old1": legacy, "old2": empty})
+
+    web._backfill_result_summaries()
+    assert legacy["result_summary"]["best_total"] == 0.5
+    assert "result_summary" in empty and empty["result_summary"] is None
+    # 두 번째 호출은 아무것도 다시 계산하지 않는다 (키가 이미 있음)
+    legacy["result_summary"] = "sentinel"
+    web._backfill_result_summaries()
+    assert legacy["result_summary"] == "sentinel"
