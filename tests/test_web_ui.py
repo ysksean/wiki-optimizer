@@ -146,4 +146,4 @@ def test_audit_fixes_structure_title_autoload_propose_timeline():
     assert "if (p.dir) loadDocs();" in JS
     assert 'class="eyebrow"' not in HTML
     assert 'id="proposeTimeline"' in HTML and '_renderTimelineInto("proposeTimeline"' in JS
-    assert ".ls-doc {" in CSS
+    assert ".ls-text {" in CSS and 'class="rail-head"' in HTML
