@@ -143,6 +143,9 @@ let docsController = null;
 let requestPending = false;
 let hasActiveJob = false;
 let submittingMode = null;
+let activeJobMode = null;
+let jobStatusesReady = false;
+let jobStatusSnapshot = new Map();
 
 // ---------- i18n ----------
 const I18N = {
@@ -156,6 +159,8 @@ const I18N = {
     mobile_menu: "모바일 메뉴", new_wiki_eyebrow: "New wiki", prop_friendly_title: "새 위키 구조를 설계하세요", prop_friendly_desc: "자료와 사용 목적을 바탕으로 폴더와 문서 구조를 제안합니다.",
     runs_eyebrow: "Experiment history", runs_desc: "점수 변화와 세대별 전략을 비교하고 원하는 결과만 적용하세요.",
     score_improved: n => `${n}% 개선`, evolution_trail: "Evolution Trail", baseline: "기준", best_label: "최고",
+    action_running: "실행 중…", progress_label: "작업 진행 단계", progress_wait: "대기", progress_run: "실행", progress_result: "결과 생성", progress_done: "완료",
+    toast_started: m => `${m} 작업을 시작했습니다.`, toast_done: m => `${m} 작업이 완료되었습니다.`, toast_error: m => `${m} 작업을 완료하지 못했습니다.`, toast_cancelled: m => `${m} 작업이 중지되었습니다.`,
     subtitle: "wiki 폴더를 지정하고 요약(A) / 구조(B) 최적화를 돌려 결과 변화를 확인합니다",
     theme: "테마", theme_system: "시스템", theme_light: "라이트", theme_dark: "다크",
     language: "언어", language_tip: "화면과 LLM 출력(요약·질문·답변) 언어를 함께 바꿉니다",
@@ -249,6 +254,8 @@ const I18N = {
     mobile_menu: "Mobile menu", new_wiki_eyebrow: "New wiki", prop_friendly_title: "Design a new wiki structure", prop_friendly_desc: "Use source material and intent to propose folders and documents.",
     runs_eyebrow: "Experiment history", runs_desc: "Compare score and strategy changes, then apply only the result you want.",
     score_improved: n => `${n}% improved`, evolution_trail: "Evolution Trail", baseline: "Baseline", best_label: "Best",
+    action_running: "Running…", progress_label: "Job progress", progress_wait: "Queued", progress_run: "Running", progress_result: "Building result", progress_done: "Done",
+    toast_started: m => `${m} started.`, toast_done: m => `${m} completed.`, toast_error: m => `${m} could not be completed.`, toast_cancelled: m => `${m} stopped.`,
     subtitle: "Point at a wiki folder, run summary (A) / structure (B) optimization, and watch results evolve",
     theme: "Theme", theme_system: "System", theme_light: "Light", theme_dark: "Dark",
     language: "Language", language_tip: "Switches both the UI and LLM outputs (summaries, questions, answers)",
@@ -342,6 +349,8 @@ const I18N = {
     mobile_menu: "移动菜单", new_wiki_eyebrow: "New wiki", prop_friendly_title: "设计新的 wiki 结构", prop_friendly_desc: "根据资料和使用目的提出文件夹与文档结构。",
     runs_eyebrow: "Experiment history", runs_desc: "比较分数和各代策略变化，只应用需要的结果。",
     score_improved: n => `提升 ${n}%`, evolution_trail: "Evolution Trail", baseline: "基准", best_label: "最高",
+    action_running: "运行中…", progress_label: "任务进度", progress_wait: "等待", progress_run: "运行", progress_result: "生成结果", progress_done: "完成",
+    toast_started: m => `${m}已开始。`, toast_done: m => `${m}已完成。`, toast_error: m => `${m}未能完成。`, toast_cancelled: m => `${m}已停止。`,
     subtitle: "指定 wiki 文件夹，运行摘要（A）/ 结构（B）优化，查看结果如何演化",
     theme: "主题", theme_system: "跟随系统", theme_light: "浅色", theme_dark: "深色",
     language: "语言", language_tip: "同时切换界面语言和 LLM 输出（摘要、问题、答案）",
@@ -506,6 +515,37 @@ function loadPrefs() {
 }
 
 // ---------- 데이터 로드/실행 ----------
+// ---------- 실행 피드백 — 아이콘 버튼 · 스피너 · 토스트 (PR #47 포팅) ----------
+const ACTION_ICONS = {
+  run: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>',
+  audit: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4M8 11h6M11 8v6"/></svg>',
+  apply: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg>',
+  propose: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z"/></svg>',
+};
+// summary/structure 실험은 같은 "실험 실행" 버튼이므로 하나의 액션(run)으로 본다
+function normalizeActionMode(mode) {
+  return mode === "summary" || mode === "structure" ? "run" : mode;
+}
+function actionButtonContent(mode, label, running) {
+  const icon = running ? '<span class="action-spinner" aria-hidden="true"></span>' : ACTION_ICONS[mode];
+  return `${icon}<span>${esc(label)}</span>`;
+}
+function showToast(message, tone = "info") {
+  const region = $("toastRegion");
+  if (!region) return;
+  const toast = document.createElement("div");
+  const mark = document.createElement("span");
+  const copy = document.createElement("span");
+  toast.className = `toast ${tone}`;
+  mark.className = "toast-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = tone === "success" ? "✓" : tone === "error" ? "!" : "→";
+  copy.textContent = message;
+  toast.append(mark, copy);
+  region.append(toast);
+  setTimeout(() => toast.remove(), 4200);
+}
+
 function syncActionStates() {
   const ready = Boolean(loadedDir) && $("dir").value.trim() === loadedDir;
   const selected = document.querySelectorAll("#docs input[type=checkbox]:checked").length;
@@ -513,12 +553,16 @@ function syncActionStates() {
   $("auditBtn").disabled = !ready || busy;
   $("applyBtn").disabled = !ready || busy;
   $("go").disabled = selected === 0 || busy;
-  const actions = [["go", "run", "run_exp"], ["auditBtn", "audit", "btn_audit"], ["applyBtn", "apply", "btn_apply"]];
+  $("propGo").disabled = busy;
+  const actions = [["go", "run", "run_exp"], ["auditBtn", "audit", "btn_audit"], ["applyBtn", "apply", "btn_apply"], ["propGo", "propose", "btn_propose"]];
   actions.forEach(([id, mode, label]) => {
     const button = $(id);
     const starting = requestPending && submittingMode === mode;
-    button.textContent = starting ? t("starting") : t(label);
-    if (starting) button.setAttribute("aria-busy", "true");
+    const running = starting || (hasActiveJob && activeJobMode === mode);
+    const buttonLabel = starting ? t("starting") : running ? t("action_running") : t(label);
+    button.classList.add("action-button");
+    button.innerHTML = actionButtonContent(mode, buttonLabel, running);
+    if (running) button.setAttribute("aria-busy", "true");
     else button.removeAttribute("aria-busy");
   });
   $("workStatus").textContent = requestPending ? t("starting_job") : hasActiveJob ? t("job_in_progress") : "";
@@ -637,22 +681,31 @@ async function pickDir() {
 async function startJobRequest(body, msgEl) {
   if (requestPending || hasActiveJob) return;
   $(msgEl).textContent = "";
-  submittingMode = body.mode;
+  const modeLabel = t("mode_" + body.mode);
+  submittingMode = normalizeActionMode(body.mode);
   requestPending = true;
   syncActionStates();
   try {
     const r = await fetch("/api/runs", { method:"POST",
       headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
     const j = await r.json();
-    if (!r.ok || j.error) { $(msgEl).textContent = j.error || t("request_failed"); return; }
+    if (!r.ok || j.error) {
+      $(msgEl).textContent = j.error || t("request_failed");
+      showToast(t("toast_error", modeLabel), "error");
+      return;
+    }
     open_.add(j.id);
+    jobStatusSnapshot.set(j.id, j.status || "queued");
     hasActiveJob = true;
+    activeJobMode = normalizeActionMode(body.mode);
+    showToast(t("toast_started", modeLabel));
     // 실행 기록으로 이동하지 않는다 — 결과는 이 화면의 타임라인에 바로 쌓인다
     const target = body.mode === "propose" ? "propose" : "opt";
     if (curView !== target) showView(target);
     $(target === "propose" ? "propose-timeline-panel" : "timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     $(msgEl).textContent = t("request_failed");
+    showToast(t("toast_error", modeLabel), "error");
   } finally {
     requestPending = false;
     submittingMode = null;
@@ -698,35 +751,14 @@ async function exportSkeleton(jobId, inputId, msgId) {
   el.className = j.error ? "err" : "muted";
 }
 
-async function startRun() {
+function startRun() {
   if (requestPending || hasActiveJob) return;
   $("msg").textContent = "";
   const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
   if (!files.length) { $("msg").textContent = t("need_docs"); return; }
-  submittingMode = "run";
-  requestPending = true;
-  syncActionStates();
-  try {
-    const r = await fetch("/api/runs", { method:"POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ files, mode: $("mode").value,
-        generations: +$("gens").value, n_qa: +$("nqa").value,
-        backend: $("backend").value, language: LANG }) });
-    const j = await r.json();
-    if (!r.ok || j.error) { $("msg").textContent = j.error || t("request_failed"); return; }
-    open_.add(j.id);
-    hasActiveJob = true;
-    // 실행 기록으로 이동하지 않는다 — 결과는 이 화면의 타임라인에 바로 쌓인다
-    if (curView !== "opt") showView("opt");
-    $("timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
-  } catch (e) {
-    $("msg").textContent = t("request_failed");
-  } finally {
-    requestPending = false;
-    submittingMode = null;
-    syncActionStates();
-    poll();
-  }
+  startJobRequest({ files, mode: $("mode").value,
+    generations: +$("gens").value, n_qa: +$("nqa").value,
+    backend: $("backend").value, language: LANG }, "msg");
 }
 
 // ---------- 뷰 ----------
@@ -1168,15 +1200,33 @@ function jobMatches(j) {
   return true;
 }
 
+// 펼친 카드의 진행 단계 — 대기 → 실행 → 결과 생성 → 완료. 부분 결과가 있어야 '결과 생성'으로 넘어간다.
+// 끝난 실행에는 붙이지 않는다 — 완료 뱃지와 결과 카드가 이미 그 말을 하고 있다
+function jobProgress(j, detail) {
+  if (!["queued", "running"].includes(j.status)) return "";
+  const hasPartial = Boolean(detail?.result) || (detail?.runs || []).some(run =>
+    run.report || run.progress?.history?.length || run.progress?.done_generations > 0);
+  const current = j.status === "done" ? 3 : j.status === "queued" ? 0 : hasPartial ? 2 : 1;
+  const labels = [t("progress_wait"), t("progress_run"), t("progress_result"), t("progress_done")];
+  const steps = labels.map((label, index) => {
+    const complete = j.status === "done" || index < current;
+    const active = j.status !== "done" && index === current;
+    const state = complete ? " complete" : active ? " active" : "";
+    return `<span class="progress-step${state}"><i aria-hidden="true">${complete ? "✓" : active ? "•" : ""}</i>${esc(label)}</span>`;
+  }).join("");
+  return `<div class="run-progress" role="group" aria-label="${esc(t("progress_label"))}">${steps}</div>`;
+}
+
 async function renderJob(j) {
   const isOpen = open_.has(j.id);
-  const badge = `<span class="badge b-${j.status}">${t("status_" + j.status)}</span>`;
+  const statusLabel = t("status_" + j.status);
+  const badge = `<span class="badge b-${j.status}" aria-label="${esc(statusLabel)}">${esc(statusLabel)}</span>`;
   const when = new Date(j.created_at*1000).toLocaleTimeString(LOCALES[LANG]);
   let inner = `<div class="job-body" id="job-${j.id}-body" hidden></div>`;
   if (isOpen) {
     const r = await fetch(`/api/runs/${j.id}`);
     const d = await r.json();
-    let body = "";
+    let body = jobProgress(j, d);
     if (d.error && !d.result && !d.runs?.length) body = `<div class="err">${esc(d.error)}</div>`;
     else {
       if (d.status === "error") body += `<div class="err runbox">${t("failed")}: ${esc(d.error)}</div>`;
@@ -1217,6 +1267,25 @@ function toggle(id) { open_.has(id) ? open_.delete(id) : open_.add(id); poll(); 
 async function cancelRun(id) {
   await fetch(`/api/runs/${id}/cancel`, { method: "POST" });
   poll();
+}
+
+// 상태 전이(완료·실패·중지)를 토스트로 알린다 — 첫 폴링은 스냅샷만 잡고 조용히 지나간다
+function announceJobTransitions(jobs) {
+  const next = new Map(jobs.map(job => [job.id, job.status]));
+  if (!jobStatusesReady) {
+    jobStatusSnapshot = next;
+    jobStatusesReady = true;
+    return;
+  }
+  for (const job of jobs) {
+    const previous = jobStatusSnapshot.get(job.id);
+    if (!previous || previous === job.status) continue;
+    const label = t("mode_" + job.mode);
+    if (job.status === "done") showToast(t("toast_done", label), "success");
+    else if (job.status === "error") showToast(t("toast_error", label), "error");
+    else if (["cancelled", "interrupted"].includes(job.status)) showToast(t("toast_cancelled", label));
+  }
+  jobStatusSnapshot = next;
 }
 
 let timer = null, lastHtml = "";
@@ -1264,6 +1333,7 @@ async function poll() {
     const r = await fetch("/api/runs");
     if (!r.ok) throw new Error(`poll failed: ${r.status}`);
     const { jobs } = await r.json();
+    announceJobTransitions(jobs);
     $("runsCountNav").textContent = jobs.length || "";
     const parts = await Promise.all(jobs.map(renderJob));
     const shown = parts.filter((_, i) => jobMatches(jobs[i]));
@@ -1271,7 +1341,9 @@ async function poll() {
       `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
     $("runsCount").textContent = !jobs.length ? ""
       : shown.length === jobs.length ? t("runs_count", jobs.length) : t("runs_filtered", shown.length, jobs.length);
-    hasActiveJob = jobs.some(j => j.status === "running" || j.status === "queued");
+    const activeJob = jobs.find(j => j.status === "running" || j.status === "queued");
+    hasActiveJob = Boolean(activeJob);
+    activeJobMode = activeJob ? normalizeActionMode(activeJob.mode) : null;
     delay = hasActiveJob ? 2000 : 10000;
     renderTimeline(jobs, parts);
     if (html !== lastHtml) {
