@@ -230,6 +230,9 @@ const I18N = {
     rule_diff: (n, p) => `${n}차 시도의 분할 규칙 — ${p}차에서 바뀐 부분`, rule_seed: n => `${n}차 시도의 분할 규칙 — 기본값`, rule_rewritten: (n, p) => `${n}차 시도의 분할 규칙 — ${p}차 결과를 보고 거의 새로 씀`, rule_prev: p => `${p}차 규칙 보기`,
     map_now: "지금 문서", map_from: "출처", map_proposed: "제안 구조", map_tip: "파일에 마우스를 올리거나 클릭하면 어느 원본 문서에서 왔는지 선으로 표시됩니다.",
     map_no_sources: "이 실행은 출처 기록 이전 버전이라 문서→파일 연결선이 없습니다. 새로 실행하면 표시됩니다.",
+    sb_formula: (a, e) => `종합 = 정확도 ${a} × 효율 ${e}`, sb_acc: (c, n) => `질문 ${n}개 중 ${c}개 정답.`, sb_acc_how: "질문은 원본 문서 전체에서 미리 만들어 모든 시도에 같은 것을 씁니다. 제안 구조의 파일만 골라 읽고 답한 뒤, 정답과 사실상 같으면 1점(LLM 판정).",
+    sb_eff: (r, t) => `질문당 평균 ${r}자만 읽음 / 원본 전체 ${t}자.`, sb_eff_how: "효율 = 1 − (평균 읽은 글자 ÷ 원본 전체 글자). 적게 읽고 맞힐수록 높습니다.",
+    sb_questions: n => `질문별 판정 · ${n}개`, th_expected: "기대한 답", th_answer: "구조로 낸 답",
     n_chars: n => `${n}자`, n_sources: n => `출처 ${n}개`, file_previews: "제안 파일 본문 미리보기", score_trend: "시도별 점수 추이",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
     prop_title: "구조 제안", mode_propose: "구조 제안", prop_rail_desc: "재료가 될 소스와 태스크를 적습니다.", runs_list_title: "기록",
@@ -333,6 +336,9 @@ const I18N = {
     rule_diff: (n, p) => `Attempt ${n} split rule — changes since attempt ${p}`, rule_seed: n => `Attempt ${n} split rule — default`, rule_rewritten: (n, p) => `Attempt ${n} split rule — largely rewritten after attempt ${p}`, rule_prev: p => `Show attempt ${p} rule`,
     map_now: "Current documents", map_from: "From", map_proposed: "Proposed structure", map_tip: "Hover or click a file to see which source documents it came from.",
     map_no_sources: "This run predates source tracking, so no document→file lines are available. Run again to see them.",
+    sb_formula: (a, e) => `Total = accuracy ${a} × efficiency ${e}`, sb_acc: (c, n) => `${c} of ${n} questions correct.`, sb_acc_how: "Questions are generated once from the full source documents and reused for every attempt. The router reads only the proposed files, answers, and an LLM judge scores 1 if the answer matches the expected one.",
+    sb_eff: (r, t) => `Read ${r} chars per question on average / ${t} chars in the sources.`, sb_eff_how: "Efficiency = 1 − (average chars read ÷ total source chars). Higher when less reading still gets the answer.",
+    sb_questions: n => `Per-question verdicts · ${n}`, th_expected: "Expected answer", th_answer: "Answer from structure",
     n_chars: n => `${n} chars`, n_sources: n => `${n} sources`, file_previews: "Preview proposed file contents", score_trend: "Score by attempt",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
     prop_title: "Propose structure", mode_propose: "Propose", prop_rail_desc: "Add source material and describe the task.", runs_list_title: "History",
@@ -436,6 +442,9 @@ const I18N = {
     rule_diff: (n, p) => `第 ${n} 次尝试的拆分规则 — 相对第 ${p} 次的变化`, rule_seed: n => `第 ${n} 次尝试的拆分规则 — 默认`, rule_rewritten: (n, p) => `第 ${n} 次尝试的拆分规则 — 参考第 ${p} 次结果后基本重写`, rule_prev: p => `查看第 ${p} 次规则`,
     map_now: "当前文档", map_from: "来源", map_proposed: "提案结构", map_tip: "悬停或点击文件，可查看它来自哪些原始文档。",
     map_no_sources: "此次运行早于来源记录功能，因此没有文档→文件的连线。重新运行即可显示。",
+    sb_formula: (a, e) => `综合 = 准确率 ${a} × 效率 ${e}`, sb_acc: (c, n) => `${n} 个问题中答对 ${c} 个。`, sb_acc_how: "问题基于全部原始文档预先生成，所有尝试使用同一组问题。仅阅读提案结构中的文件作答，与标准答案实质一致得 1 分（LLM 判定）。",
+    sb_eff: (r, t) => `每个问题平均只读 ${r} 字 / 原文共 ${t} 字。`, sb_eff_how: "效率 = 1 −（平均阅读字数 ÷ 原文总字数）。读得越少且答对，分数越高。",
+    sb_questions: n => `逐题判定 · ${n} 个`, th_expected: "期望答案", th_answer: "按结构给出的答案",
     n_chars: n => `${n} 字`, n_sources: n => `${n} 个来源`, file_previews: "预览提案文件内容", score_trend: "各次尝试的分数走势",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
     prop_title: "结构提案", mode_propose: "结构提案", prop_rail_desc: "添加素材来源并描述任务。", runs_list_title: "记录",
@@ -967,7 +976,7 @@ function applyView(res, status) {
   return html + "</div>";
 }
 
-function chart(hist, key, bestGen, failed = new Set()) {
+function chart(hist, key, bestGen, failed = new Set(), xLabel = g => t("gen_short", g)) {
   const W = 640, H = 180, P = 32;
   const xs = hist.map(h => h.generation);
   const X = i => P + (W - 2*P) * (xs.length === 1 ? 0.5 : i / (xs.length - 1));
@@ -1001,7 +1010,7 @@ function chart(hist, key, bestGen, failed = new Set()) {
       svg += `<circle cx="${X(bi)}" cy="${Y(hist[bi].score.total)}" r="6" fill="none" stroke="var(--acc)" stroke-width="1.5"/>`;
     }
   }
-  xs.forEach((g, i) => { svg += `<text x="${X(i)-12}" y="${H-8}">${t("gen_short", g)}</text>`; });
+  xs.forEach((g, i) => { svg += `<text x="${X(i)-12}" y="${H-8}">${xLabel(g)}</text>`; });
   svg += `</svg>`;
   const legend = `<div class="chart-head"><span><i></i>${t("held_out")}</span>` +
     (hist[0][key] ? `<span><i class="train"></i>${t("train")}</span>` : "") + `</div>`;
@@ -1211,14 +1220,32 @@ function structureRun(run, jobId) {
       html += `<details class="file-previews"><summary>${t("file_previews")}</summary>${bestStruct.map((f, j) => `<div class="preview"><b>${esc(structFileName(f.title, j).name)}</b> <span class="muted">· ${t("n_chars", f.content.length)}</span><p>${esc(f.content)}</p></div>`).join("")}</details>`;
     }
   }
-  html += `<details><summary>${t("score_trend")}</summary>${chart(p.history, "", bestGen, failed)}</details>`;
-  const det = rep?.best?.result?.details;
-  if (det) {
-    html += `<details><summary>${t("routing")}</summary>${wrapTable(
-      `<tr><th>${t("th_q")}</th><th>${t("th_picked")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
-      det.map(d => `<tr><td>${esc(d.q)}</td><td>${(d.picked||[]).map(esc).join(", ")}</td>
-        <td>${d.read_chars}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}
-    </details>`;
+  if (cur) html += scoreBlock(cur, p, rep, cur.generation === bestGen);
+  html += `<details><summary>${t("score_trend")}</summary>${chart(p.history, "", bestGen, failed, g => t("attempt_n", g + 1))}</details>`;
+  return html + "</div>";
+}
+
+// 점수 근거 — 종합 = 정확도 × 효율 산식과, 그 시도의 질문별 판정(읽은 파일 · 답 · 정답 여부)
+function scoreBlock(cur, p, rep, isBest) {
+  const sc = cur.score || {};
+  if (sc.total == null) return "";
+  const qs = rep?.question_set || p.question_set || [];
+  const det = cur.details || (isBest ? rep?.best?.result?.details : null) || [];
+  const nQ = qs.length || det.length || null;
+  const raw = rep?.total_raw_chars ?? p.total_raw_chars;
+  const correct = det.length ? det.filter(d => d.score).length : (nQ != null ? Math.round(sc.accuracy * nQ) : null);
+  const ans = Object.fromEntries(qs.map(q => [q.q, q.a]));
+  const fmt = n => Number(n).toLocaleString(LOCALES[LANG]);
+  let html = `<div class="score-basis"><div class="sb-formula"><b>${sc.total}</b><span>${t("sb_formula", sc.accuracy, sc.efficiency)}</span></div>
+    <div class="sb-rows">
+      <div class="sb-row"><b>${t("acc_short")} ${sc.accuracy}</b><span>${nQ != null && correct != null ? t("sb_acc", correct, nQ) + " " : ""}${t("sb_acc_how")}</span></div>
+      <div class="sb-row"><b>${t("eff_short")} ${sc.efficiency}</b><span>${sc.avg_read != null && raw ? t("sb_eff", fmt(Math.round(sc.avg_read)), fmt(raw)) + " " : ""}${t("sb_eff_how")}</span></div>
+    </div>`;
+  if (det.length) {
+    html += `<details class="sb-table" open><summary>${t("sb_questions", det.length)}</summary>${wrapTable(
+      `<tr><th>${t("th_q")}</th><th>${t("th_expected")}</th><th>${t("th_picked")}</th><th>${t("th_answer")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
+      det.map(d => `<tr class="${d.score ? "q-ok" : "q-bad"}"><td>${esc(d.q)}</td><td>${esc(ans[d.q] || "")}</td><td>${(d.picked || []).map(esc).join(", ")}</td>
+        <td>${esc(d.pred || "")}</td><td>${fmt(d.read_chars)}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}</details>`;
   }
   return html + "</div>";
 }

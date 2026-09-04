@@ -131,6 +131,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             "files": [{"title": f["title"], "sources": f.get("sources", []), "n_chars": len(f.get("content", ""))}
                       for f in struct.get("files", [])],
             "score": {k: v for k, v in result.items() if k != "details"},
+            # 질문별 판정(읽은 파일·답·정답 여부) — 화면에서 '점수 근거'로 보여준다
+            "details": result.get("details", []),
             "elapsed_sec": round(dt, 1),
         })
 
@@ -141,6 +143,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         with open(os.path.join(run_dir, "progress.json"), "w") as pf:
             json.dump({
                 "mode": "structure", "arm": arm, "docs": list(docs.keys()),
+                "total_raw_chars": total_raw, "question_set": question_set,
                 "generations": generations, "done_generations": g + 1,
                 "best_gen": best["generation"], "best_total": best["total"],
                 "history": history,
