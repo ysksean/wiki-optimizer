@@ -147,3 +147,16 @@ def test_audit_fixes_structure_title_autoload_propose_timeline():
     assert 'class="eyebrow"' not in HTML
     assert 'id="proposeTimeline"' in HTML and '_renderTimelineInto("proposeTimeline"' in JS
     assert ".ls-text {" in CSS and 'class="rail-head"' in HTML
+
+
+def test_views_share_rail_timeline_structure():
+    """사이드바 세 화면의 구조 통일: 구조 제안도 설정 레일 + 실행 타임라인 2열, 실행 기록 머리글도 같은 컴포넌트. Stage 0 표기 제거."""
+    propose = HTML[HTML.index('id="view-propose"'):HTML.index('id="view-runs"')]
+    assert 'class="workbench-grid"' in propose and 'class="setup-rail"' in propose and 'class="rail-head"' in propose
+    assert 'class="workspace-panel propose-panel"' in propose and 'id="srcCount"' in propose
+    assert 'id="proposeLiveStatus"' in propose and 'id="propose-timeline-panel"' in propose
+    assert 'class="timeline-head runs-head"' in HTML and 'id="runsCount"' in HTML
+    assert 'data-mode="propose"' in HTML
+    assert "Stage 0" not in HTML and "Stage 0" not in JS and "Stage 0" not in CSS
+    assert JS.count("no_propose_hint:") == 3 and JS.count("src_empty:") == 3 and JS.count("prop_rail_desc:") == 3
+    assert "ls.hidden = !j;" in JS and ".live-status[hidden] { display: none; }" in CSS

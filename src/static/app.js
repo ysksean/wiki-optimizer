@@ -76,11 +76,14 @@ function syncWorkspaceSummary() {
   $("topWorkspace").textContent = ready ? name : "wiki-optimizer";
 }
 
-// ---------- Stage 0 소스 리스트 ----------
+// ---------- 구조 제안 소스 리스트 ----------
 let srcState = [];   // [{kind:"dir"|"upload", value, label}]
 function renderSrcList() {
   const box = $("srcList");
   box.innerHTML = "";
+  const cnt = $("srcCount");
+  if (cnt) cnt.textContent = String(srcState.length);
+  if (!srcState.length) { const e = document.createElement("div"); e.className = "docs-empty"; e.textContent = t("src_empty"); box.appendChild(e); return; }
   for (let i = 0; i < srcState.length; i++) {
     const it = srcState[i];
     const row = document.createElement("div");
@@ -172,11 +175,11 @@ const I18N = {
     strategy_custom: "전략 직접 지정 (비우면 실험 결과의 best 전략 사용)",
     strategy_label: "직접 지정할 최적화 전략",
     docs_selected: (n,t) => `${t}개 문서 중 ${n}개 선택`, select_all: "모두 선택", clear_all: "선택 해제",
-    runs_title: "실험 기록", runs_count: n => `${n}건`,
+    runs_title: "실행 기록", runs_count: n => `${n}건`,
     need_dir: "폴더 경로를 입력하세요", need_dir_first: "위에서 폴더를 먼저 지정하세요",
     no_md: "md 파일이 없습니다", need_docs: "문서를 하나 이상 선택하세요", load_failed: "문서를 불러오지 못했습니다. 경로와 서버 상태를 확인하세요.",
     request_failed: "요청에 실패했습니다. 잠시 후 다시 시도하세요.",
-    no_jobs: "아직 실행한 실험이 없습니다", no_jobs_hint: "문서를 불러오고 실험을 실행하면 세대별 점수와 전략 변화가 여기에 표시됩니다.",
+    no_jobs: "아직 실행한 실험이 없습니다", no_jobs_hint: "문서를 불러오고 실험을 실행하면 세대별 점수와 전략 변화가 여기에 표시됩니다.", no_propose_hint: "소스와 태스크를 넣고 실행하면 제안된 폴더 구조가 여기에 표시됩니다.",
     waiting_gen: "아직 첫 세대 결과 대기 중…",
     filter_all: "전체", filter_mode: "모드 필터", filter_status: "상태 필터", filter_active: "진행 중", runs_search: "문서 이름으로 찾기",
     runs_filtered: (n, total) => `${n} / ${total}건`, chip_best: "best", chip_failed: n => `판정 실패 ${n}`,
@@ -216,7 +219,7 @@ const I18N = {
     structure_title: d => `구조 진화 — ${d}`,
     files_per_gen: "세대별 파일 구성", th_files: "파일",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
-    prop_title: "Stage 0 — 구조 제안 (백지에서)", mode_propose: "0 제안",
+    prop_title: "구조 제안", mode_propose: "구조 제안", prop_rail_desc: "재료가 될 소스와 태스크를 적습니다.", runs_list_title: "기록",
     rail_title: "설정", rail_desc: "문서와 실험 방식을 고릅니다.",
     timeline_title: "실행", timeline_desc: "가장 최근 실행이 여기 표시됩니다.",
     nav_opt: "위키 최적화", nav_propose: "구조 제안", nav_runs: "실행 기록",
@@ -224,8 +227,8 @@ const I18N = {
     src_manual_ph: "경로 직접 입력 후 Enter (예: ~/repo/docs)",
     src_kind_dir: "폴더", src_kind_file: "파일", src_remove: "소스 제거",
     src_upload_label: (first, n) => n > 1 ? `${first} 외 ${n - 1}개 (업로드)` : `${first} (업로드)`,
-    prop_desc: "위키가 아직 없을 때: 레포/데이터 폴더 + 태스크 설명을 넣으면 폴더 구조를 제안하고, 근거 없는 축(gap)을 알려줍니다",
-    prop_sources: "소스 — 위키의 재료가 될 레포·문서", prop_sources_ph: "",
+    prop_desc: "위키가 아직 없을 때 씁니다. 소스와 태스크를 바탕으로 폴더 구조를 제안하고, 근거 없는 축(gap)을 알려줍니다.",
+    prop_sources: "소스", prop_sources_hint: "위키의 재료가 될 레포·문서 폴더를 추가하세요.", src_empty: "폴더를 고르거나 경로를 입력하면 소스가 여기에 표시됩니다.",
     prop_task: "태스크 설명", prop_task_ph: "이 위키의 소비자·소비 시점, 실제로 던질 질문 예시 2~3개, 데이터의 성질, 산출물 용도",
     btn_propose: "구조 제안 실행", prop_seed: "이어서 개선", prop_seed_tip: "이전 제안 run의 best 분할 전략을 seed로 재사용합니다 (warm start)",
     need_sources_task: "소스 폴더와 태스크 설명을 입력하세요",
@@ -269,7 +272,7 @@ const I18N = {
     need_dir: "Enter a folder path", need_dir_first: "Set the folder above first",
     no_md: "No md files found", need_docs: "Select at least one document", load_failed: "Documents could not be loaded. Check the path and server status.",
     request_failed: "The request failed. Please try again.",
-    no_jobs: "No experiments yet", no_jobs_hint: "Load documents and run an experiment to see generation scores and strategy changes here.",
+    no_jobs: "No experiments yet", no_jobs_hint: "Load documents and run an experiment to see generation scores and strategy changes here.", no_propose_hint: "Add sources and a task, then run to see the proposed folder structure here.",
     waiting_gen: "Waiting for the first generation…",
     filter_all: "All", filter_mode: "Filter by mode", filter_status: "Filter by status", filter_active: "Active", runs_search: "Search by document",
     runs_filtered: (n, total) => `${n} / ${total}`, chip_best: "best", chip_failed: n => `${n} parse failed`,
@@ -309,7 +312,7 @@ const I18N = {
     structure_title: d => `Structure evolution — ${d}`,
     files_per_gen: "files per generation", th_files: "files",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
-    prop_title: "Stage 0 — propose structure (blank slate)", mode_propose: "0 propose",
+    prop_title: "Propose structure", mode_propose: "Propose", prop_rail_desc: "Add source material and describe the task.", runs_list_title: "History",
     rail_title: "Setup", rail_desc: "Pick documents and an experiment.",
     timeline_title: "Run", timeline_desc: "The latest run shows up here.",
     nav_opt: "Optimize wiki", nav_propose: "Propose structure", nav_runs: "Runs",
@@ -317,8 +320,8 @@ const I18N = {
     src_manual_ph: "Type a path and press Enter (e.g. ~/repo/docs)",
     src_kind_dir: "dir", src_kind_file: "file", src_remove: "Remove source",
     src_upload_label: (first, n) => n > 1 ? `${first} +${n - 1} more (uploaded)` : `${first} (uploaded)`,
-    prop_desc: "No wiki yet: point at repo/data folders + a task description to get a proposed folder structure, with unbacked axes flagged as gaps",
-    prop_sources: "Sources — repos and documents to build from", prop_sources_ph: "",
+    prop_desc: "For when there is no wiki yet. Proposes a folder structure from your sources and task, flagging unbacked axes as gaps.",
+    prop_sources: "Sources", prop_sources_hint: "Add repo and document folders the wiki will be built from.", src_empty: "Pick a folder or type a path to list sources here.",
     prop_task: "Task description", prop_task_ph: "Who consumes this wiki and when, 2-3 example questions, nature of the data, intended use",
     btn_propose: "Propose structure", prop_seed: "continue improving", prop_seed_tip: "Warm-start from the best split strategy of previous proposal runs",
     need_sources_task: "Enter source folders and a task description",
@@ -362,7 +365,7 @@ const I18N = {
     need_dir: "请输入文件夹路径", need_dir_first: "请先在上方指定文件夹",
     no_md: "未找到 md 文件", need_docs: "请至少选择一个文档", load_failed: "无法加载文档。请检查路径和服务器状态。",
     request_failed: "请求失败，请稍后重试。",
-    no_jobs: "还没有运行过实验", no_jobs_hint: "加载文档并运行实验后，这里将显示各代评分和策略变化。",
+    no_jobs: "还没有运行过实验", no_jobs_hint: "加载文档并运行实验后，这里将显示各代评分和策略变化。", no_propose_hint: "添加来源和任务并运行后，这里将显示提案的文件夹结构。",
     waiting_gen: "等待第一代结果…",
     filter_all: "全部", filter_mode: "按模式筛选", filter_status: "按状态筛选", filter_active: "进行中", runs_search: "按文档名搜索",
     runs_filtered: (n, total) => `${n} / ${total} 条`, chip_best: "best", chip_failed: n => `${n} 个判定失败`,
@@ -402,7 +405,7 @@ const I18N = {
     structure_title: d => `结构进化 — ${d}`,
     files_per_gen: "各代文件构成", th_files: "文件",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
-    prop_title: "Stage 0 — 结构提案（从零开始）", mode_propose: "0 提案",
+    prop_title: "结构提案", mode_propose: "结构提案", prop_rail_desc: "添加素材来源并描述任务。", runs_list_title: "记录",
     rail_title: "设置", rail_desc: "选择文档与实验方式。",
     timeline_title: "运行", timeline_desc: "这里显示最近一次运行。",
     nav_opt: "Wiki 优化", nav_propose: "结构提案", nav_runs: "运行记录",
@@ -410,8 +413,8 @@ const I18N = {
     src_manual_ph: "输入路径后回车（例：~/repo/docs）",
     src_kind_dir: "目录", src_kind_file: "文件", src_remove: "移除源",
     src_upload_label: (first, n) => n > 1 ? `${first} 等 ${n} 个（已上传）` : `${first}（已上传）`,
-    prop_desc: "还没有 wiki 时：指定仓库/数据文件夹 + 任务描述，即可获得文件夹结构提案，并标出缺乏依据的轴（gap）",
-    prop_sources: "源 — 用作 wiki 素材的仓库·文档", prop_sources_ph: "",
+    prop_desc: "用于还没有 wiki 的情况。根据来源与任务提出文件夹结构，并标出缺乏依据的轴（gap）。",
+    prop_sources: "来源", prop_sources_hint: "添加将作为 wiki 素材的仓库与文档文件夹。", src_empty: "选择文件夹或输入路径后，来源会显示在这里。",
     prop_task: "任务描述", prop_task_ph: "该 wiki 的使用者与使用时机、2~3 个示例问题、数据的性质、产出用途",
     btn_propose: "运行结构提案", prop_seed: "继续改进", prop_seed_tip: "以之前提案 run 的最佳拆分策略作为 seed（warm start）",
     need_sources_task: "请输入源文件夹和任务描述",
@@ -1224,12 +1227,16 @@ function renderTimeline(jobs, parts) {
   if (jobs.length && !autoOpenedLatest) { autoOpenedLatest = true; if (!open_.has(jobs[0].id)) { open_.add(jobs[0].id); setTimeout(poll, 50); } }
   _renderTimelineInto("optTimeline", jobs, parts, 0);
   _renderTimelineInto("proposeTimeline", jobs, parts, jobs.findIndex(j => j.mode === "propose"));
-  const ls = $("liveStatus");
-  if (ls) {
-    const j = jobs[0];
-    ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span><span class="ls-text">${t("status_" + j.status)} · ${t("mode_" + j.mode)} · ${esc(j.doc_names[0] || "")}${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
-      (j.result_summary && j.result_summary.best_total != null ? ` · best <b>${j.result_summary.best_total}</b>` : "") + `</span>`;
-  }
+  _renderLiveStatus("liveStatus", jobs[0]);
+  _renderLiveStatus("proposeLiveStatus", jobs.find(j => j.mode === "propose"));
+}
+// 화면 머리글의 상태 알약 — 위키 최적화는 최신 실행, 구조 제안은 최신 제안 실행
+function _renderLiveStatus(elId, j) {
+  const ls = $(elId);
+  if (!ls) return;
+  ls.hidden = !j;
+  ls.innerHTML = !j ? "" : `<span class="dot ${j.status}"></span><span class="ls-text">${t("status_" + j.status)} · ${t("mode_" + j.mode)} · ${esc(j.doc_names[0] || "")}${j.doc_names.length > 1 ? " " + t("and_more", j.doc_names.length - 1) : ""} · ${j.backend}` +
+    (j.result_summary && j.result_summary.best_total != null ? ` · best <b>${j.result_summary.best_total}</b>` : "") + `</span>`;
 }
 const _timelineCache = {};
 // 특정 화면의 타임라인에 job 1건 렌더 — 실행 기록과 같은 카드, id는 tl-<컨테이너> 접두로 충돌 방지
@@ -1241,7 +1248,7 @@ function _renderTimelineInto(elId, jobs, parts, idx) {
   const html = j
     ? parts[idx].replaceAll(`id="job-${j.id}-body"`, `id="tl-${elId}-${j.id}-body"`)
                 .replaceAll(`aria-controls="job-${j.id}-body"`, `aria-controls="tl-${elId}-${j.id}-body"`)
-    : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t("no_jobs_hint")}</span></div>`;
+    : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t(elId === "proposeTimeline" ? "no_propose_hint" : "no_jobs_hint")}</span></div>`;
   if (html === _timelineCache[elId]) return;
   el.innerHTML = html; _timelineCache[elId] = html;
   const details = el.querySelectorAll("details");
