@@ -37,7 +37,7 @@
   <header class="app-topbar"><div class="breadcrumb"><b id="topWorkspace">wiki-optimizer</b><span>/</span><span id="topCurrent" data-i18n="nav_opt"></span></div><label class="sr-only" for="mobileLang" data-i18n="language"></label><select class="mobile-language" id="mobileLang" onchange="setLang(this.value)"><option value="ko">한국어</option><option value="en">English</option><option value="zh">中文</option></select></header>
 
   <section id="view-opt" class="view view-shell">
-  <div class="page-intro"><div><h2 data-i18n="opt_title"></h2><p data-i18n="opt_desc"></p><div class="live-status" id="liveStatus" aria-live="polite"></div></div><div class="path-chip" id="pathChip"><code id="currentPath" data-i18n="path_not_set"></code><button type="button" onclick="focusFolder()" data-i18n="change_folder"></button></div></div>
+  <div class="page-intro"><div><h2 data-i18n="opt_title"></h2><p data-i18n="opt_desc"></p><div class="live-status" id="liveStatus" aria-live="polite" hidden></div></div><div class="path-chip" id="pathChip"><code id="currentPath" data-i18n="path_not_set"></code><button type="button" onclick="focusFolder()" data-i18n="change_folder"></button></div></div>
   <div class="workbench-grid">
   <div class="setup-rail">
     <div class="rail-head"><h2 data-i18n="rail_title"></h2><p data-i18n="rail_desc"></p></div>
@@ -68,55 +68,54 @@
   </section>
 
   <section id="view-propose" class="view view-shell" hidden>
-  <div class="page-intro"><div><h2 data-i18n="prop_friendly_title"></h2><p data-i18n="prop_friendly_desc"></p></div></div>
-  <div class="propose-panel">
-    <h2 class="panel-title" data-i18n="prop_title"></h2>
-    <p class="panel-desc" data-i18n="prop_desc"></p>
-    <label data-i18n="prop_sources" for="srcManual"></label>
-    <div id="srcList" class="srclist"></div>
-    <div class="srcbtns">
-      <button type="button" class="ghost" onclick="pickSrcDir()" data-i18n="src_add_dir"></button>
-      <button type="button" class="ghost" onclick="$('srcFile').click()" data-i18n="src_add_files"></button>
-      <input type="file" id="srcFile" multiple accept=".md,.txt" hidden
-        onchange="uploadSrcFiles(this.files)">
-      <label class="sr-only" for="srcFile" data-i18n="src_add_files"></label>
-      <input type="text" id="srcManual" data-i18n-placeholder="src_manual_ph"
-        onkeydown="if(event.key==='Enter'){addSrcPath(this.value); this.value='';}">
-    </div>
-    <label for="propTask" style="margin-top:12px" data-i18n="prop_task"></label>
-    <textarea id="propTask" rows="5" data-i18n-placeholder="prop_task_ph"
-      onchange="savePrefs()" style="width:100%"></textarea>
-    <div class="propose-actions">
-      <button onclick="startPropose()" data-i18n="btn_propose"></button>
-      <label for="propSeed" style="display:flex;align-items:center;gap:4px;margin:0">
-        <input type="checkbox" id="propSeed"> <span data-i18n="prop_seed" data-i18n-title="prop_seed_tip"></span>
-      </label>
-      <span id="msg3" class="err" role="status" aria-live="polite"></span>
-    </div>
+  <div class="page-intro"><div><h2 data-i18n="prop_friendly_title"></h2><p data-i18n="prop_friendly_desc"></p><div class="live-status" id="proposeLiveStatus" aria-live="polite" hidden></div></div></div>
+  <div class="workbench-grid">
+  <div class="setup-rail">
+    <div class="rail-head"><h2 data-i18n="rail_title"></h2><p data-i18n="prop_rail_desc"></p></div>
+    <section class="workspace-panel propose-panel" aria-labelledby="sources-title"><div class="workspace-head"><div><h2 id="sources-title" data-i18n="prop_sources"></h2><p data-i18n="prop_sources_hint"></p></div><span class="doc-count" id="srcCount">0</span></div>
+      <div class="folder-tools">
+        <label class="sr-only" for="srcManual" data-i18n="src_manual_ph"></label>
+        <input type="text" id="srcManual" data-i18n-placeholder="src_manual_ph" onkeydown="if(event.key==='Enter'){addSrcPath(this.value); this.value='';}">
+        <button type="button" class="ghost" onclick="pickSrcDir()" data-i18n="src_add_dir"></button>
+        <button type="button" class="ghost" onclick="$('srcFile').click()" data-i18n="src_add_files"></button>
+        <input type="file" id="srcFile" multiple accept=".md,.txt" hidden onchange="uploadSrcFiles(this.files)">
+        <label class="sr-only" for="srcFile" data-i18n="src_add_files"></label>
+      </div>
+      <div id="srcList" class="srclist"><div class="docs-empty" data-i18n="src_empty"></div></div>
+    </section>
+    <aside>
+      <section class="experiment-panel" aria-labelledby="task-title"><h2 id="task-title" data-i18n="prop_task"></h2><p data-i18n="prop_desc"></p>
+        <label class="sr-only" for="propTask" data-i18n="prop_task"></label>
+        <textarea id="propTask" rows="6" data-i18n-placeholder="prop_task_ph" onchange="savePrefs()"></textarea>
+        <label class="seed-option" for="propSeed"><input type="checkbox" id="propSeed"> <span data-i18n="prop_seed" data-i18n-title="prop_seed_tip"></span></label>
+        <button type="button" class="run-primary" onclick="startPropose()" data-i18n="btn_propose"></button>
+        <div class="safe-note"><svg viewBox="0 0 16 16"><path d="M8 1.5 13 3v4c0 3-2 5.5-5 7-3-1.5-5-4-5-7V3l5-1.5Z"/><path d="m5.5 7.5 1.7 1.7 3.5-3.5"/></svg><span data-i18n="safe_note"></span></div>
+        <span id="msg3" class="err view-message" role="status" aria-live="polite"></span>
+      </section>
+    </aside>
   </div>
-  <section class="timeline-panel propose-timeline" id="propose-timeline-panel" aria-labelledby="propose-timeline-title">
-    <div class="timeline-head"><h2 id="propose-timeline-title" data-i18n="timeline_title"></h2><p data-i18n="timeline_desc"></p><button type="button" class="ghost timeline-all" onclick="showView('runs')" data-i18n="nav_runs"></button></div>
-    <div id="proposeTimeline"><div class="card empty-state timeline-empty"><strong data-i18n="no_jobs"></strong><span data-i18n="no_jobs_hint"></span></div></div>
-  </section>
+    <section class="timeline-panel" id="propose-timeline-panel" aria-labelledby="propose-timeline-title">
+      <div class="timeline-head"><h2 id="propose-timeline-title" data-i18n="timeline_title"></h2><p data-i18n="timeline_desc"></p><button type="button" class="ghost timeline-all" onclick="showView('runs')" data-i18n="nav_runs"></button></div>
+      <div id="proposeTimeline"><div class="card empty-state timeline-empty"><strong data-i18n="no_jobs"></strong><span data-i18n="no_propose_hint"></span></div></div>
+    </section>
+  </div>
   </section>
 
   <section id="view-runs" class="view view-shell" hidden>
   <div class="page-intro"><div><h2 data-i18n="runs_title"></h2><p data-i18n="runs_desc"></p></div></div>
+  <div class="timeline-head runs-head"><h2 data-i18n="runs_list_title"></h2><p class="count" id="runsCount"></p><span class="work-status" id="workStatus" role="status" aria-live="polite"></span></div>
   <div class="runs-filters">
     <div class="doc-filter" role="group" data-i18n-aria-label="filter_mode" id="runsModeFilter">
       <button type="button" class="on" data-mode="all" aria-pressed="true" onclick="setRunsFilter('mode','all',this)" data-i18n="filter_all"></button>
       <button type="button" data-mode="summary" aria-pressed="false" onclick="setRunsFilter('mode','summary',this)" data-i18n="mode_summary"></button>
       <button type="button" data-mode="structure" aria-pressed="false" onclick="setRunsFilter('mode','structure',this)" data-i18n="mode_structure"></button>
+      <button type="button" data-mode="propose" aria-pressed="false" onclick="setRunsFilter('mode','propose',this)" data-i18n="mode_propose"></button>
       <button type="button" data-mode="audit" aria-pressed="false" onclick="setRunsFilter('mode','audit',this)" data-i18n="mode_audit"></button>
       <button type="button" data-mode="apply" aria-pressed="false" onclick="setRunsFilter('mode','apply',this)" data-i18n="mode_apply"></button>
     </div>
     <label class="sr-only" for="runsStatus" data-i18n="filter_status"></label>
     <select id="runsStatus" onchange="setRunsFilter('status',this.value)"><option value="all" data-i18n="filter_all"></option><option value="active" data-i18n="filter_active"></option><option value="done" data-i18n="status_done"></option><option value="error" data-i18n="status_error"></option></select>
     <label class="doc-search runs-search" for="runsSearch"><span class="sr-only" data-i18n="runs_search"></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="text" id="runsSearch" data-i18n-placeholder="runs_search" oninput="setRunsFilter('q',this.value)"></label>
-  </div>
-  <div class="section-head">
-    <span class="count" id="runsCount"></span>
-    <span class="work-status" id="workStatus" role="status" aria-live="polite"></span>
   </div>
   <div id="jobs"></div>
   </section>

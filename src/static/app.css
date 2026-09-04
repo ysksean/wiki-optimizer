@@ -372,8 +372,8 @@
   .card { border-color: var(--line-subtle); box-shadow: none; padding: 20px 22px; }
   .panel-title { font-size: 14px; }
   td, th { font-size: 12.5px; }
-  /* Stage 0 소스 리스트 */
-  .srclist { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  /* 구조 제안 소스 리스트 */
+  .srclist { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; max-height: 300px; overflow: auto; }
   .srcrow { display: flex; align-items: center; gap: 8px; height: 32px;
     padding: 0 10px; border-radius: 6px; background: var(--card-raised);
     font-size: 12.5px; }
@@ -382,9 +382,6 @@
   .srcrow .x { margin-left: auto; background: none; border: none; color: var(--dim);
     cursor: pointer; font-size: 13px; padding: 2px 4px; }
   .srcrow .x:hover { color: var(--tx); }
-  .srcbtns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .srcbtns .ghost { height: 30px; font-size: 12px; }
-  .srcbtns input[type=text] { flex: 1; min-width: 180px; min-height: 30px; font-size: 12.5px; }
   /* 점수 히트맵 (Braintrust) */
   .hG { background: var(--ok-soft); }
   .hM { background: var(--warn-soft); }
@@ -449,7 +446,7 @@
   .timeline-empty { min-height: 280px; display: grid; align-content: center; justify-items: center; gap: 6px; text-align: center;
     border: 1px dashed var(--line-strong); background: transparent; box-shadow: none; color: var(--dim); font-size: var(--fs-secondary); }
   .timeline-empty strong { color: var(--tx-secondary); font-size: var(--fs-body); }
-  #optTimeline .card { margin-bottom: 0; }
+  #optTimeline .card, #proposeTimeline .card { margin-bottom: 0; }
   .workspace-panel, .experiment-panel, .next-panel, .propose-panel { border: 1px solid var(--line); border-radius: 13px; background: var(--card); }
   .workspace-panel { position: relative; overflow: hidden; }
   .workspace-head { min-height: 64px; padding: 16px 18px; display: flex; align-items: center; border-bottom: 1px solid var(--line); }
@@ -509,9 +506,11 @@
   .next-panel details { margin-top: 8px; }
   .next-panel textarea { font-size: var(--fs-caption); }
   .view-message { display: block; margin-top: 10px; min-height: 18px; }
-  .propose-panel { padding: 22px; }
-  .propose-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
-  .propose-actions label { margin: 0; }
+  .experiment-panel textarea { width: 100%; margin-top: 14px; font-size: var(--fs-caption); line-height: 1.5; resize: vertical; }
+  .seed-option { display: flex; align-items: center; gap: 7px; margin: 10px 0 0; color: var(--dim); font-size: var(--fs-caption); font-weight: 500; }
+  .seed-option input { width: 15px; height: 15px; margin: 0; }
+  .runs-head .count { margin: 0; }
+  .runs-head .work-status { margin-left: auto; color: var(--dim); font-size: var(--fs-caption); }
   .srcrow .x { min-height: 28px; }
   #view-runs .section-head { margin-top: 0; }
   #view-runs #jobs > .empty-state { min-height: 190px; display: grid; align-content: center; justify-items: center; text-align: center; }
@@ -622,7 +621,7 @@
   @media (max-width: 760px) { .job-head .meta { margin-left: 0; } }
 
   /* ---------- ⑤ quiet SaaS — 상태 알약 · 벤토 요약 · 스파크 KPI · 그라데이션 차트 ---------- */
-  .workspace-panel, .experiment-panel, .next-panel, .propose-panel, #jobs .card, #optTimeline .card { border-color: var(--line-subtle); box-shadow: var(--shadow-panel); border-radius: 14px; }
+  .workspace-panel, .experiment-panel, .next-panel, .propose-panel, #jobs .card, #optTimeline .card, #proposeTimeline .card { border-color: var(--line-subtle); box-shadow: var(--shadow-panel); border-radius: 14px; }
   .live-status { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 7px 12px; width: fit-content; border-radius: 99px;
     background: var(--card); border: 1px solid var(--line-subtle); box-shadow: var(--shadow-panel); color: var(--tx-secondary); font-size: var(--fs-secondary); }
   .live-status b { color: var(--tx); font-variant-numeric: tabular-nums; }
@@ -659,5 +658,5 @@
   .doc-list-details > summary { color: var(--dim); font-size: var(--fs-caption); cursor: pointer; }
   .doc-list { margin-top: 6px; color: var(--tx-secondary); font-size: var(--fs-caption); line-height: 1.6; word-break: break-word; }
   .live-status { max-width: 100%; }
+  .live-status[hidden] { display: none; }
   .ls-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .propose-timeline { margin-top: 20px; }
