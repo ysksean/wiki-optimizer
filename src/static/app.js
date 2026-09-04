@@ -223,6 +223,14 @@ const I18N = {
     structure_title_n: n => `구조 진화 · 문서 ${n}개`, doc_list: "문서 목록",
     structure_title: d => `구조 진화 — ${d}`,
     files_per_gen: "세대별 파일 구성", th_files: "파일",
+    structure_head: (d, f) => `구조 재편 제안 · 문서 ${d}개 → 파일 ${f}개`,
+    structure_intro: (n, b) => `AI가 "문서를 어떻게 나눌지" 규칙을 ${n}번 고쳐 쓰며 시도했고, 각 시도를 같은 질문 세트로 채점했습니다. 점수가 가장 높은 ${b}차 시도가 제안입니다.`,
+    structure_intro_running: (d, n) => `AI가 "문서를 어떻게 나눌지" 규칙을 고쳐 쓰며 시도하는 중입니다 · ${d}/${n}차`,
+    structure_hero: n => `${n}차 시도 종합`, attempt_n: n => `${n}차 시도`, attempt_meta: (f, a) => `파일 ${f}개 · 정확도 ${a}`,
+    rule_diff: (n, p) => `${n}차 시도의 분할 규칙 — ${p}차에서 바뀐 부분`, rule_seed: n => `${n}차 시도의 분할 규칙 — 기본값`, rule_rewritten: (n, p) => `${n}차 시도의 분할 규칙 — ${p}차 결과를 보고 거의 새로 씀`, rule_prev: p => `${p}차 규칙 보기`,
+    map_now: "지금 문서", map_from: "출처", map_proposed: "제안 구조", map_tip: "파일에 마우스를 올리거나 클릭하면 어느 원본 문서에서 왔는지 선으로 표시됩니다.",
+    map_no_sources: "이 실행은 출처 기록 이전 버전이라 문서→파일 연결선이 없습니다. 새로 실행하면 표시됩니다.",
+    n_chars: n => `${n}자`, n_sources: n => `출처 ${n}개`, file_previews: "제안 파일 본문 미리보기", score_trend: "시도별 점수 추이",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
     prop_title: "구조 제안", mode_propose: "구조 제안", prop_rail_desc: "재료가 될 소스와 태스크를 적습니다.", runs_list_title: "기록",
     rail_title: "설정", rail_desc: "문서와 실험 방식을 고릅니다.",
@@ -318,6 +326,14 @@ const I18N = {
     structure_title_n: n => `Structure evolution · ${n} documents`, doc_list: "Documents",
     structure_title: d => `Structure evolution — ${d}`,
     files_per_gen: "files per generation", th_files: "files",
+    structure_head: (d, f) => `Proposed restructure · ${d} documents → ${f} files`,
+    structure_intro: (n, b) => `The AI rewrote its "how to split the documents" rule ${n} times, scoring each attempt on the same question set. Attempt ${b} scored highest and is the proposal.`,
+    structure_intro_running: (d, n) => `The AI is rewriting its "how to split" rule and trying again · attempt ${d}/${n}`,
+    structure_hero: n => `attempt ${n} total`, attempt_n: n => `Attempt ${n}`, attempt_meta: (f, a) => `${f} files · accuracy ${a}`,
+    rule_diff: (n, p) => `Attempt ${n} split rule — changes since attempt ${p}`, rule_seed: n => `Attempt ${n} split rule — default`, rule_rewritten: (n, p) => `Attempt ${n} split rule — largely rewritten after attempt ${p}`, rule_prev: p => `Show attempt ${p} rule`,
+    map_now: "Current documents", map_from: "From", map_proposed: "Proposed structure", map_tip: "Hover or click a file to see which source documents it came from.",
+    map_no_sources: "This run predates source tracking, so no document→file lines are available. Run again to see them.",
+    n_chars: n => `${n} chars`, n_sources: n => `${n} sources`, file_previews: "Preview proposed file contents", score_trend: "Score by attempt",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
     prop_title: "Propose structure", mode_propose: "Propose", prop_rail_desc: "Add source material and describe the task.", runs_list_title: "History",
     rail_title: "Setup", rail_desc: "Pick documents and an experiment.",
@@ -413,6 +429,14 @@ const I18N = {
     structure_title_n: n => `结构进化 · ${n} 篇文档`, doc_list: "文档列表",
     structure_title: d => `结构进化 — ${d}`,
     files_per_gen: "各代文件构成", th_files: "文件",
+    structure_head: (d, f) => `结构重组提案 · ${d} 篇文档 → ${f} 个文件`,
+    structure_intro: (n, b) => `AI 将"如何拆分文档"的规则改写并尝试了 ${n} 次，每次都用同一问题集评分。得分最高的第 ${b} 次尝试即为提案。`,
+    structure_intro_running: (d, n) => `AI 正在改写"如何拆分"的规则并再次尝试 · 第 ${d}/${n} 次`,
+    structure_hero: n => `第 ${n} 次尝试综合`, attempt_n: n => `第 ${n} 次尝试`, attempt_meta: (f, a) => `${f} 个文件 · 准确率 ${a}`,
+    rule_diff: (n, p) => `第 ${n} 次尝试的拆分规则 — 相对第 ${p} 次的变化`, rule_seed: n => `第 ${n} 次尝试的拆分规则 — 默认`, rule_rewritten: (n, p) => `第 ${n} 次尝试的拆分规则 — 参考第 ${p} 次结果后基本重写`, rule_prev: p => `查看第 ${p} 次规则`,
+    map_now: "当前文档", map_from: "来源", map_proposed: "提案结构", map_tip: "悬停或点击文件，可查看它来自哪些原始文档。",
+    map_no_sources: "此次运行早于来源记录功能，因此没有文档→文件的连线。重新运行即可显示。",
+    n_chars: n => `${n} 字`, n_sources: n => `${n} 个来源`, file_previews: "预览提案文件内容", score_trend: "各次尝试的分数走势",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
     prop_title: "结构提案", mode_propose: "结构提案", prop_rail_desc: "添加素材来源并描述任务。", runs_list_title: "记录",
     rail_title: "设置", rail_desc: "选择文档与实验方式。",
@@ -1078,21 +1102,116 @@ function summaryRun(run) {
   }
   return html + "</div>";
 }
-function structureRun(run) {
+// ---------- B 구조 결과 카드 — "N차 시도" · 분할 규칙 · 문서→파일 매핑 다이어그램 ----------
+const selectedAttempt = {};   // runKey -> generation (기본은 best)
+function selectAttempt(key, gen) { selectedAttempt[key] = gen; poll(); }
+// 파일 제목 "주제: 부제" → 파일명(01-주제.md)과 부제
+function structFileName(title, j) {
+  const i = title.indexOf(":");
+  const head = (i < 0 ? title : title.slice(0, i)).trim(), tail = i < 0 ? "" : title.slice(i + 1).trim();
+  return { name: `${String(j + 1).padStart(2, "0")}-${head}.md`, desc: tail };
+}
+// 매핑 다이어그램 — 왼쪽 원본 문서, 오른쪽 제안 파일, 사이에 출처 선. 출처 정보가 없는(구버전) 실행이면 선 없이 목록만
+function structureMap(docs, files) {
+  const RH = 26, FH = 44, SW = 96, n = docs.length, m = files.length;
+  const H = Math.max(n * RH, m * FH), lt = (H - n * RH) / 2, rt = (H - m * FH) / 2;
+  const hasSources = files.some(f => (f.sources || []).length);
+  const di = Object.fromEntries(docs.map((d, i) => [d, i]));
+  const ly = i => lt + i * RH + RH / 2, ry = j => rt + j * FH + FH / 2;
+  const wires = files.flatMap((f, j) => (f.sources || []).filter(d => d in di).map(d =>
+    `<path class="w f${j} d${di[d]}" d="M0 ${ly(di[d]).toFixed(0)} C ${SW / 2} ${ly(di[d]).toFixed(0)}, ${SW / 2} ${ry(j).toFixed(0)}, ${SW} ${ry(j).toFixed(0)}"/>`)).join("");
+  const ico = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3 3v10H4z"/><path d="M9 1.5v3h3"/></svg>';
+  const left = docs.map((d, i) => `<div class="src d${i}" data-d="${i}" style="height:${RH}px" title="${esc(d)}">${ico}<span>${esc(d)}.md</span></div>`).join("");
+  const right = files.map((f, j) => {
+    const { name, desc } = structFileName(f.title, j);
+    const src = (f.sources || []).filter(d => d in di);
+    const chars = f.n_chars ?? (f.content ? f.content.length : null);
+    const meta = [desc, chars != null ? t("n_chars", chars) : "", hasSources ? t("n_sources", src.length) : ""].filter(Boolean).join(" · ");
+    return `<div class="dst f${j}" data-f="${j}" data-src="${src.map(d => di[d]).join(",")}" style="height:${FH - 6}px">${ico}<div><b>${esc(name)}</b><small>${esc(meta)}</small>${src.length ? `<small class="src-names">${t("map_from")}: ${src.map(esc).join(", ")}</small>` : ""}</div></div>`;
+  }).join("");
+  return `<div class="smap${hasSources ? "" : " no-wires"}" onmouseover="smapHover(event)" onmouseout="smapClear(event)" onclick="smapPin(event)">
+    <div class="col"><h4>${t("map_now")} <b>${n}</b></h4><div style="padding-top:${lt.toFixed(0)}px">${left}</div></div>
+    <svg class="wires" width="${SW}" height="${H}" aria-hidden="true">${wires}</svg>
+    <div class="col"><h4>${t("map_proposed")} <b>${m}</b></h4><div style="padding-top:${rt.toFixed(0)}px">${right}</div></div>
+  </div><div class="smap-tip">${hasSources ? t("map_tip") : t("map_no_sources")}</div>`;
+}
+function _smapRoot(ev) { return ev.target.closest(".smap"); }
+function smapHover(ev) {
+  const root = _smapRoot(ev); if (!root || root.dataset.pinned) return;
+  const el = ev.target.closest(".dst, .src"); if (!el) return;
+  smapLight(root, el);
+}
+function smapLight(root, el) {
+  root.querySelectorAll(".hot").forEach(x => x.classList.remove("hot"));
+  if (el.classList.contains("dst")) {
+    const j = el.dataset.f;
+    root.querySelectorAll(`.w.f${j}, .dst.f${j}`).forEach(x => x.classList.add("hot"));
+    (el.dataset.src || "").split(",").filter(Boolean).forEach(i => root.querySelector(`.src.d${i}`)?.classList.add("hot"));
+  } else {
+    const i = el.dataset.d;
+    root.querySelectorAll(`.w.d${i}, .src.d${i}`).forEach(x => x.classList.add("hot"));
+    root.querySelectorAll(`.w.d${i}`).forEach(w => { const f = [...w.classList].find(c => /^f\d+$/.test(c)); root.querySelector(`.dst.${f}`)?.classList.add("hot"); });
+  }
+}
+function smapClear(ev) {
+  const root = _smapRoot(ev); if (!root || root.dataset.pinned) return;
+  if (ev.relatedTarget && root.contains(ev.relatedTarget) && ev.relatedTarget.closest(".dst, .src")) return;
+  root.querySelectorAll(".hot").forEach(x => x.classList.remove("hot"));
+}
+// 클릭하면 고정(모바일·키보드용) — 같은 항목 다시 클릭하면 해제
+function smapPin(ev) {
+  const root = _smapRoot(ev); if (!root) return;
+  const el = ev.target.closest(".dst, .src"); if (!el) return;
+  const key = el.dataset.f != null ? "f" + el.dataset.f : "d" + el.dataset.d;
+  if (root.dataset.pinned === key) { delete root.dataset.pinned; root.querySelectorAll(".hot").forEach(x => x.classList.remove("hot")); return; }
+  root.dataset.pinned = key; smapLight(root, el);
+}
+
+// 분할 규칙 박스 — 이전 시도와 겹치는 부분이 충분하면 단어 diff, 거의 다시 썼으면 원문 + 이전 규칙 접기
+function ruleBlock(prev, cur) {
+  const n = cur.generation + 1;
+  if (!prev) return `<div class="rule"><em>${t("rule_seed", n)}</em><div class="diff">${esc(cur.strategy)}</div></div>`;
+  const diff = wordDiff(prev.strategy, cur.strategy);
+  const changed = (diff.match(/<(ins|del)>/g) || []).length;
+  const tokens = cur.strategy.split(/\s+/).filter(Boolean).length || 1;
+  if (changed / tokens <= 0.5)
+    return `<div class="rule"><em>${t("rule_diff", n, prev.generation + 1)}</em>${diff}</div>`;
+  return `<div class="rule"><em>${t("rule_rewritten", n, prev.generation + 1)}</em><div class="diff">${esc(cur.strategy)}</div>
+    <details class="rule-prev"><summary>${t("rule_prev", prev.generation + 1)}</summary><div class="diff">${esc(prev.strategy)}</div></details></div>`;
+}
+
+function structureRun(run, jobId) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
   const failed = failedGens(rep);
-  let html = `<div class="runbox"><h3>${t("structure_title_n", p.docs.length)}
-      <span class="muted">${t("gen_progress", p.done_generations, p.generations)}</span></h3><details class="doc-list-details"><summary>${t("doc_list")} · ${p.docs.length}</summary><div class="doc-list">${p.docs.map(esc).join(", ")}</div></details>${resultMeta(p, rep)}${parseFailedNote(failed)}
-    <div class="kpis"><div class="kpi"><b>${p.best_total}</b><span>${t("best_gen", p.best_gen)}</span></div></div>
-    ${chart(p.history, "", p.best_gen, failed)}
-    <details><summary>${t("files_per_gen")}</summary>${wrapTable(
-      `<tr><th>${t("generation_label")}</th><th>${t("total")}</th><th>${t("acc_short")}</th><th>${t("eff_short")}</th><th>${t("th_files")}</th></tr>` +
-      p.history.map(h => `<tr${h.generation===p.best_gen?' class="is-best"':failed.has(h.generation)?' class="is-failed"':''}>
-        <td>${h.generation}${h.generation===p.best_gen?" ★":""}</td>
-        <td${heat(h.score.total)}>${h.score.total}</td><td${heat(h.score.accuracy)}>${h.score.accuracy}</td><td${heat(h.score.efficiency)}>${h.score.efficiency}</td>
-        <td>${(h.file_titles||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
-    </details>`;
+  const key = `${jobId}/${run.run_dir}`;
+  const hist = p.history || [];
+  const bestGen = p.best_gen;
+  const sel = selectedAttempt[key] ?? bestGen;
+  const cur = hist.find(h => h.generation === sel) || hist[hist.length - 1];
+  const prev = cur ? hist.find(h => h.generation === cur.generation - 1) : null;
+  // 파일 목록: 선택한 시도의 history.files(제목·출처·글자수). best면 report.best.struct(본문 포함)를 우선
+  const bestStruct = rep?.best?.struct?.files;
+  const files = (cur && cur.generation === bestGen && bestStruct) ? bestStruct : (cur?.files || (cur?.file_titles || []).map(x => ({ title: x, sources: [] })));
+  const running = p.done_generations < p.generations;
+  const bestH = hist.find(h => h.generation === bestGen);
+  const bestCount = bestStruct ? bestStruct.length : (bestH?.n_files ?? files.length);
+  let html = `<div class="runbox structure-run">
+    <div class="sr-head"><div><h3>${t("structure_head", p.docs.length, bestCount)}</h3>
+      <p>${running ? t("structure_intro_running", p.done_generations, p.generations) : t("structure_intro", hist.length, bestGen + 1)}</p></div>
+      ${p.best_total != null && bestGen >= 0 ? `<div class="sr-hero"><b>${p.best_total}</b><small>${t("structure_hero", bestGen + 1)}${bestH?.score ? ` · ${t("acc_short")} ${bestH.score.accuracy} × ${t("eff_short")} ${bestH.score.efficiency}` : ""}</small></div>` : ""}
+    </div>
+    ${resultMeta(p, rep)}${parseFailedNote(failed)}
+    <div class="attempts" role="tablist">${hist.map(h => `<button type="button" role="tab" aria-selected="${h.generation === sel}" class="attempt${h.generation === sel ? " on" : ""}${failed.has(h.generation) ? " failed" : ""}" onclick="selectAttempt('${esc(key)}', ${h.generation})">
+        <span>${t("attempt_n", h.generation + 1)}${h.generation === bestGen ? " ★" : ""}</span><b>${failed.has(h.generation) ? "—" : h.score.total}</b><small>${t("attempt_meta", h.n_files, h.score.accuracy)}</small></button>`).join("")}</div>`;
+  if (cur) {
+    html += ruleBlock(prev, cur);
+    html += structureMap(p.docs, files);
+    if (cur.generation === bestGen && bestStruct) {
+      html += `<details class="file-previews"><summary>${t("file_previews")}</summary>${bestStruct.map((f, j) => `<div class="preview"><b>${esc(structFileName(f.title, j).name)}</b> <span class="muted">· ${t("n_chars", f.content.length)}</span><p>${esc(f.content)}</p></div>`).join("")}</details>`;
+    }
+  }
+  html += `<details><summary>${t("score_trend")}</summary>${chart(p.history, "", bestGen, failed)}</details>`;
   const det = rep?.best?.result?.details;
   if (det) {
     html += `<details><summary>${t("routing")}</summary>${wrapTable(
@@ -1237,7 +1356,7 @@ async function renderJob(j) {
       } else {
         body += d.runs.map(run =>
           (j.mode === "propose" ? proposalRun(run, j.id)
-           : run.progress?.mode === "structure" ? structureRun(run) : summaryRun(run))).join("")
+           : run.progress?.mode === "structure" ? structureRun(run, j.id) : summaryRun(run))).join("")
           || `<div class="runbox" style="color:var(--dim)">${t("waiting_gen")}</div>`;
       }
     }
