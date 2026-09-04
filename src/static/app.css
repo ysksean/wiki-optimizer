@@ -660,3 +660,39 @@
   .live-status { max-width: 100%; }
   .live-status[hidden] { display: none; }
   .ls-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- ⑥ 실행 피드백 (PR #47 포팅) — 스피너 뱃지 · 아이콘 버튼 · 진행 단계 · 토스트 ---------- */
+  .action-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  .action-button svg { flex: 0 0 auto; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .action-spinner { flex: 0 0 auto; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: status-spin .75s linear infinite; }
+  .badge::before { flex: 0 0 auto; }
+  .b-running::before { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; background: transparent; animation: status-spin .75s linear infinite; }
+  .b-done::before { width: 4px; height: 8px; margin: -2px 1px 0 2px; border: solid currentColor; border-width: 0 2px 2px 0; border-radius: 0; background: transparent; transform: rotate(45deg); }
+  @keyframes status-spin { to { transform: rotate(360deg); } }
+  .run-progress { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 16px; padding: 14px 12px; border: 1px solid var(--line-subtle); border-radius: 10px; background: var(--control); }
+  .run-progress::before { content: ""; position: absolute; left: 12.5%; right: 12.5%; top: 25px; height: 1px; background: var(--line-strong); }
+  .progress-step { position: relative; z-index: 1; min-width: 0; color: var(--dim); text-align: center; font-size: var(--fs-caption); }
+  .progress-step i { display: grid; place-items: center; width: 22px; height: 22px; margin: 0 auto 7px; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--control); font-style: normal; }
+  .progress-step.active { color: var(--acc); font-weight: 650; }
+  .progress-step.active i { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
+  .progress-step.complete { color: var(--ok); }
+  .progress-step.complete i { border-color: var(--ok); background: var(--ok-soft); }
+  .toast-region { position: fixed; z-index: 80; right: 20px; bottom: 20px; width: min(360px, calc(100vw - 32px)); display: grid; gap: 8px; pointer-events: none; }
+  .toast { min-height: 54px; padding: 11px 14px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line-subtle); border-radius: 12px;
+    background: var(--card-raised); color: var(--tx-secondary); box-shadow: var(--shadow-panel); font-size: var(--fs-secondary); line-height: 1.5; animation: toast-in .22s ease-out; }
+  .toast-mark { flex: 0 0 auto; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); font-weight: 750; }
+  .toast.success .toast-mark { background: var(--ok-soft); color: var(--ok); }
+  .toast.error .toast-mark { background: var(--bad-soft); color: var(--bad); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .b-running::before, .action-spinner { animation: none; border-right-color: currentColor; opacity: .72; }
+    .toast { animation: none; }
+  }
+  /* 모바일: 칩 묶음이 1열 폭을 넓혀 뱃지가 늘어나던 문제 — 칩은 한 줄 전체, 뱃지는 내용 폭만 */
+  @media (max-width: 760px) {
+    .job-head .job-chips { grid-column: 1 / -1; }
+    .job-head .badge { justify-self: start; }
+    .job-head .mode { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prov { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 22px; }
+    .toast-region { right: 16px; bottom: 82px; }
+  }
