@@ -750,3 +750,18 @@
     .smap .dst { height: auto !important; }
     .smap-tip { display: none; }
   }
+
+  /* ---------- 점수 근거 (B 구조) ---------- */
+  .score-basis { margin: 18px 0 8px; padding: 14px 16px; border: 1px solid var(--line-subtle); border-radius: 10px; background: var(--control); }
+  .sb-formula { display: flex; align-items: baseline; gap: 10px; }
+  .sb-formula b { font: 650 22px/1 var(--font-sans); font-variant-numeric: tabular-nums; }
+  .sb-formula span { color: var(--tx-secondary); font-size: var(--fs-secondary); font-variant-numeric: tabular-nums; }
+  .sb-rows { display: grid; gap: 8px; margin-top: 12px; }
+  .sb-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; font-size: var(--fs-caption); line-height: 1.55; }
+  .sb-row b { color: var(--tx); font-variant-numeric: tabular-nums; }
+  .sb-row span { color: var(--dim); }
+  .sb-table { margin-top: 12px; }
+  .sb-table > summary { color: var(--tx-secondary); font-size: var(--fs-caption); font-weight: 600; cursor: pointer; }
+  .sb-table td { white-space: normal; vertical-align: top; }
+  .sb-table tr.q-bad td { background: var(--bad-soft); }
+  @media (max-width: 760px) { .sb-row { grid-template-columns: 1fr; gap: 2px; } }

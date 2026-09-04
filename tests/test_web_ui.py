@@ -173,3 +173,12 @@ def test_structure_card_explains_attempts_and_maps_docs_to_files():
     assert "onclick=\"selectAttempt('${esc(key)}'" in JS   # 속성 안 따옴표 충돌 회귀 방지
     assert ".smap {" in CSS and ".smap.no-wires .wires { display: none; }" in CSS
     assert ".smap .dst { height: auto !important; }" in CSS   # 모바일: 출처 이름이 한 줄 더 붙는다
+
+
+def test_structure_card_shows_score_basis():
+    """점수 근거: 종합 = 정확도 × 효율 산식, 정확도·효율의 계산 방식 설명, 시도별 질문 판정 표."""
+    assert "function scoreBlock(cur, p, rep, isBest)" in JS and "scoreBlock(cur, p, rep, cur.generation === bestGen)" in JS
+    assert JS.count("sb_formula:") == 3 and JS.count("sb_acc_how:") == 3 and JS.count("sb_eff_how:") == 3
+    assert 'th_expected' in JS and 'th_answer' in JS
+    assert ".score-basis {" in CSS and ".sb-table tr.q-bad td" in CSS
+    assert 'g => t("attempt_n", g + 1)' in JS   # 구조 카드 차트 x축도 'N차 시도'

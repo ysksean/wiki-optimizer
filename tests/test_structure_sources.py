@@ -65,4 +65,7 @@ def test_history_entries_carry_per_file_sources(tmp_path, monkeypatch):
     entry = report["history"][0]
     assert entry["files"] == [{"title": "merged", "sources": ["a", "b"], "n_chars": 3}]
     assert entry["file_titles"] == ["merged"]   # 구버전 필드 유지
+    assert entry["details"] == []                # 질문별 판정도 시도마다 남긴다
+    progress = json.loads(next((tmp_path / "runs").glob("structure-*/progress.json")).read_text())
+    assert progress["total_raw_chars"] > 0 and progress["question_set"] == [{"q": "q", "a": "a"}]
     assert report["best"]["struct"]["files"][0]["sources"] == ["a", "b"]
