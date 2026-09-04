@@ -36,19 +36,20 @@ def organize(docs, strategy):
         "너는 지식베이스 구조 설계자다. 아래 원본 문서들을 '분할 전략'에 따라 "
         "여러 개의 위키 파일로 재조직하라.\n"
         f"[분할 전략]\n{strategy}\n\n"
-        "각 파일은 제목(title)과 내용(content)을 가진다. content는 원본에서 "
-        "관련 내용을 추려 간결히 정리한다. 파일 개수와 분할 방식은 전략을 따르라.\n"
-        '출력은 JSON만: {"files":[{"title":"...","content":"..."}]}  다른 텍스트 금지.\n\n'
+        "각 파일은 제목(title), 내용(content), 출처(sources)를 가진다. content는 원본에서 "
+        "관련 내용을 추려 간결히 정리한다. sources는 그 파일 내용의 근거가 된 원본 문서 이름 "
+        "목록이다 (위 '=== 문서: 이름 ===' 의 이름을 그대로). 파일 개수와 분할 방식은 전략을 따르라.\n"
+        '출력은 JSON만: {"files":[{"title":"...","content":"...","sources":["문서이름",...]}]}  다른 텍스트 금지.\n\n'
         f"{joined}"
     )
     out = llm.generate(prompt, num_predict=1500, temperature=0.3)
-    struct = _parse_struct(out)
+    struct = _parse_struct(out, docs)
     # 파싱 실패 시 1회 재시도, 그래도 실패하면 문서 자체를 파일로 두는 fallback
     if not struct.get("files"):
         out = llm.generate(prompt, num_predict=1500, temperature=0.5)
-        struct = _parse_struct(out)
+        struct = _parse_struct(out, docs)
     if not struct.get("files"):
-        struct = {"files": [{"title": name, "content": text} for name, text in docs.items()]}
+        struct = {"files": [{"title": name, "content": text, "sources": [name]} for name, text in docs.items()]}
     # index 생성 (파일명 + 한줄 설명) — Router가 파일 고를 때 쓴다
     struct["index"] = [
         {"title": f["title"], "desc": _one_line(f["content"])}
@@ -62,7 +63,11 @@ def _one_line(content, limit=80):
     return first[:limit]
 
 
-def _parse_struct(text):
+def _parse_struct(text, docs=None):
+    """Organizer 출력 파싱. sources는 실제 문서 이름만 남긴다 (LLM이 지어낸 이름은 버림).
+
+    docs가 없으면(구버전 호출) sources 검증 없이 그대로 둔다.
+    """
     m = re.search(r"\{.*\}", text, re.DOTALL)
     if not m:
         return {"files": []}
@@ -74,8 +79,25 @@ def _parse_struct(text):
     clean = []
     for f in files:
         if isinstance(f, dict) and "title" in f and "content" in f:
-            clean.append({"title": str(f["title"]).strip(), "content": str(f["content"]).strip()})
+            clean.append({"title": str(f["title"]).strip(), "content": str(f["content"]).strip(),
+                          "sources": _clean_sources(f.get("sources"), docs)})
     return {"files": clean}
+
+
+def _clean_sources(raw, docs):
+    """출처 목록 정리 — 문자열 배열만 인정, 중복 제거, 순서 유지. docs가 있으면 그 이름만 통과."""
+    if not isinstance(raw, list):
+        return []
+    seen, out = set(), []
+    for name in raw:
+        if not isinstance(name, str):
+            continue
+        name = name.strip()
+        if not name or name in seen or (docs is not None and name not in docs):
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
 
 
 # ---------- Router ----------

@@ -142,7 +142,9 @@ def test_quiet_saas_result_summary_and_live_status():
 
 def test_audit_fixes_structure_title_autoload_propose_timeline():
     """검수 반영: 구조 카드 제목 축약+문서 접기(F1), 저장 폴더 자동 로드(F2), eyebrow 제거(F6), 구조 제안 타임라인(F7)."""
-    assert JS.count("structure_title_n:") == 3 and 'class="doc-list-details"' in JS
+    assert JS.count("structure_title_n:") == 3 and ".doc-list-details {" in CSS
+    # 구조 카드는 이후 매핑 다이어그램(.smap)으로 대체 — 문서 목록은 왼쪽 열이 대신한다
+    assert 'class="smap' in JS
     assert "if (p.dir) loadDocs();" in JS
     assert 'class="eyebrow"' not in HTML
     assert 'id="proposeTimeline"' in HTML and '_renderTimelineInto("proposeTimeline"' in JS
@@ -160,3 +162,14 @@ def test_views_share_rail_timeline_structure():
     assert "Stage 0" not in HTML and "Stage 0" not in JS and "Stage 0" not in CSS
     assert JS.count("no_propose_hint:") == 3 and JS.count("src_empty:") == 3 and JS.count("prop_rail_desc:") == 3
     assert "ls.hidden = !j;" in JS and ".live-status[hidden] { display: none; }" in CSS
+
+
+def test_structure_card_explains_attempts_and_maps_docs_to_files():
+    """B 구조 결과 카드: 세대 → 'N차 시도', 분할 규칙 박스, 문서→파일 매핑 다이어그램(출처 선), 구버전 실행 fallback."""
+    assert "function structureRun(run, jobId)" in JS and "structureRun(run, j.id)" in JS
+    assert "function structureMap(docs, files)" in JS and 'class="w f${j} d${di[d]}"' in JS
+    assert "function smapPin(ev)" in JS and "function ruleBlock(prev, cur)" in JS
+    assert JS.count("attempt_n:") == 3 and JS.count("structure_intro:") == 3 and JS.count("map_no_sources:") == 3
+    assert "onclick=\"selectAttempt('${esc(key)}'" in JS   # 속성 안 따옴표 충돌 회귀 방지
+    assert ".smap {" in CSS and ".smap.no-wires .wires { display: none; }" in CSS
+    assert ".smap .dst { height: auto !important; }" in CSS   # 모바일: 출처 이름이 한 줄 더 붙는다

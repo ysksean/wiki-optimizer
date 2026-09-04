@@ -127,6 +127,9 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             "strategy": strategy,
             "n_files": result["n_files"],
             "file_titles": [f["title"] for f in struct.get("files", [])],
+            # 시도별 구조 요약 — 제목·출처·글자수 (본문은 best만 struct에 남긴다)
+            "files": [{"title": f["title"], "sources": f.get("sources", []), "n_chars": len(f.get("content", ""))}
+                      for f in struct.get("files", [])],
             "score": {k: v for k, v in result.items() if k != "details"},
             "elapsed_sec": round(dt, 1),
         })
