@@ -9,8 +9,10 @@ control 모드(no_evolve=True): reflect를 건너뛰고 seed 전략을 세대 �
   세대 g:
     1. Organizer: 현재 분할 전략으로 문서들을 구조화
     2. 채점: 질문 세트로 Router가 파일 선택 -> 답 -> 정확도 + 효율(읽은 글자수)
-    3. 최고면 best 갱신
-    4. Reflector: 못 맞춘 질문 / 많이 읽은 질문을 근거로 분할 전략 수정
+       질문은 train/held-out으로 나눈다(evolve.split_questions, 묶음 이름 시드).
+       held-out 점수가 best 판정·리포트 점수, train 점수는 Reflector 전용.
+    3. 최고면 best 갱신 (held-out 기준)
+    4. Reflector: train에서 못 맞춘 질문 / 많이 읽은 질문을 근거로 분할 전략 수정
     5. 다음 세대에 재조직
 
 사용법:
@@ -23,11 +25,13 @@ import glob
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import llm
 import provenance
 import structure
+import evolve
 
 
 SEED_STRATEGY = (
@@ -89,36 +93,59 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     if question_set is None:
         print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
         question_set = structure.build_cross_question_set(docs, n=n_qa)
-    print(f"[setup] 질문 {len(question_set)}개 고정")
-    for qa in question_set:
-        print(f"   - {qa['q']}")
-    print()
     if not question_set:
         print("[error] 질문 세트 실패. 중단.")
         return
+    # train/held-out 분리 — A 모드(evolve.split_questions)와 같은 규칙, 시드는 문서 묶음 이름.
+    # reflect는 train 판정만 보고, best 판정과 리포트 점수는 held-out으로만 낸다.
+    bundle = "+".join(docs.keys())
+    train_qs, test_qs = evolve.split_questions(question_set, bundle)
+    degenerate = train_qs is test_qs or len(train_qs) == len(question_set)
+    question_split = {"train": len(train_qs), "heldout": len(test_qs), "degenerate": degenerate,
+                      "heldout_questions": [qa["q"] for qa in test_qs]}
+    print(f"[setup] 질문 {len(question_set)}개 고정 → train {len(train_qs)} / held-out {len(test_qs)}"
+          + ("  (질문이 적어 분리 포기 — 전부 겸용)" if degenerate else ""))
+    for qa in question_set:
+        tag = "H" if qa in test_qs and not degenerate else "T"
+        print(f"   - [{tag}] {qa['q']}")
+    print()
 
     strategy = SEED_STRATEGY
-    # reflect에 넘길 채점 결과는 반드시 best 전략과 짝이어야 한다 → 함께 저장
+    # reflect에 넘길 채점 결과(train)는 반드시 best 전략과 짝이어야 한다 → 함께 저장.
+    # best["result"]는 held-out 결과(리포트·UI용), best["train_result"]는 reflect용.
     best = {"total": -1.0, "generation": -1, "strategy": None, "struct": None,
-            "result": None}
+            "result": None, "train_result": None}
     history = []
     parse_failed_gens = []
 
     for g in range(generations):
         t = time.time()
         struct = structure.organize(docs, strategy)
-        result = structure.score_structure(struct, question_set, total_raw)
+        # held-out은 항상, train은 reflect가 필요한 arm(evolve)에서만 — control은 채점 절약.
+        # 질문이 적어 분리를 포기한 경우(degenerate) 한 번만 채점해 둘 다로 쓴다.
+        if no_evolve or degenerate:
+            result = structure.score_structure(struct, test_qs, total_raw)
+            r_train = result if degenerate and not no_evolve else None
+        else:
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                fut_train = ex.submit(structure.score_structure, struct, train_qs, total_raw)
+                fut_test = ex.submit(structure.score_structure, struct, test_qs, total_raw)
+                r_train = fut_train.result()
+                result = fut_test.result()
         dt = time.time() - t
 
         # 판정 파싱 실패 세대는 점수가 자리만 채운 0이다 — best 후보에서 제외
-        parse_failed = bool(result.get("parse_failed"))
+        parse_failed = bool(result.get("parse_failed")
+                            or (r_train is not None and r_train.get("parse_failed")))
         if parse_failed:
             parse_failed_gens.append(g)
         improved = (not parse_failed) and result["total"] > best["total"]
         marker = "  <- best" if improved else ("  (judge 파싱 실패 — 제외)" if parse_failed else "")
+        train_part = f"train={r_train['total']} (acc={r_train['accuracy']}) " if r_train is not None else ""
         print(
-            f"[gen {g}] total={result['total']} acc={result['accuracy']} "
-            f"eff={result['efficiency']} files={result['n_files']} "
+            f"[gen {g}] held-out={result['total']} acc={result['accuracy']} "
+            + train_part
+            + f"eff={result['efficiency']} files={result['n_files']} "
             f"avg_read={result['avg_read']}  ({dt:.0f}s){marker}"
         )
 
@@ -130,28 +157,33 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             # 시도별 구조 요약 — 제목·출처·글자수 (본문은 best만 struct에 남긴다)
             "files": [{"title": f["title"], "sources": f.get("sources", []), "n_chars": len(f.get("content", ""))}
                       for f in struct.get("files", [])],
+            # score/details = held-out (채택 판단 기준). train_*는 reflect가 본 것.
             "score": {k: v for k, v in result.items() if k != "details"},
-            # 질문별 판정(읽은 파일·답·정답 여부) — 화면에서 '점수 근거'로 보여준다
             "details": result.get("details", []),
+            "train_score": ({k: v for k, v in r_train.items() if k != "details"}
+                            if r_train is not None else None),
+            "train_details": r_train.get("details", []) if r_train is not None else [],
             "elapsed_sec": round(dt, 1),
         })
 
         if improved:
             best = {"total": result["total"], "generation": g, "strategy": strategy,
-                    "struct": struct, "result": result}
+                    "struct": struct, "result": result, "train_result": r_train}
 
         with open(os.path.join(run_dir, "progress.json"), "w") as pf:
             json.dump({
                 "mode": "structure", "arm": arm, "docs": list(docs.keys()),
                 "total_raw_chars": total_raw, "question_set": question_set,
+                "question_split": question_split,
                 "generations": generations, "done_generations": g + 1,
                 "best_gen": best["generation"], "best_total": best["total"],
                 "history": history,
             }, pf, ensure_ascii=False)
 
         if not no_evolve and g < generations - 1 and best["strategy"] is not None:
-            # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도
-            strategy = reflect(best["strategy"], best["result"])
+            # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도.
+            # reflect는 train 판정만 본다 — held-out 실패를 보여주면 채택 점수가 오염된다.
+            strategy = reflect(best["strategy"], best["train_result"] or best["result"])
 
     print(f"\n[done] best gen={best['generation']} total={best['total']}")
     best_files = best["struct"]["files"] if best["struct"] else []
@@ -170,6 +202,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "total_raw_chars": total_raw,
         "generations": generations,
         "question_set": question_set,
+        "question_split": question_split,
         "parse_failed": bool(parse_failed_gens),
         "parse_failed_generations": parse_failed_gens,
         "best": best,

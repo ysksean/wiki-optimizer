@@ -232,6 +232,7 @@ const I18N = {
     map_no_sources: "이 실행은 출처 기록 이전 버전이라 문서→파일 연결선이 없습니다. 새로 실행하면 표시됩니다.",
     sb_formula: (a, e) => `종합 = 정확도 ${a} × 효율 ${e}`, sb_acc: (c, n) => `질문 ${n}개 중 ${c}개 정답.`, sb_acc_how: "질문은 원본 문서 전체에서 미리 만들어 모든 시도에 같은 것을 씁니다. 제안 구조의 파일만 골라 읽고 답한 뒤, 정답과 사실상 같으면 1점(LLM 판정).",
     sb_eff: (r, t) => `질문당 평균 ${r}자만 읽음 / 원본 전체 ${t}자.`, sb_eff_how: "효율 = 1 − (평균 읽은 글자 ÷ 원본 전체 글자). 적게 읽고 맞힐수록 높습니다.",
+    sb_heldout_tag: "검증 질문 기준", sb_split_label: "질문 분리", sb_split: (h, tr) => `채택 판단은 검증(held-out) 질문 ${h}개로만 합니다. 학습(train) 질문 ${tr}개는 규칙을 고칠 때만 보여줍니다 — 고친 규칙이 본 적 없는 질문에도 통하는지 확인하기 위해서입니다.`, sb_train_score: (t, a) => `학습 질문 점수: ${t} (정확도 ${a}).`, sb_acc_heldout: (c, n) => `검증 질문 ${n}개 중 ${c}개 정답.`, sb_train_questions: n => `학습 질문 판정 · ${n}개 (규칙 수정에 쓴 것)`,
     sb_questions: n => `질문별 판정 · ${n}개`, th_expected: "기대한 답", th_answer: "구조로 낸 답",
     n_chars: n => `${n}자`, n_sources: n => `출처 ${n}개`, file_previews: "제안 파일 본문 미리보기", score_trend: "시도별 점수 추이",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
@@ -338,6 +339,7 @@ const I18N = {
     map_no_sources: "This run predates source tracking, so no document→file lines are available. Run again to see them.",
     sb_formula: (a, e) => `Total = accuracy ${a} × efficiency ${e}`, sb_acc: (c, n) => `${c} of ${n} questions correct.`, sb_acc_how: "Questions are generated once from the full source documents and reused for every attempt. The router reads only the proposed files, answers, and an LLM judge scores 1 if the answer matches the expected one.",
     sb_eff: (r, t) => `Read ${r} chars per question on average / ${t} chars in the sources.`, sb_eff_how: "Efficiency = 1 − (average chars read ÷ total source chars). Higher when less reading still gets the answer.",
+    sb_heldout_tag: "held-out", sb_split_label: "Question split", sb_split: (h, tr) => `Adoption is judged on ${h} held-out questions only. The ${tr} training questions are shown to the rule-writer alone, so we can check whether a revised rule also works on questions it has never seen.`, sb_train_score: (t, a) => `Training score: ${t} (accuracy ${a}).`, sb_acc_heldout: (c, n) => `${c} of ${n} held-out questions correct.`, sb_train_questions: n => `Training-question verdicts · ${n} (used to revise the rule)`,
     sb_questions: n => `Per-question verdicts · ${n}`, th_expected: "Expected answer", th_answer: "Answer from structure",
     n_chars: n => `${n} chars`, n_sources: n => `${n} sources`, file_previews: "Preview proposed file contents", score_trend: "Score by attempt",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
@@ -444,6 +446,7 @@ const I18N = {
     map_no_sources: "此次运行早于来源记录功能，因此没有文档→文件的连线。重新运行即可显示。",
     sb_formula: (a, e) => `综合 = 准确率 ${a} × 效率 ${e}`, sb_acc: (c, n) => `${n} 个问题中答对 ${c} 个。`, sb_acc_how: "问题基于全部原始文档预先生成，所有尝试使用同一组问题。仅阅读提案结构中的文件作答，与标准答案实质一致得 1 分（LLM 判定）。",
     sb_eff: (r, t) => `每个问题平均只读 ${r} 字 / 原文共 ${t} 字。`, sb_eff_how: "效率 = 1 −（平均阅读字数 ÷ 原文总字数）。读得越少且答对，分数越高。",
+    sb_heldout_tag: "基于验证问题", sb_split_label: "问题拆分", sb_split: (h, tr) => `是否采用仅由 ${h} 个验证（held-out）问题决定。${tr} 个训练问题只提供给规则改写步骤，以检验改后的规则对未见过的问题是否同样有效。`, sb_train_score: (t, a) => `训练问题得分：${t}（准确率 ${a}）。`, sb_acc_heldout: (c, n) => `${n} 个验证问题中答对 ${c} 个。`, sb_train_questions: n => `训练问题判定 · ${n} 个（用于改写规则）`,
     sb_questions: n => `逐题判定 · ${n} 个`, th_expected: "期望答案", th_answer: "按结构给出的答案",
     n_chars: n => `${n} 字`, n_sources: n => `${n} 个来源`, file_previews: "预览提案文件内容", score_trend: "各次尝试的分数走势",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
@@ -1231,20 +1234,32 @@ function scoreBlock(cur, p, rep, isBest) {
   if (sc.total == null) return "";
   const qs = rep?.question_set || p.question_set || [];
   const det = cur.details || (isBest ? rep?.best?.result?.details : null) || [];
-  const nQ = qs.length || det.length || null;
+  // 분리된 실행이면 score/details는 held-out(검증) 것 — 질문 수도 검증 질문 수로
+  const split = rep?.question_split || p.question_split;
+  const hasSplit = Boolean(split && !split.degenerate);
+  const nQ = hasSplit ? split.heldout : (qs.length || det.length || null);
   const raw = rep?.total_raw_chars ?? p.total_raw_chars;
   const correct = det.length ? det.filter(d => d.score).length : (nQ != null ? Math.round(sc.accuracy * nQ) : null);
   const ans = Object.fromEntries(qs.map(q => [q.q, q.a]));
   const fmt = n => Number(n).toLocaleString(LOCALES[LANG]);
-  let html = `<div class="score-basis"><div class="sb-formula"><b>${sc.total}</b><span>${t("sb_formula", sc.accuracy, sc.efficiency)}</span></div>
+  const tr = cur.train_score;
+  let html = `<div class="score-basis"><div class="sb-formula"><b>${sc.total}</b><span>${t("sb_formula", sc.accuracy, sc.efficiency)}${hasSplit ? ` <em class="sb-tag">${t("sb_heldout_tag")}</em>` : ""}</span></div>
     <div class="sb-rows">
-      <div class="sb-row"><b>${t("acc_short")} ${sc.accuracy}</b><span>${nQ != null && correct != null ? t("sb_acc", correct, nQ) + " " : ""}${t("sb_acc_how")}</span></div>
+      ${hasSplit ? `<div class="sb-row"><b>${t("sb_split_label")}</b><span>${t("sb_split", split.heldout, split.train)}${tr ? " " + t("sb_train_score", tr.total, tr.accuracy) : ""}</span></div>` : ""}
+      <div class="sb-row"><b>${t("acc_short")} ${sc.accuracy}</b><span>${nQ != null && correct != null ? t(hasSplit ? "sb_acc_heldout" : "sb_acc", correct, nQ) + " " : ""}${t("sb_acc_how")}</span></div>
       <div class="sb-row"><b>${t("eff_short")} ${sc.efficiency}</b><span>${sc.avg_read != null && raw ? t("sb_eff", fmt(Math.round(sc.avg_read)), fmt(raw)) + " " : ""}${t("sb_eff_how")}</span></div>
     </div>`;
   if (det.length) {
     html += `<details class="sb-table" open><summary>${t("sb_questions", det.length)}</summary>${wrapTable(
       `<tr><th>${t("th_q")}</th><th>${t("th_expected")}</th><th>${t("th_picked")}</th><th>${t("th_answer")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
       det.map(d => `<tr class="${d.score ? "q-ok" : "q-bad"}"><td>${esc(d.q)}</td><td>${esc(ans[d.q] || "")}</td><td>${(d.picked || []).map(esc).join(", ")}</td>
+        <td>${esc(d.pred || "")}</td><td>${fmt(d.read_chars)}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}</details>`;
+  }
+  const trd = cur.train_details || [];
+  if (hasSplit && trd.length) {
+    html += `<details class="sb-table"><summary>${t("sb_train_questions", trd.length)}</summary>${wrapTable(
+      `<tr><th>${t("th_q")}</th><th>${t("th_expected")}</th><th>${t("th_picked")}</th><th>${t("th_answer")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
+      trd.map(d => `<tr class="${d.score ? "q-ok" : "q-bad"}"><td>${esc(d.q)}</td><td>${esc(ans[d.q] || "")}</td><td>${(d.picked || []).map(esc).join(", ")}</td>
         <td>${esc(d.pred || "")}</td><td>${fmt(d.read_chars)}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}</details>`;
   }
   return html + "</div>";
