@@ -182,3 +182,10 @@ def test_structure_card_shows_score_basis():
     assert 'th_expected' in JS and 'th_answer' in JS
     assert ".score-basis {" in CSS and ".sb-table tr.q-bad td" in CSS
     assert 'g => t("attempt_n", g + 1)' in JS   # 구조 카드 차트 x축도 'N차 시도'
+
+
+def test_score_basis_marks_heldout_split():
+    """B 구조 held-out 분리(설계 1단계): 점수 근거가 검증/학습 질문을 구분해 보여준다."""
+    assert "const split = rep?.question_split || p.question_split;" in JS
+    assert JS.count("sb_split:") == 3 and JS.count("sb_train_questions:") == 3
+    assert 'cur.train_details' in JS and ".sb-tag {" in CSS
