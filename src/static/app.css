@@ -761,6 +761,7 @@
   .sb-row b { color: var(--tx); font-variant-numeric: tabular-nums; }
   .sb-row span { color: var(--dim); }
   .sb-table { margin-top: 12px; }
+  .sb-tag { margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: var(--acc-soft); color: var(--acc); font-style: normal; font-size: var(--fs-caption); font-weight: 600; }
   .sb-table > summary { color: var(--tx-secondary); font-size: var(--fs-caption); font-weight: 600; cursor: pointer; }
   .sb-table td { white-space: normal; vertical-align: top; }
   .sb-table tr.q-bad td { background: var(--bad-soft); }
