@@ -783,7 +783,9 @@
 .smap button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .smap .dst .src-names { overflow-wrap: anywhere; }
 .job-chips .chip-prov { display: none; }
-.result-meta-details { margin: 10px 0; color: var(--dim); font-size: var(--fs-caption); }
+.result-meta-details { margin: 0; color: var(--dim); font-size: var(--fs-caption); }
+.result-meta-details > summary { cursor: pointer; }
+.result-meta > .result-meta-details .result-meta { margin-top: 4px; }
 .mobile-workbench { display: none; }
 @media (max-width: 760px) {
   .app-topbar { gap: 6px; }

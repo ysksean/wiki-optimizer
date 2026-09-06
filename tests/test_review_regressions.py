@@ -76,7 +76,10 @@ def test_export_structure_selected_run_never_overwrites(tmp_path, monkeypatch):
     result, err = web.export_skeleton('j', str(out), 'r1')
     assert err is None and len(result['written']) == 1
     file = out / result['written'][0]
-    assert file.read_text() == 'chosen'
+    text = file.read_text()
+    # skeleton과 같은 frontmatter(title/sources/generated_by) 뒤에 본문
+    assert text.startswith('---\ntitle: ../Guide\nsources: []\ngenerated_by: wiki-optimizer structure j\n---\n')
+    assert text.endswith('\n\nchosen\n')
     file.write_text('user edit')
     result, err = web.export_skeleton('j', str(out), 'r1')
     assert len(result['skipped']) == 1 and file.read_text() == 'user edit'

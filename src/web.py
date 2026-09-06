@@ -433,6 +433,23 @@ def save_uploads(files):
             "saved": [n for n, _ in clean]}, None
 
 
+def _structure_file_text(item, job_id):
+    """B 구조 파일 하나의 본문 — Stage 0 skeleton과 같은 frontmatter(title/sources/generated_by)를 앞에 붙인다.
+
+    출처(sources)가 파일에 남아야 나중에 이 폴더를 다시 읽어도 어느 원본에서 왔는지 알 수 있다.
+    """
+    fm = ["---", f"title: {item.get('title') or 'page'}"]
+    sources = item.get("sources") or []
+    if sources:
+        fm.append("sources:")
+        fm.extend(f"  - {s}" for s in sources)
+    else:
+        fm.append("sources: []")
+    fm.append(f"generated_by: wiki-optimizer structure {job_id}")
+    fm.append("---")
+    return "\n".join(fm) + "\n\n" + (item.get("content") or "") + "\n"
+
+
 def export_skeleton(job_id, write_dir, run_dir=None):
     """propose job의 best 구조를 write_dir에 골격으로 쓴다 (기존 파일 skip)."""
     with JOBS_LOCK:
@@ -466,7 +483,7 @@ def export_skeleton(job_id, write_dir, run_dir=None):
                 name = f"{i:02d}-{title}.md"
                 try:
                     with open(os.path.join(root, name), "x", encoding="utf-8") as f:
-                        f.write(item.get("content") or "")
+                        f.write(_structure_file_text(item, job_id))
                     written.append(name)
                 except FileExistsError:
                     skipped.append(name)

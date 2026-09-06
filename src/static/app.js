@@ -1082,7 +1082,11 @@ function resultMeta(p, rep) {
     const bits = [prov.backend, prov.model, prov.code_sha].filter(Boolean).map(esc).join(" · ");
     html += `<span class="prov" title="${esc(t("provenance_title"))}${prov.question_set_sha ? " · qs " + esc(prov.question_set_sha) : ""}">${bits}</span>`;
   }
-  return html ? `<details class="result-meta-details"><summary>${t("provenance_title")}</summary><div class="result-meta">${html}</div></details>` : "";
+  // arm 뱃지(진화/대조군)는 신뢰 신호라 항상 보이게, provenance 칩만 접는다
+  const armHtml = arm ? `<span class="arm arm-${esc(arm)}">${t("arm_" + arm) || esc(arm)}</span>` : "";
+  const provHtml = html.slice(armHtml.length);
+  if (!html) return "";
+  return `<div class="result-meta">${armHtml}${provHtml ? `<details class="result-meta-details"><summary>${t("provenance_title")}</summary><div class="result-meta">${provHtml}</div></details>` : ""}</div>`;
 }
 function failedGens(rep) { return new Set((rep && rep.parse_failed_generations) || []); }
 function parseFailedNote(failed) {
