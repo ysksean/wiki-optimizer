@@ -14,6 +14,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -237,6 +238,8 @@ def _run_job_locked(job, cancel):
                 res = apply_mod.run_apply(
                     job["base_dir"], strategy=job.get("strategy") or None,
                     n_qa=job["n_qa"], progress_cb=cb,
+                    files=job["files"], out_dir=os.path.join(job["dir"], "output"),
+                    strategy_source=job.get("strategy_source"),
                 )
                 res["type"] = "apply"
                 res["done"] = res["total"] = len(res["docs"])
@@ -304,6 +307,15 @@ def start_job(params):
         if not os.path.isdir(base_dir):
             return None, f"폴더가 없습니다: {base_dir}"
         doc_names = [os.path.basename(base_dir.rstrip("/"))]
+        if mode == "apply":
+            if not (params.get("strategy") or "").strip():
+                return None, "요약 결과에서 전략을 선택하거나 직접 입력하세요"
+            allowed = {os.path.realpath(p["raw"]) for p in audit.find_pairs(base_dir)}
+            requested = params.get("files") or []
+            files = [os.path.realpath(f) for f in requested if os.path.realpath(f) in allowed]
+            if not files or len(files) != len(requested):
+                return None, "현재 폴더의 원본 문서를 선택하세요"
+            doc_names = [os.path.relpath(f, base_dir) for f in files]
 
     generations, err = _clamp_int(params, "generations", 3, 1, 10)
     if err:
@@ -326,6 +338,7 @@ def start_job(params):
         "files": files,
         "base_dir": base_dir,
         "strategy": (params.get("strategy") or "").strip(),
+        "strategy_source": str(params.get("strategy_source") or "user"),
         "sources": sources,
         "task": task,
         "seed_from_runs": bool(params.get("seed_from_runs")),
@@ -420,23 +433,61 @@ def save_uploads(files):
             "saved": [n for n, _ in clean]}, None
 
 
-def export_skeleton(job_id, write_dir):
+def _structure_file_text(item, job_id):
+    """B 구조 파일 하나의 본문 — Stage 0 skeleton과 같은 frontmatter(title/sources/generated_by)를 앞에 붙인다.
+
+    출처(sources)가 파일에 남아야 나중에 이 폴더를 다시 읽어도 어느 원본에서 왔는지 알 수 있다.
+    """
+    fm = ["---", f"title: {item.get('title') or 'page'}"]
+    sources = item.get("sources") or []
+    if sources:
+        fm.append("sources:")
+        fm.extend(f"  - {s}" for s in sources)
+    else:
+        fm.append("sources: []")
+    fm.append(f"generated_by: wiki-optimizer structure {job_id}")
+    fm.append("---")
+    return "\n".join(fm) + "\n\n" + (item.get("content") or "") + "\n"
+
+
+def export_skeleton(job_id, write_dir, run_dir=None):
     """propose job의 best 구조를 write_dir에 골격으로 쓴다 (기존 파일 skip)."""
     with JOBS_LOCK:
         job = JOBS.get(job_id)
-    if not job or job["mode"] != "propose":
-        return None, "없는 propose job"
+    if not job or job["mode"] not in ("propose", "structure"):
+        return None, "내보낼 구조 작업이 없습니다"
+    if job["status"] != "done":
+        return None, "완료된 결과만 내보낼 수 있습니다"
     write_dir = os.path.expanduser((write_dir or "").strip())
     if not write_dir:
         return None, "내보낼 폴더 경로가 비어 있습니다"
     pages = None
-    for p in sorted(glob.glob(os.path.join(job["dir"], "*", "report.json")),
-                    reverse=True):
+    reports = sorted(glob.glob(os.path.join(job["dir"], "*", "report.json")), reverse=True)
+    if run_dir is not None:
+        reports = [p for p in reports if os.path.basename(os.path.dirname(p)) == run_dir]
+    for p in reports:
         try:
             with open(p) as f:
                 r = json.load(f)
         except (OSError, json.JSONDecodeError):
             continue
+        if job["mode"] == "structure":
+            files = (r.get("best") or {}).get("struct", {}).get("files", [])
+            if not files or r.get("parse_failed"):
+                return None, "검증된 구조 결과가 없습니다"
+            root = os.path.abspath(write_dir)
+            os.makedirs(root, exist_ok=True)
+            written, skipped = [], []
+            for i, item in enumerate(files, 1):
+                title = re.sub(r'[^\w .가-힣-]', '_', str(item.get("title") or "page"))[:100]
+                name = f"{i:02d}-{title}.md"
+                try:
+                    with open(os.path.join(root, name), "x", encoding="utf-8") as f:
+                        f.write(_structure_file_text(item, job_id))
+                    written.append(name)
+                except FileExistsError:
+                    skipped.append(name)
+            return {"written": written, "skipped": skipped, "dir": root}, None
         pages = (r.get("best") or {}).get("pages")
         if pages:
             break
@@ -576,7 +627,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/skeleton":
             try:
                 res, err = export_skeleton(params.get("job_id", ""),
-                                           params.get("write_dir", ""))
+                                           params.get("write_dir", ""), params.get("run_dir"))
             except Exception as e:
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return

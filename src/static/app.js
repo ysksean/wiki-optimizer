@@ -59,11 +59,42 @@ function syncModeCards() {
 }
 
 function syncExperimentSummary() {
+  for (const key of ["gens", "nqa", "backend"]) {
+    const other = $("prop-" + key);
+    if (other) other.value = $(key).value;
+  }
   $("gensSummary").textContent = $("gens").value;
   $("nqaSummary").textContent = $("nqa").value;
   $("backendSummary").textContent = $("backend").value === "claude" ? "Claude" : "Codex";
 }
 
+function updateSharedSetting(key, value) {
+  $(key).value = value;
+  syncExperimentSummary(); savePrefs();
+}
+function mobilePanel(panel) {
+  $("view-opt").dataset.mobilePanel = panel;
+  for (const key of ["setup", "result"]) $("panel-" + key).setAttribute("aria-pressed", String(key === panel));
+  window.scrollTo(0, 0);
+}
+let strategySource = "user";
+const summaryStrategies = new Map();
+function useSummaryStrategy(key) {
+  const chosen = summaryStrategies.get(key);
+  if (!chosen) return;
+  $("strategy").value = chosen.strategy;
+  strategySource = chosen.source;
+  $("strategySource").textContent = t("strategy_selected") + ": " + chosen.source;
+  $("strategy").closest("details").open = true;
+  showView("opt"); mobilePanel("setup");
+  $("strategy").scrollIntoView({block:"center"});
+  syncActionStates();
+}
+function editStrategy() {
+  strategySource = "user";
+  $("strategySource").textContent = t("source_manual");
+  syncActionStates();
+}
 function syncWorkspaceSummary() {
   const dir = $("dir").value.trim();
   const boxes = [...document.querySelectorAll("#docs input[type=checkbox]")];
@@ -472,6 +503,10 @@ const I18N = {
   },
 };
 
+Object.assign(I18N.ko, {"choose_strategy": "이 요약 전략 사용", "apply_scope": "선택한 원본 문서만 새 요약으로 생성합니다. 구조 파일 저장은 결과 카드의 내보내기를 사용하세요.", "strategy_custom": "요약 전략 직접 입력 / 선택한 전략 확인", "btn_apply": "선택 문서 요약 생성", "need_strategy": "요약 결과에서 전략을 선택하거나 직접 입력하세요.", "strategy_selected": "선택한 전략", "export_best": "최고 구조 파일 내보내기", "export_path": "새 파일을 저장할 폴더 경로", "export_safe": "최고 점수의 구조를 저장합니다. 기존 파일은 덮어쓰지 않습니다.", "no_matches": "검색 결과가 없습니다", "reset_filters": "필터 초기화", "connection_lost": "서버 연결이 끊겼습니다. 자동으로 다시 연결합니다.", "compared_count": "동일 문서 비교", "new_count": "새 요약", "after_all": "전체 생성 문서 평균", "setup_tab": "설정", "result_tab": "결과", "source_manual": "직접 입력", "audit_scope": "진단은 폴더 전체를 대상으로 합니다."});
+Object.assign(I18N.en, {"choose_strategy": "Use this summary strategy", "apply_scope": "Generate new summaries for selected source documents only. Export structure files from the result card.", "strategy_custom": "Enter or review the summary strategy", "btn_apply": "Summarize selected documents", "need_strategy": "Choose a strategy from a summary result or enter one.", "strategy_selected": "Selected strategy", "export_best": "Export best structure files", "export_path": "Folder for generated files", "export_safe": "Exports the highest-scoring structure. Existing files are preserved.", "no_matches": "No matching results", "reset_filters": "Reset filters", "connection_lost": "Server disconnected. Reconnecting automatically.", "compared_count": "Matched documents compared", "new_count": "New summaries", "after_all": "All generated documents average", "setup_tab": "Setup", "result_tab": "Results", "source_manual": "Entered manually", "audit_scope": "Audit covers the entire folder."});
+Object.assign(I18N.zh, {"choose_strategy": "使用此摘要策略", "apply_scope": "仅为选中的原始文档生成新摘要。结构文件请从结果卡片导出。", "strategy_custom": "输入或查看摘要策略", "btn_apply": "生成所选文档摘要", "need_strategy": "请从摘要结果选择策略或直接输入。", "strategy_selected": "所选策略", "export_best": "导出最佳结构文件", "export_path": "保存新文件的文件夹路径", "export_safe": "保存最高分结构，保留已有文件。", "no_matches": "没有匹配结果", "reset_filters": "重置筛选", "connection_lost": "服务器连接断开，正在自动重连。", "compared_count": "相同文档比较", "new_count": "新摘要", "after_all": "所有生成文档平均分", "setup_tab": "设置", "result_tab": "结果", "source_manual": "手动输入", "audit_scope": "诊断覆盖整个文件夹。"});
+
 let LANG = "ko";
 try { LANG = localStorage.getItem("wikiopt_lang") || "ko"; } catch (e) {}
 if (!I18N[LANG]) LANG = "ko";
@@ -512,13 +547,13 @@ function setTheme(mode) {
   if (mode === "light" || mode === "dark") root.setAttribute("data-theme", mode);
   else { mode = "system"; root.removeAttribute("data-theme"); }
   try { localStorage.setItem("wikiopt_theme", mode); } catch (e) {}
-  var sel = document.getElementById("theme"); if (sel) sel.value = mode;
+  for (const id of ["theme", "mobileTheme"]) { const sel = $(id); if (sel) sel.value = mode; }
   requestAnimationFrame(function () { requestAnimationFrame(function () { root.classList.remove("theme-switching"); }); });
 }
 (function () {
   var t = "system";
   try { t = localStorage.getItem("wikiopt_theme") || "system"; } catch (e) {}
-  var sel = document.getElementById("theme"); if (sel) sel.value = t;
+  for (const id of ["theme", "mobileTheme"]) { const sel = $(id); if (sel) sel.value = t; }
 })();
 
 // ---------- 폼 값 저장/복원 (wikiopt_lang 저장 로직의 확장) ----------
@@ -587,9 +622,10 @@ function syncActionStates() {
   const selected = document.querySelectorAll("#docs input[type=checkbox]:checked").length;
   const busy = requestPending || hasActiveJob;
   $("auditBtn").disabled = !ready || busy;
-  $("applyBtn").disabled = !ready || busy;
+  $("applyBtn").disabled = !ready || selected === 0 || !$("strategy").value.trim() || busy;
   $("go").disabled = selected === 0 || busy;
   $("propGo").disabled = busy;
+  $("mobileRun").disabled = selected === 0 || busy;
   const actions = [["go", "run", "run_exp"], ["auditBtn", "audit", "btn_audit"], ["applyBtn", "apply", "btn_apply"], ["propGo", "propose", "btn_propose"]];
   actions.forEach(([id, mode, label]) => {
     const button = $(id);
@@ -661,7 +697,8 @@ function renderDocs(docs) {
     label.dataset.name = d.name.toLocaleLowerCase(LANG);
     copy.className = "doc-copy";
     name.append(document.createTextNode(d.name));
-    hint.textContent = d.path.endsWith(".md") ? "Markdown" : d.path.split(".").pop().toUpperCase();
+    hint.textContent = d.path;
+    label.title = d.path;
     copy.append(name, hint);
     size.className = "sz";
     size.textContent = `${(d.size/1000).toFixed(1)}k`;
@@ -738,6 +775,7 @@ async function startJobRequest(body, msgEl) {
     // 실행 기록으로 이동하지 않는다 — 결과는 이 화면의 타임라인에 바로 쌓인다
     const target = body.mode === "propose" ? "propose" : "opt";
     if (curView !== target) showView(target);
+    if (target === "opt") mobilePanel("result");
     $(target === "propose" ? "propose-timeline-panel" : "timeline-panel").scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     $(msgEl).textContent = t("request_failed");
@@ -760,8 +798,11 @@ function startAudit() {
 function startApply() {
   const dir = $("dir").value.trim();
   if (!dir) { $("msg2").textContent = t("need_dir_first"); return; }
-  startJobRequest({ mode:"apply", dir, n_qa:6, backend:$("backend").value,
-    language:LANG, strategy: $("strategy").value.trim() }, "msg2");
+  const strategy = $("strategy").value.trim();
+  if (!strategy) { $("msg2").textContent = t("need_strategy"); return; }
+  const files = [...document.querySelectorAll("#docs input:checked")].map(x => x.value);
+  startJobRequest({ mode:"apply", dir, files, n_qa:+$("nqa").value, backend:$("backend").value,
+    language:LANG, strategy, strategy_source:strategySource }, "msg2");
 }
 
 function startPropose() {
@@ -774,17 +815,27 @@ function startPropose() {
     backend: $("backend").value, language: LANG }, "msg3");
 }
 
-async function exportSkeleton(jobId, inputId, msgId) {
-  const write_dir = $(inputId).value.trim();
-  const el = $(msgId);
+async function exportSkeleton(form) {
+  const el = form.querySelector("[role=status]");
+  const input = form.querySelector("input");
+  const button = form.querySelector("button");
   el.textContent = "";
-  if (!write_dir) { el.textContent = t("prop_export_ph"); return; }
-  const r = await fetch("/api/skeleton", { method:"POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ job_id: jobId, write_dir }) });
-  const j = await r.json();
-  el.textContent = j.error ? j.error : t("prop_export_done", j.written.length, j.skipped.length);
-  el.className = j.error ? "err" : "muted";
+  const write_dir = input.value.trim();
+  if (!write_dir) { el.textContent = t("export_path"); input.focus(); return; }
+  button.disabled = true;
+  try {
+    const r = await fetch("/api/skeleton", {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({job_id:form.dataset.job, run_dir:form.dataset.run || undefined, write_dir})});
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || t("request_failed"));
+    el.textContent = t("prop_export_done", j.written.length, j.skipped.length);
+  } catch (e) { el.textContent = e.message || t("request_failed"); }
+  finally { button.disabled = false; }
+}
+function exportForm(jobId, runDir, label) {
+  return `<form class="export-form" data-job="${esc(jobId)}" data-run="${esc(runDir || "")}" onsubmit="event.preventDefault();exportSkeleton(this)">
+    <label>${t("export_path")}<input type="text" aria-label="${t("export_path")}" placeholder="${t("export_path")}"></label>
+    <button type="submit" class="ghost">${t(label)}</button><small>${t("export_safe")}</small><span role="status" aria-live="polite"></span></form>`;
 }
 
 function startRun() {
@@ -959,6 +1010,7 @@ function applyView(res, status) {
       <div class="kpi"><b>${b ?? "-"}</b><span>${t("before_avg")}</span></div>
       <div class="kpi"><b class="${dir_}">${a}</b><span>${t("after_avg")}</span></div></div>`;
   }
+  if (res.n_compared != null) html += `<p class="note">${t("compared_count")}: ${res.n_compared} · ${t("new_count")}: ${res.n_new} · ${t("after_all")}: ${res.avg_after_all ?? "—"}</p>`;
   if (res.strategy)
     html += `<details><summary>${t("used_strategy", esc(res.strategy_source||""))}</summary>
       <pre>${esc(res.strategy)}</pre></details>`;
@@ -999,10 +1051,9 @@ function chart(hist, key, bestGen, failed = new Set(), xLabel = g => t("gen_shor
   if (hist[0][key])
     svg += line(h => (h[key]||{}).total ?? 0, "var(--line-strong)", 'stroke-width="1.5" stroke-dasharray="4 5"');
   {
-    const gid = "g" + Math.random().toString(36).slice(2, 8);
     const pts = hist.map((h, i) => `${X(i)},${Y(h.score.total)}`).join(" ");
-    svg += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--acc)" stop-opacity=".28"/><stop offset="1" stop-color="var(--acc)" stop-opacity="0"/></linearGradient></defs>
-      <polygon points="${X(0)},${H-P} ${pts} ${X(xs.length-1)},${H-P}" fill="url(#${gid})"/>`;
+    svg += `
+      <polygon points="${X(0)},${H-P} ${pts} ${X(xs.length-1)},${H-P}" fill="var(--acc)" fill-opacity=".18"/>`;
   }
   svg += line(h => h.score.total, "var(--acc)", 'stroke-width="2.5"');
   hist.forEach((h, i) => { if (failed.has(h.generation))
@@ -1031,7 +1082,11 @@ function resultMeta(p, rep) {
     const bits = [prov.backend, prov.model, prov.code_sha].filter(Boolean).map(esc).join(" · ");
     html += `<span class="prov" title="${esc(t("provenance_title"))}${prov.question_set_sha ? " · qs " + esc(prov.question_set_sha) : ""}">${bits}</span>`;
   }
-  return html ? `<div class="result-meta">${html}</div>` : "";
+  // arm 뱃지(진화/대조군)는 신뢰 신호라 항상 보이게, provenance 칩만 접는다
+  const armHtml = arm ? `<span class="arm arm-${esc(arm)}">${t("arm_" + arm) || esc(arm)}</span>` : "";
+  const provHtml = html.slice(armHtml.length);
+  if (!html) return "";
+  return `<div class="result-meta">${armHtml}${provHtml ? `<details class="result-meta-details"><summary>${t("provenance_title")}</summary><div class="result-meta">${provHtml}</div></details>` : ""}</div>`;
 }
 function failedGens(rep) { return new Set((rep && rep.parse_failed_generations) || []); }
 function parseFailedNote(failed) {
@@ -1044,10 +1099,9 @@ function spark(values, best = -1) {
   const X = i => n === 1 ? W / 2 : 4 + (W - 8) * i / (n - 1);
   const Y = v => H - 3 - (H - 8) * Math.max(0, Math.min(1, v));
   const pts = values.map((v, i) => `${X(i)},${Y(v)}`).join(" ");
-  const gid = "s" + Math.random().toString(36).slice(2, 8);
   const bi = best >= 0 && best < n ? best : n - 1;
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--acc)" stop-opacity=".35"/><stop offset="1" stop-color="var(--acc)" stop-opacity="0"/></linearGradient></defs>
-    <polygon points="${X(0)},${H} ${pts} ${X(n-1)},${H}" fill="url(#${gid})"/><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.5"/>
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+    <polygon points="${X(0)},${H} ${pts} ${X(n-1)},${H}" fill="var(--acc)" fill-opacity=".18"/><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.5"/>
     <circle cx="${X(bi)}" cy="${Y(values[bi])}" r="2.5" fill="var(--acc)"/></svg>`;
 }
 function deltaChip(cur, base, digits = 2) {
@@ -1055,7 +1109,7 @@ function deltaChip(cur, base, digits = 2) {
   const d = cur - base; if (Math.abs(d) < 1e-9) return `<span class="delta flat">${t("delta_flat")}</span>`;
   return `<span class="delta ${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(digits)} <em>${t("vs_baseline")}</em></span>`;
 }
-function summaryRun(run) {
+function summaryRun(run, jobId) {
   const p = run.progress, rep = run.report;
   if (!p) return "";
   const failed = failedGens(rep);
@@ -1112,6 +1166,11 @@ function summaryRun(run) {
         ${ratio!=null ? (ratio*100).toFixed(0)+"%" : ""}</div>
       <pre>${esc(rep.best.summary)}</pre></details>`;
   }
+  if (jobId && rep?.best?.strategy && !rep.parse_failed) {
+    const key = `${jobId}/${run.run_dir}`;
+    summaryStrategies.set(key, {strategy:rep.best.strategy, source:`${key} · ${rep.best.generation + 1}`});
+    html += `<button type="button" class="ghost" onclick="useSummaryStrategy('${esc(key)}')">${t("choose_strategy")}</button>`;
+  }
   return html + "</div>";
 }
 // ---------- B 구조 결과 카드 — "N차 시도" · 분할 규칙 · 문서→파일 매핑 다이어그램 ----------
@@ -1133,13 +1192,13 @@ function structureMap(docs, files) {
   const wires = files.flatMap((f, j) => (f.sources || []).filter(d => d in di).map(d =>
     `<path class="w f${j} d${di[d]}" d="M0 ${ly(di[d]).toFixed(0)} C ${SW / 2} ${ly(di[d]).toFixed(0)}, ${SW / 2} ${ry(j).toFixed(0)}, ${SW} ${ry(j).toFixed(0)}"/>`)).join("");
   const ico = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3 3v10H4z"/><path d="M9 1.5v3h3"/></svg>';
-  const left = docs.map((d, i) => `<div class="src d${i}" data-d="${i}" style="height:${RH}px" title="${esc(d)}">${ico}<span>${esc(d)}.md</span></div>`).join("");
+  const left = docs.map((d, i) => `<button type="button" aria-pressed="false" class="src d${i}" data-d="${i}" style="height:${RH}px" title="${esc(d)}">${ico}<span>${esc(d)}.md</span></button>`).join("");
   const right = files.map((f, j) => {
     const { name, desc } = structFileName(f.title, j);
     const src = (f.sources || []).filter(d => d in di);
     const chars = f.n_chars ?? (f.content ? f.content.length : null);
     const meta = [desc, chars != null ? t("n_chars", chars) : "", hasSources ? t("n_sources", src.length) : ""].filter(Boolean).join(" · ");
-    return `<div class="dst f${j}" data-f="${j}" data-src="${src.map(d => di[d]).join(",")}" style="height:${FH - 6}px">${ico}<div><b>${esc(name)}</b><small>${esc(meta)}</small>${src.length ? `<small class="src-names">${t("map_from")}: ${src.map(esc).join(", ")}</small>` : ""}</div></div>`;
+    return `<button type="button" aria-pressed="false" class="dst f${j}" data-f="${j}" data-src="${src.map(d => di[d]).join(",")}" style="height:${FH - 6}px">${ico}<div><b>${esc(name)}</b><small>${esc(meta)}</small>${src.length ? `<small class="src-names">${t("map_from")}: ${src.map(esc).join(", ")}</small>` : ""}</div></button>`;
   }).join("");
   return `<div class="smap${hasSources ? "" : " no-wires"}" onmouseover="smapHover(event)" onmouseout="smapClear(event)" onclick="smapPin(event)">
     <div class="col"><h4>${t("map_now")} <b>${n}</b></h4><div style="padding-top:${lt.toFixed(0)}px">${left}</div></div>
@@ -1174,9 +1233,10 @@ function smapClear(ev) {
 function smapPin(ev) {
   const root = _smapRoot(ev); if (!root) return;
   const el = ev.target.closest(".dst, .src"); if (!el) return;
+  root.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", "false"));
   const key = el.dataset.f != null ? "f" + el.dataset.f : "d" + el.dataset.d;
   if (root.dataset.pinned === key) { delete root.dataset.pinned; root.querySelectorAll(".hot").forEach(x => x.classList.remove("hot")); return; }
-  root.dataset.pinned = key; smapLight(root, el);
+  root.dataset.pinned = key; el.setAttribute("aria-pressed", "true"); smapLight(root, el);
 }
 
 // 분할 규칙 박스 — 이전 시도와 겹치는 부분이 충분하면 단어 diff, 거의 다시 썼으면 원문 + 이전 규칙 접기
@@ -1225,6 +1285,8 @@ function structureRun(run, jobId) {
   }
   if (cur) html += scoreBlock(cur, p, rep, cur.generation === bestGen);
   html += `<details><summary>${t("score_trend")}</summary>${chart(p.history, "", bestGen, failed, g => t("attempt_n", g + 1))}</details>`;
+  if (rep?.best?.struct?.files?.length && !rep.parse_failed)
+    html += exportForm(jobId, run.run_dir, "export_best");
   return html + "</div>";
 }
 
@@ -1318,12 +1380,7 @@ function proposalRun(run, jobId) {
         <td>${(h.page_paths||[]).map(esc).join("<br>")}</td></tr>`).join(""))}
     </details>`;
   }
-  if (rep && jobId) {
-    html += `<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
-      <input type="text" id="exp-${jobId}" placeholder="${t("prop_export_ph")}" style="max-width:340px">
-      <button class="ghost" onclick="exportSkeleton('${jobId}','exp-${jobId}','expmsg-${jobId}')">${t("prop_export")}</button>
-      <span id="expmsg-${jobId}" class="muted"></span></div>`;
-  }
+  if (rep && jobId) html += exportForm(jobId, run.run_dir, "prop_export");
   return html + "</div>";
 }
 
@@ -1344,6 +1401,11 @@ function jobChips(j) {
 
 // 실행 기록 필터 — 모드/상태/문서명. 타임라인(최신 1건)에는 적용하지 않는다
 const runsFilter = { mode: "all", status: "all", q: "" };
+function resetRunsFilters() {
+  runsFilter.mode = "all"; runsFilter.status = "all"; runsFilter.q = "";
+  $("runsSearch").value = ""; $("runsStatus").value = "all";
+  setRunsFilter("mode", "all", $("runsModeFilter").querySelector("button"));
+}
 function setRunsFilter(key, value, btn) {
   runsFilter[key] = key === "q" ? value.trim().toLowerCase() : value;
   if (btn) {
@@ -1398,7 +1460,7 @@ async function renderJob(j) {
       } else {
         body += d.runs.map(run =>
           (j.mode === "propose" ? proposalRun(run, j.id)
-           : run.progress?.mode === "structure" ? structureRun(run, j.id) : summaryRun(run))).join("")
+           : run.progress?.mode === "structure" ? structureRun(run, j.id) : summaryRun(run, j.id))).join("")
           || `<div class="runbox" style="color:var(--dim)">${t("waiting_gen")}</div>`;
       }
     }
@@ -1480,11 +1542,22 @@ function _renderTimelineInto(elId, jobs, parts, idx) {
                 .replaceAll(`aria-controls="job-${j.id}-body"`, `aria-controls="tl-${elId}-${j.id}-body"`)
     : `<div class="card empty-state timeline-empty"><strong>${t("no_jobs")}</strong><span>${t(elId === "proposeTimeline" ? "no_propose_hint" : "no_jobs_hint")}</span></div>`;
   if (html === _timelineCache[elId]) return;
-  el.innerHTML = html; _timelineCache[elId] = html;
+  preserveFormState(el, html); _timelineCache[elId] = html;
   const details = el.querySelectorAll("details");
   expanded.forEach(i => { if (details[i]) details[i].open = true; });
 }
+let polling = false, pollAgain = false;
+function preserveFormState(container, html) {
+  const inputs = [...container.querySelectorAll(".export-form input")].map(el => ({job:el.closest("form").dataset.job,run:el.closest("form").dataset.run,value:el.value,focused:el===document.activeElement}));
+  container.innerHTML = html;
+  for (const state of inputs) {
+    const form = [...container.querySelectorAll(".export-form")].find(f => f.dataset.job === state.job && f.dataset.run === state.run);
+    if (form) { const el = form.querySelector("input"); el.value = state.value; if (state.focused) el.focus(); }
+  }
+}
 async function poll() {
+  if (polling) { pollAgain = true; return; }
+  polling = true;
   clearTimeout(timer);
   const focusedJobId = document.activeElement?.dataset?.jobId;
   const expandedDetails = [...document.querySelectorAll("#jobs details")]
@@ -1499,7 +1572,7 @@ async function poll() {
     const parts = await Promise.all(jobs.map(renderJob));
     const shown = parts.filter((_, i) => jobMatches(jobs[i]));
     const html = shown.join("") ||
-      `<div class="card empty-state"><strong>${t("no_jobs")}</strong>${t("no_jobs_hint")}</div>`;
+      `<div class="card empty-state"><strong>${t(jobs.length ? "no_matches" : "no_jobs")}</strong>${jobs.length ? `<button type="button" onclick="resetRunsFilters()">${t("reset_filters")}</button>` : t("no_jobs_hint")}</div>`;
     $("runsCount").textContent = !jobs.length ? ""
       : shown.length === jobs.length ? t("runs_count", jobs.length) : t("runs_filtered", shown.length, jobs.length);
     const activeJob = jobs.find(j => j.status === "running" || j.status === "queued");
@@ -1508,18 +1581,23 @@ async function poll() {
     delay = hasActiveJob ? 2000 : 10000;
     renderTimeline(jobs, parts);
     if (html !== lastHtml) {
-      $("jobs").innerHTML = html;
+      preserveFormState($("jobs"), html);
       lastHtml = html;
       const details = document.querySelectorAll("#jobs details");
       expandedDetails.forEach(index => { if (details[index]) details[index].open = true; });
       if (focusedJobId)
         document.querySelector(`[data-job-id="${focusedJobId}"]`)?.focus();
     }
+    $("connectionStatus").hidden = true;
   } catch (e) {
+    $("connectionStatus").hidden = false;
+    $("connectionStatus").textContent = t("connection_lost");
     delay = 3000;
   } finally {
     syncActionStates();
-    timer = setTimeout(poll, delay);
+    polling = false;
+    timer = setTimeout(poll, pollAgain ? 0 : delay);
+    pollAgain = false;
   }
 }
 
