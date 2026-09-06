@@ -48,13 +48,19 @@ def write_skeleton(pages, out_root, write=False, run_id=""):
     out_root = os.path.abspath(os.path.expanduser(out_root))
     written, skipped = [], []
     for p in pages:
-        dest = os.path.join(out_root, p["path"])
-        if os.path.exists(dest):
+        dest = os.path.realpath(os.path.join(out_root, p["path"]))
+        if os.path.commonpath([os.path.realpath(out_root), dest]) != os.path.realpath(out_root):
+            raise ValueError("출력 폴더 밖의 경로는 허용되지 않습니다")
+        if os.path.lexists(dest):
             skipped.append(p["path"])
             continue
         if write:
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with open(dest, "w") as f:
-                f.write(render_stub(p, run_id=run_id))
+            try:
+                with open(dest, "x") as f:
+                    f.write(render_stub(p, run_id=run_id))
+            except FileExistsError:
+                skipped.append(p["path"])
+                continue
         written.append(p["path"])
     return {"written": written, "skipped": skipped, "tree": render_tree(pages)}

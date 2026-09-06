@@ -361,7 +361,7 @@ def test_web_export_skeleton_uses_latest_best(tmp_path, monkeypatch):
     run.mkdir(parents=True)
     json.dump({"mode": "proposal", "best": {"pages": _pages()}},
               open(run / "report.json", "w"))
-    job = {"id": "j1", "mode": "propose", "dir": str(job_dir)}
+    job = {"id": "j1", "mode": "propose", "status": "done", "dir": str(job_dir)}
     with web.JOBS_LOCK:
         web.JOBS["j1"] = job
     try:

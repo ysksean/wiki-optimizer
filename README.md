@@ -65,6 +65,19 @@ Everything happens in the dashboard: point it at a wiki folder, pick documents,
 choose Stage A or B and the backend (claude / codex), run, and watch scores,
 strategies, and structures evolve per generation.
 
+The dashboard keeps the two output actions explicit:
+
+- Select **Use this summary strategy** from a completed Stage A result (or enter
+  a strategy), select source documents, then generate their new summaries.
+  Dashboard generation never silently chooses a strategy from another experiment.
+- Stage B results export the **best structure files**, including their content.
+  Structure proposals export skeletons. Each result has its own destination form;
+  existing files are preserved.
+- Before/After averages compare only documents with valid scores on both sides.
+  New summaries and the average across all generated documents are shown separately.
+- Nested documents keep their relative paths. Diagnostic question caches are keyed
+  by source content, document identity, question count, language, backend and model.
+
 The only CLI-exclusive feature is the statistical batch with a control arm:
 
 ```bash
@@ -105,6 +118,15 @@ ruff check --select E9,F src tests   # lint — syntax errors + pyflakes only
 python -m py_compile src/*.py        # compile every module
 pytest tests -q                      # unit tests (pure logic, no LLM calls)
 ```
+
+Browser regressions (requires an installed Chromium; optionally set `CHROMIUM_PATH`):
+
+```bash
+uv run --with playwright --no-project python tests/browser_review.py
+```
+
+This uses temporary documents and results, performs real local exports, and checks
+mobile layouts and keyboard controls without LLM calls.
 
 Tests live in `tests/` (`conftest.py` puts `src/` on `sys.path`, so no package
 install is needed). None of them call `claude` / `codex` — they run offline.

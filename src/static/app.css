@@ -570,7 +570,7 @@
     .mode-card b { font-size: 12px; }
     .advanced-grid input, .advanced-grid select { min-height: 44px; }
     .advanced-settings > summary, .next-actions button, .path-chip button { min-height: 44px; font-size: 12px; }
-    .docs-toolbar { position: fixed; left: 16px; right: 16px; bottom: 76px; }
+    .docs-toolbar { position: static; margin-top: 8px; }
     .docs-toolbar #docsStatus { white-space: nowrap; }
     .mode-cards { gap: 7px; }
     .mobile-nav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: 66px; display: grid; grid-template-columns: repeat(3,1fr);
@@ -765,3 +765,40 @@
   .sb-table td { white-space: normal; vertical-align: top; }
   .sb-table tr.q-bad td { background: var(--bad-soft); }
   @media (max-width: 760px) { .sb-row { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Review fixes: keep controls local and put results before implementation metadata. */
+.folder-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.folder-tools input { grid-column: 1 / -1; width: 100%; }
+.export-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.export-form label { flex: 1 1 220px; min-width: 0; }
+.export-form input { display: block; width: 100%; margin-top: 6px; }
+.export-form small, .export-form [role=status] { flex: 1 1 100%; color: var(--dim); overflow-wrap: anywhere; }
+.shared-settings { margin: 16px 0; }
+.connection-status { padding: 12px 20px; color: var(--warn); background: var(--warn-soft); }
+.smap .col { min-width: 0; }
+.smap button.src, .smap button.dst { width: 100%; text-align: left; letter-spacing: normal; }
+.smap button.src { border: 0; background: transparent; min-height: 26px; }
+.smap button.dst { min-height: 38px; }
+.smap button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.smap .dst .src-names { overflow-wrap: anywhere; }
+.job-chips .chip-prov { display: none; }
+.result-meta-details { margin: 10px 0; color: var(--dim); font-size: var(--fs-caption); }
+.mobile-workbench { display: none; }
+@media (max-width: 760px) {
+  .app-topbar { gap: 6px; }
+  .breadcrumb { flex: 1; }
+  .breadcrumb b { max-width: 75px; }
+  .mobile-language { margin-left: 0; max-width: 96px; }
+  .smap, .smap.no-wires { grid-template-columns: minmax(0, 1fr); }
+  .mobile-workbench { display: flex; gap: 8px; position: sticky; top: 58px; z-index: 25; padding: 8px 0; background: var(--bg); margin-bottom: 12px; }
+  .mobile-workbench button { flex: 1; min-height: 44px; }
+  .mobile-workbench [aria-pressed=true] { color: var(--acc); border-color: var(--acc); }
+  #view-opt[data-mobile-panel=setup] #timeline-panel { display: none; }
+  #view-opt[data-mobile-panel=result] .setup-rail { display: none; }
+  .docs-toolbar { position: static; margin-top: 8px; }
+  .export-form button { width: 100%; min-height: 44px; }
+}
+@media (max-width: 760px) {
+  .mobile-workbench button:not([id=mobileRun]) { background: var(--card); color: var(--tx-secondary); border: 1px solid var(--line); }
+  .mobile-workbench button[aria-pressed=true] { background: var(--acc-soft); color: var(--acc); border-color: var(--acc); }
+}

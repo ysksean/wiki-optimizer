@@ -71,7 +71,7 @@ def test_mobile_layout_guards_against_horizontal_overflow():
     assert ".doc-search input { min-height: 44px; }" in BUNDLE
     assert ".advanced-grid input, .advanced-grid select { min-height: 44px; }" in BUNDLE
     assert ".docs { max-height: 360px; }" in BUNDLE
-    assert ".docs-toolbar { position: fixed; left: 16px; right: 16px; bottom: 76px; }" in BUNDLE
+    assert ".docs-toolbar { position: static; margin-top: 8px; }" in BUNDLE
 
 
 def test_topbar_does_not_advertise_unimplemented_actions():

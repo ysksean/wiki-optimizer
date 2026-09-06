@@ -15,6 +15,8 @@ Router 모드 (개념 위키):
 """
 
 import glob
+import hashlib
+import tempfile
 import json
 import os
 import re
@@ -35,7 +37,7 @@ def _md_files(d, exclude_dirs=()):
             continue
         if any(rel.startswith(x + os.sep) for x in exclude_dirs):
             continue
-        out[os.path.splitext(os.path.basename(f))[0]] = f
+        out[os.path.splitext(rel)[0].replace(os.sep, "/")] = f
     return out
 
 
@@ -57,7 +59,13 @@ def find_pairs(base_dir):
 def get_questions(name, raw_text, n=6):
     """문서별 질문 세트 (자동 생성 + 캐시)."""
     os.makedirs(QCACHE_DIR, exist_ok=True)
-    path = os.path.join(QCACHE_DIR, f"{name}.json")
+    identity = json.dumps({"version": 2, "name": name, "raw": raw_text,
+                           "n": n, "language": llm.LANGUAGE,
+                           "backend": llm.BACKEND,
+                           "model": llm.CODEX_MODEL if llm.BACKEND == "codex" else llm.CLAUDE_MODEL},
+                          ensure_ascii=False, sort_keys=True)
+    key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    path = os.path.join(QCACHE_DIR, f"{key}.json")
     if os.path.exists(path):
         try:
             with open(path) as f:
@@ -68,8 +76,10 @@ def get_questions(name, raw_text, n=6):
             pass
     qs = scoring.build_question_set(raw_text, n=n)
     if qs:
-        with open(path, "w") as f:
+        with tempfile.NamedTemporaryFile(mode="w", dir=QCACHE_DIR, delete=False) as f:
             json.dump(qs, f, ensure_ascii=False)
+            tmp = f.name
+        os.replace(tmp, path)
     return qs
 
 
@@ -111,10 +121,22 @@ def wiki_pages(base_dir):
 def build_graph(pages):
     """백링크 그래프. nodes=[{id, chars, inlinks, outlinks}], edges=[{source, target}]"""
     names = {p["name"] for p in pages}
+    aliases = {}
+    for name in names:
+        aliases.setdefault(os.path.basename(name), []).append(name)
     edges, inlinks = [], {p["name"]: 0 for p in pages}
     for p in pages:
+        resolved = set()
         for target in parse_links(p["text"]):
-            if target in names and target != p["name"]:
+            target = target.removesuffix(".md")
+            relative = os.path.normpath(os.path.join(os.path.dirname(p["name"]), target)).replace(os.sep, "/")
+            if target not in names:
+                if relative in names:
+                    target = relative
+                elif len(aliases.get(target, [])) == 1:
+                    target = aliases[target][0]
+            if target in names and target != p["name"] and target not in resolved:
+                resolved.add(target)
                 edges.append({"source": p["name"], "target": target})
                 inlinks[target] += 1
     nodes = [

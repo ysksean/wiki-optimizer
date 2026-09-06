@@ -28,7 +28,7 @@ def best_strategy_from_runs(runs_dir="runs"):
             continue
         b = r.get("best") or {}
         strategy, total = b.get("strategy"), b.get("total")
-        if not strategy or not isinstance(total, (int, float)):
+        if r.get("parse_failed") or not strategy or not isinstance(total, (int, float)):
             continue
         if "struct" in b or "pages" in b:  # B단계(구조)/Stage0(제안) 전략은 요약 전략이 아니다
             continue
@@ -41,9 +41,9 @@ def _slim(score):
     return {k: v for k, v in score.items() if k != "qa_details"}
 
 
-def run_apply(base_dir, strategy=None, n_qa=6, out_dir=None, progress_cb=None):
+def run_apply(base_dir, strategy=None, n_qa=6, out_dir=None, progress_cb=None, files=None, strategy_source=None):
     """전체 raw를 전략으로 재요약하고 before/after를 채점해 반환."""
-    strategy_source = "user"
+    strategy_source = strategy_source or "user"
     if not strategy:
         found = best_strategy_from_runs()
         if found:
@@ -56,14 +56,21 @@ def run_apply(base_dir, strategy=None, n_qa=6, out_dir=None, progress_cb=None):
     os.makedirs(out_dir, exist_ok=True)
 
     pairs = audit.find_pairs(base_dir)
-    docs, before_totals, after_totals = [], [], []
+    if files is not None:
+        selected = {os.path.realpath(f) for f in files}
+        pairs = [p for p in pairs if os.path.realpath(p["raw"]) in selected]
+    if not pairs:
+        raise ValueError("처리할 원본 문서가 없습니다")
+    docs, before_totals, after_totals, paired_after = [], [], [], []
     for i, pr in enumerate(pairs):
         with open(pr["raw"]) as f:
             raw_text = f.read()
         qs = audit.get_questions(pr["name"], raw_text, n=n_qa)
 
         after_text = evolve.summarize(raw_text, strategy)
-        with open(os.path.join(out_dir, f"{pr['name']}.md"), "w") as f:
+        dest = os.path.join(out_dir, f"{pr['name']}.md")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "w") as f:
             f.write(after_text)
 
         entry = {"name": pr["name"], "raw_chars": len(raw_text),
@@ -71,7 +78,8 @@ def run_apply(base_dir, strategy=None, n_qa=6, out_dir=None, progress_cb=None):
         if qs:
             s_after = scoring.score(raw_text, after_text, qs)
             entry["after"]["score"] = _slim(s_after)
-            after_totals.append(s_after["total"])
+            if not s_after.get("parse_failed"):
+                after_totals.append(s_after["total"])
         if pr["wiki"]:
             with open(pr["wiki"]) as f:
                 before_text = f.read()
@@ -79,7 +87,9 @@ def run_apply(base_dir, strategy=None, n_qa=6, out_dir=None, progress_cb=None):
             if qs:
                 s_before = scoring.score(raw_text, before_text, qs)
                 entry["before"]["score"] = _slim(s_before)
-                before_totals.append(s_before["total"])
+                if not s_before.get("parse_failed") and not s_after.get("parse_failed"):
+                    before_totals.append(s_before["total"])
+                    paired_after.append(s_after["total"])
         docs.append(entry)
         if progress_cb:
             progress_cb(i + 1, len(pairs), docs)
@@ -90,7 +100,10 @@ def run_apply(base_dir, strategy=None, n_qa=6, out_dir=None, progress_cb=None):
         "strategy": strategy,
         "strategy_source": strategy_source,
         "avg_before": round(sum(before_totals) / len(before_totals), 3) if before_totals else None,
-        "avg_after": round(sum(after_totals) / len(after_totals), 3) if after_totals else None,
+        "avg_after": round(sum(paired_after) / len(paired_after), 3) if paired_after else None,
+        "avg_after_all": round(sum(after_totals) / len(after_totals), 3) if after_totals else None,
+        "n_compared": len(paired_after),
+        "n_new": sum(1 for d in docs if "before" not in d),
         "docs": docs,
     }
     _register_strategy(result)
