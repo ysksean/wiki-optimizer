@@ -39,6 +39,10 @@ or load that exact `best.pages` and call `skeleton.write_skeleton(pages, destina
 write=True)`. Inspect destination paths for symlinks before invoking this writer.
 It skips existing files and produces empty stubs. Re-running the generator with
 `--write` creates a new proposal and does not export the previously reviewed one.
+New default proposals use paths relative to `wiki/`; set their export destination
+to `<workspace>/wiki`. Check older/custom reports before selecting a destination
+to avoid a doubled `wiki/wiki/` prefix. Export does not create raw sources, a
+functional index or an operation log. Complete those in the build workflow.
 
 ## Existing wiki: diagnose and experiment
 
@@ -85,6 +89,14 @@ strategy to `apply.run_apply(...)` using the installed signature, or the dashboa
 Do not pick a strategy solely because it has the largest score across unrelated runs.
 For B export, use the selected run's export action; it retains page contents and
 source frontmatter. Do not claim a new evaluation for an unchanged exported result.
+The B organizer treats its pages as the contents of the default workspace's
+`wiki/` layer, but its title-based export and flat router do not implement or
+measure nested folder navigation. Do not present B output as a complete vault.
+
+For the proposed workload-based comparison of structure plus summary, see
+[evaluation.md](evaluation.md). Its family-separated final test, navigation trace,
+claim checks and update benchmark are a design for further work, not capabilities
+of the current CLI.
 
 ## Add a new original document
 

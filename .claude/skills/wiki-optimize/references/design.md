@@ -1,5 +1,33 @@
 # Design a wiki for a real task
 
+## Default workspace and path contract
+
+Use the Karpathy-style separation by default:
+
+```text
+<workspace>/
+  raw/                 original material, preserved
+  wiki/
+    index.md           reader entry point and links
+    <adaptive layout>  grounded pages, sub-indexes and cross-links as needed
+  .wiki-state/log.md   operation history (reuse an existing log convention)
+```
+
+The outer separation stays stable while the layout inside `wiki/` can be flat,
+topic-based, task-based, project-based or mixed according to the workload. These
+are candidates, not mandatory folders. Respect the user's explicit alternative.
+Do not silently relocate source repositories or create raw copies of generated
+summaries; record external source pointers and any ingestion work still needed.
+
+For a new default Stage 0 design, `pages[].path` is relative to `wiki/`, e.g.
+`operations/recovery.md`, not `wiki/operations/recovery.md`. Export its stubs to
+`<workspace>/wiki`. Keep `raw/`, the navigation index and operation log out of the
+scored knowledge-page list; create the real index and log during the build step.
+For existing reports, inspect their stored path convention before choosing the
+destination. The generic exporter preserves supplied paths; it adds no wrapper.
+`design.json.sources` still points to the actual original roots. A skeleton export
+alone does not create a complete workspace or an incremental-update baseline.
+
 ## Start with the decisions the reader must make
 
 Write a compact brief using known context. Include the reader (human, agent, or
@@ -57,8 +85,9 @@ Keep canonical facts in one place and link from other pages. Preserve exceptions
 preconditions, numeric thresholds, units, rationale and version constraints that
 matter to the task. A generic folder list without page responsibilities is incomplete.
 
-If using Stage 0, its current prompt requests 5–12 pages. Treat this as an engine
-default, not evidence that the task needs that many. A manually edited candidate
+Stage 0 now asks for a task-appropriate page count rather than a fixed 5–12 pages.
+Generation still has a bounded output budget; a broad task may need a scoped
+design pass. A manually edited candidate
 must have its own reviewed artifact; the original run's score no longer measures it.
 
 ## Check source references and real navigation
@@ -94,6 +123,10 @@ skeleton cannot be reported as successful retrieval from finished wiki pages.
 Use the actual consumer's reading behavior when evaluating a finished wiki. The
 built-in B router uses a flat index and whole-page reads; it does not measure
 filesystem search, recursive link traversal or section-level reading.
+
+When comparing multiple layouts or summary policies, use the
+[joint evaluation design](evaluation.md). It distinguishes content loss from
+navigation failure and defines what a workload-specific improvement claim needs.
 
 ## Deliver and retain the design
 

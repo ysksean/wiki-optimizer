@@ -15,12 +15,20 @@ Design the wiki around the work its reader needs to do. A useful result explains
 which page answers each important question, what original evidence supports it,
 how the reader finds it, and what happens when the source changes.
 
+Default to the Karpathy-style workspace: preserve originals in `raw/`, maintain
+derived knowledge in `wiki/`, and enter through `wiki/index.md`. Adapt page
+boundaries, subfolders and links inside `wiki/` to the user's work. Keep an
+operational log separate from knowledge pages, respecting existing conventions.
+Honor an explicitly requested alternative layout; do not migrate an existing
+vault merely to match the default. See the path contract in the design workflow.
+
 ## Choose the requested outcome
 
 | User needs | Read and use |
 |---|---|
 | A new wiki, task-specific structure, or redesign of an existing wiki | [Design workflow](references/design.md) |
 | Audit, A/B experiments, interpretation, or exporting an existing result | [Tool recipes and evidence rules](references/tools.md) |
+| Compare folder layouts and summaries for a user's workload | [Joint evaluation design](references/evaluation.md), then tool recipes for current limitations |
 | Add one new document to an existing `raw/` + `wiki/` workspace | The incremental-update section in [Tool recipes](references/tools.md) |
 
 Read only the relevant reference. A request for a sketch does not require running
