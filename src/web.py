@@ -29,6 +29,7 @@ import audit
 import evolve
 import evolve_proposal
 import evolve_structure
+import incremental
 import skeleton as skeleton_mod
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -222,6 +223,12 @@ def _run_job_locked(job, cancel):
                     job["sources"], job["task"], generations=job["generations"],
                     n_qa=job["n_qa"], strategy=strategy, out_dir=job["dir"],
                 )
+            elif job["mode"] == "incremental":
+                res = incremental.prepare_update(
+                    job["base_dir"], job["source_file"], os.path.join(job["dir"], "update"),
+                    task=job["task"], n_qa=job["n_qa"], progress=flush_result,
+                )
+                flush_result(res)
             elif job["mode"] == "audit":
                 def cb(done, total, partial):
                     flush_result({"type": "audit", "done": done, "total": total,
@@ -273,7 +280,7 @@ def _clamp_int(params, key, default, lo, hi):
 
 def start_job(params):
     mode = params.get("mode", "summary")
-    if mode not in ("summary", "structure", "audit", "apply", "propose"):
+    if mode not in ("summary", "structure", "audit", "apply", "propose", "incremental"):
         return None, f"알 수 없는 mode: {mode}"
     backend = params.get("backend", "claude")
     if backend not in ("claude", "codex"):
@@ -284,7 +291,16 @@ def start_job(params):
 
     files, base_dir, doc_names = [], None, []
     sources, task = [], ""
-    if mode == "propose":
+    if mode == "incremental":
+        try:
+            root, source = incremental.validate_input(params.get("dir") or "", params.get("source_file") or "")
+        except (ValueError, OSError) as exc:
+            return None, str(exc)
+        base_dir = str(root)
+        files = [str(source)]
+        task = (params.get("task") or "").strip()
+        doc_names = [source.name]
+    elif mode == "propose":
         sources = [os.path.expanduser(str(s).strip())
                    for s in (params.get("sources") or []) if str(s).strip()]
         missing = [s for s in sources if not os.path.isdir(s)]
@@ -337,6 +353,7 @@ def start_job(params):
         "language": language,
         "files": files,
         "base_dir": base_dir,
+        "source_file": files[0] if mode == "incremental" else None,
         "strategy": (params.get("strategy") or "").strip(),
         "strategy_source": str(params.get("strategy_source") or "user"),
         "sources": sources,
@@ -380,6 +397,12 @@ def job_detail(job):
         runs.append(entry)
     out = {k: v for k, v in job.items() if k != "dir"}
     out["runs"] = runs
+    if job["mode"] == "incremental":
+        report_path = os.path.join(job["dir"], "update", "report.json")
+        if os.path.isfile(report_path):
+            with open(report_path) as stream:
+                out["result"] = json.load(stream)
+            return out
     # audit/apply 결과 (진행 중엔 부분 결과)
     rp = os.path.join(job["dir"], "result.json")
     if os.path.exists(rp):
@@ -389,6 +412,17 @@ def job_detail(job):
         except (OSError, json.JSONDecodeError):
             pass
     return out
+
+
+def commit_incremental(job_id: str, undo: bool = False) -> dict:
+    """Apply or undo the stored candidate belonging to a completed update job."""
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job or job["mode"] != "incremental" or job["status"] != "done":
+        raise ValueError("Choose a completed incremental update")
+    with RUN_LOCK:
+        report = incremental.commit_update(os.path.join(job["dir"], "update"), undo=undo)
+    return {"status": report["status"]}
 
 
 UPLOAD_DIR = os.path.join("runs", "uploads")
@@ -603,6 +637,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         parts = url.path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] in ("apply-update", "undo-update"):
+            origin = self.headers.get("Origin")
+            if (self.headers.get("Content-Type", "").split(";")[0] != "application/json"
+                    or (origin and urlparse(origin).netloc != self.headers.get("Host"))):
+                self._json({"error": "Same-origin JSON request required"}, 403)
+                return
+            try:
+                result = commit_incremental(parts[2], undo=parts[3] == "undo-update")
+            except (ValueError, OSError) as exc:
+                self._json({"error": str(exc)}, 409)
+                return
+            self._json(result)
+            return
         if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "cancel":
             payload, code = cancel_job(parts[2])
             self._json(payload, code)
