@@ -24,7 +24,7 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
 질문 세트(cross-doc)는 묶음당 1회 생성해 모든 arm/run이 공유한다.
 (B단계는 train/held-out 분할이 없어 향상폭은 전체 질문 세트 점수 기준이다.)
 
---arms로 arm 목록을 직접 지정할 수 있다 (A단계 전용). evolve-wiki arm은
+--arms로 arm 목록을 직접 지정할 수 있다 (B단계는 evolve, evolve-informed, control). evolve-wiki arm은
 flat 이력 대신 구조화 패턴 위키(wiki.py)를 reflect에 주입한다 — 논문
 (arxiv 2608.27454)의 "flat 이력 vs 구조화 위키" 대비축을 재현하는 arm이다.
 
@@ -67,16 +67,17 @@ def select_docs(n, raw_dir="data/raw"):
 
 
 KNOWN_ARMS = ("evolve", "evolve-wiki", "evolve-nohist", "control")
+# B단계 arm: evolve-informed는 Reflector에 근거 문단·실패 유형을 추가로 준 고정 Reflector
+STRUCTURE_ARMS = ("evolve", "evolve-informed", "control")
 
 
 def resolve_arms(arms=None, with_control=False, ablation=False, stage="summary"):
     """arm 목록 결정. --arms 명시가 최우선, 없으면 기존 플래그 규칙."""
     if arms:
-        if stage == "structure":
-            raise ValueError("--arms는 A단계(summary) 전용이다")
-        unknown = [a for a in arms if a not in KNOWN_ARMS]
+        allowed = STRUCTURE_ARMS if stage == "structure" else KNOWN_ARMS
+        unknown = [a for a in arms if a not in allowed]
         if unknown:
-            raise ValueError(f"알 수 없는 arm: {unknown} (지원: {list(KNOWN_ARMS)})")
+            raise ValueError(f"알 수 없는 arm: {unknown} (지원: {list(allowed)})")
         if len(set(arms)) != len(arms):
             raise ValueError(f"arm 중복: {arms}")
         return list(arms)
@@ -179,6 +180,7 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
                 report = evolve_structure.evolve_structure(
                     files=files, generations=generations, n_qa=n_qa,
                     out_dir=batch_dir, no_evolve=(arm == "control"),
+                    informed=(arm == "evolve-informed"),
                     question_set=question_set,
                 )
             except Exception as e:  # 한 run 실패해도 배치는 계속
@@ -466,7 +468,24 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             "- evolve-nohist arm이 있는데 비교 기준(evolve arm)이 없다 — "
             "영속 이력 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
         )
-    elif "control" in by_arm and "evolve" in by_arm:
+    if "evolve-informed" in by_arm and "evolve" in by_arm:
+        inf = _arm_stats(by_arm["evolve-informed"])
+        net_i = inf["mean_imp"] - ev["mean_imp"]
+        lines.append(
+            f"- 근거 정보 효과(net) = evolve-informed {inf['mean_imp']:+.3f} - "
+            f"evolve {ev['mean_imp']:+.3f} = **{net_i:+.3f}**"
+        )
+        lines += _significance_lines(
+            valid, "evolve-informed", "evolve",
+            "근거 문단·실패 유형을 본 Reflector가 **눈 감은 Reflector보다 실제로 개선**한다.",
+            "근거 정보 유무가 통계적으로 **구분되지 않는다** — 관측된 차이는 노이즈로 설명 가능.",
+        )
+    elif "evolve-informed" in by_arm:
+        lines.append(
+            "- evolve-informed arm이 있는데 비교 기준(evolve arm)이 없다 — "
+            "근거 정보 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
+        )
+    if "control" in by_arm and "evolve" in by_arm:
         ct = _arm_stats(by_arm["control"])
         net = ev["mean_imp"] - ct["mean_imp"]
         lines.append(
@@ -514,8 +533,8 @@ if __name__ == "__main__":
     ap.add_argument("--stage", choices=["summary", "structure"], default="summary",
                     help="summary=A단계(문서별 요약), structure=B단계(폴더 구조)")
     ap.add_argument("--arms", default=None,
-                    help="쉼표 구분 arm 목록 (예: evolve,evolve-wiki,control) — A단계 전용, "
-                         "--with-control/--ablation보다 우선")
+                    help="쉼표 구분 arm 목록 (A단계: evolve,evolve-wiki,evolve-nohist,control / "
+                         "B단계: evolve,evolve-informed,control) — --with-control/--ablation보다 우선")
     args = ap.parse_args()
     if args.ablation and args.stage == "structure":
         ap.error("--ablation은 --stage structure와 함께 쓸 수 없다")

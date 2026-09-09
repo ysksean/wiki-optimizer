@@ -244,7 +244,7 @@ const I18N = {
     diff_legend: (b,a) => `기존 요약 대비 변경 (<del>삭제</del> / <ins>추가</ins>) · ${b} → ${a}자`,
     new_summary: "기존 요약 없음 — 신규 생성",
     gen_progress: (d,t) => `(${d}/${t}세대)`, accuracy: "정확도", efficiency: "효율",
-    "arm_evolve": "진화", "arm_control": "대조군 · 무진화", "arm_evolve-nohist": "진화 · 이력 없음", "arm_evolve-wiki": "진화 · 패턴 위키",
+    "arm_evolve": "진화", "arm_evolve-informed": "진화 · 근거 제공", "arm_control": "대조군 · 무진화", "arm_evolve-nohist": "진화 · 이력 없음", "arm_evolve-wiki": "진화 · 패턴 위키",
     parse_failed_note: n => `${n}개 세대는 판정 파싱 실패로 점수가 무효 — 집계에서 제외`, strategy_unchanged: "변경 없음",
     vs_baseline: "vs 기준", delta_flat: "= 기준", tile_best: "best held-out", tile_gain: "개선폭", tile_gens: "세대", tile_judge: "판정",
     tile_failed: n => `${n} 실패`, tile_valid: "전부 유효", tile_excluded: "집계 제외", tile_parse_ok: "판정 정상", baseline_val: n => `기준 ${n}`, best_gen_short: n => `best ${n}세대`, and_more: n => `외 ${n}`,
@@ -264,6 +264,8 @@ const I18N = {
     sb_formula: (a, e) => `종합 = 정확도 ${a} × 효율 ${e}`, sb_acc: (c, n) => `질문 ${n}개 중 ${c}개 정답.`, sb_acc_how: "질문은 원본 문서 전체에서 미리 만들어 모든 시도에 같은 것을 씁니다. 제안 구조의 파일만 골라 읽고 답한 뒤, 정답과 사실상 같으면 1점(LLM 판정).",
     sb_eff: (r, t) => `질문당 평균 ${r}자만 읽음 / 원본 전체 ${t}자.`, sb_eff_how: "효율 = 1 − (평균 읽은 글자 ÷ 원본 전체 글자). 적게 읽고 맞힐수록 높습니다.",
     sb_heldout_tag: "검증 질문 기준", sb_split_label: "질문 분리", sb_split: (h, tr) => `채택 판단은 검증(held-out) 질문 ${h}개로만 합니다. 학습(train) 질문 ${tr}개는 규칙을 고칠 때만 보여줍니다 — 고친 규칙이 본 적 없는 질문에도 통하는지 확인하기 위해서입니다.`, sb_train_score: (t, a) => `학습 질문 점수: ${t} (정확도 ${a}).`, sb_acc_heldout: (c, n) => `검증 질문 ${n}개 중 ${c}개 정답.`, sb_train_questions: n => `학습 질문 판정 · ${n}개 (규칙 수정에 쓴 것)`,
+    fail_doc_dropped: "근거 문서가 어느 파일에도 없음", fail_routing_miss: "라우팅 실수 — 근거는 다른 파일에 있음", fail_content_lost: "요약 손실 — 고른 파일이 근거 문서를 담고 있는데도 틀림", fail_no_evidence: "원본에서 근거를 못 찾음",
+    evidence_at: "근거 위치", evidence_holders: "근거를 담은 파일", structure_warnings: n => `구조 결함 ${n}건 (LLM 판정 없이 확인된 것)`,
     sb_questions: n => `질문별 판정 · ${n}개`, th_expected: "기대한 답", th_answer: "구조로 낸 답",
     n_chars: n => `${n}자`, n_sources: n => `출처 ${n}개`, file_previews: "제안 파일 본문 미리보기", score_trend: "시도별 점수 추이",
     routing: "best 구조의 질문별 라우팅", th_q: "질문", th_picked: "읽은 파일", th_chars: "글자", th_correct: "정답",
@@ -351,7 +353,7 @@ const I18N = {
     diff_legend: (b,a) => `changes vs existing summary (<del>removed</del> / <ins>added</ins>) · ${b} → ${a} chars`,
     new_summary: "no existing summary — newly generated",
     gen_progress: (d,t) => `(gen ${d}/${t})`, accuracy: "accuracy", efficiency: "efficiency",
-    "arm_evolve": "evolve", "arm_control": "control · no evolution", "arm_evolve-nohist": "evolve · no history", "arm_evolve-wiki": "evolve · pattern wiki",
+    "arm_evolve": "evolve", "arm_evolve-informed": "evolve · with evidence", "arm_control": "control · no evolution", "arm_evolve-nohist": "evolve · no history", "arm_evolve-wiki": "evolve · pattern wiki",
     parse_failed_note: n => `${n} generation(s) have invalid scores (judge parse failed) — excluded from aggregates`, strategy_unchanged: "unchanged",
     vs_baseline: "vs baseline", delta_flat: "= baseline", tile_best: "best held-out", tile_gain: "Gain", tile_gens: "Generations", tile_judge: "Judge",
     tile_failed: n => `${n} failed`, tile_valid: "all valid", tile_excluded: "excluded", tile_parse_ok: "parse ok", baseline_val: n => `baseline ${n}`, best_gen_short: n => `best gen ${n}`, and_more: n => `+${n} more`,
@@ -371,6 +373,8 @@ const I18N = {
     sb_formula: (a, e) => `Total = accuracy ${a} × efficiency ${e}`, sb_acc: (c, n) => `${c} of ${n} questions correct.`, sb_acc_how: "Questions are generated once from the full source documents and reused for every attempt. The router reads only the proposed files, answers, and an LLM judge scores 1 if the answer matches the expected one.",
     sb_eff: (r, t) => `Read ${r} chars per question on average / ${t} chars in the sources.`, sb_eff_how: "Efficiency = 1 − (average chars read ÷ total source chars). Higher when less reading still gets the answer.",
     sb_heldout_tag: "held-out", sb_split_label: "Question split", sb_split: (h, tr) => `Adoption is judged on ${h} held-out questions only. The ${tr} training questions are shown to the rule-writer alone, so we can check whether a revised rule also works on questions it has never seen.`, sb_train_score: (t, a) => `Training score: ${t} (accuracy ${a}).`, sb_acc_heldout: (c, n) => `${c} of ${n} held-out questions correct.`, sb_train_questions: n => `Training-question verdicts · ${n} (used to revise the rule)`,
+    fail_doc_dropped: "Source document is in no file", fail_routing_miss: "Routing miss — evidence lives in another file", fail_content_lost: "Content lost — picked file holds the source doc but still wrong", fail_no_evidence: "No evidence paragraph found in sources",
+    evidence_at: "evidence in", evidence_holders: "files holding the evidence", structure_warnings: n => `${n} structural defects (found without any LLM judgment)`,
     sb_questions: n => `Per-question verdicts · ${n}`, th_expected: "Expected answer", th_answer: "Answer from structure",
     n_chars: n => `${n} chars`, n_sources: n => `${n} sources`, file_previews: "Preview proposed file contents", score_trend: "Score by attempt",
     routing: "per-question routing of best structure", th_q: "question", th_picked: "files read", th_chars: "chars", th_correct: "correct",
@@ -458,7 +462,7 @@ const I18N = {
     diff_legend: (b,a) => `相对现有摘要的变化（<del>删除</del> / <ins>新增</ins>）· ${b} → ${a} 字`,
     new_summary: "无现有摘要 — 新生成",
     gen_progress: (d,t) => `（第 ${d}/${t} 代）`, accuracy: "准确率", efficiency: "效率",
-    "arm_evolve": "进化", "arm_control": "对照组 · 不进化", "arm_evolve-nohist": "进化 · 无历史", "arm_evolve-wiki": "进化 · 模式 wiki",
+    "arm_evolve": "进化", "arm_evolve-informed": "进化 · 提供依据", "arm_control": "对照组 · 不进化", "arm_evolve-nohist": "进化 · 无历史", "arm_evolve-wiki": "进化 · 模式 wiki",
     parse_failed_note: n => `${n} 代的评分无效（判定解析失败）— 已从汇总中排除`, strategy_unchanged: "无变化",
     vs_baseline: "vs 基准", delta_flat: "= 基准", tile_best: "best held-out", tile_gain: "提升", tile_gens: "代数", tile_judge: "判定",
     tile_failed: n => `${n} 次失败`, tile_valid: "全部有效", tile_excluded: "已排除", tile_parse_ok: "判定正常", baseline_val: n => `基准 ${n}`, best_gen_short: n => `最佳第 ${n} 代`, and_more: n => `等 ${n} 个`,
@@ -478,6 +482,8 @@ const I18N = {
     sb_formula: (a, e) => `综合 = 准确率 ${a} × 效率 ${e}`, sb_acc: (c, n) => `${n} 个问题中答对 ${c} 个。`, sb_acc_how: "问题基于全部原始文档预先生成，所有尝试使用同一组问题。仅阅读提案结构中的文件作答，与标准答案实质一致得 1 分（LLM 判定）。",
     sb_eff: (r, t) => `每个问题平均只读 ${r} 字 / 原文共 ${t} 字。`, sb_eff_how: "效率 = 1 −（平均阅读字数 ÷ 原文总字数）。读得越少且答对，分数越高。",
     sb_heldout_tag: "基于验证问题", sb_split_label: "问题拆分", sb_split: (h, tr) => `是否采用仅由 ${h} 个验证（held-out）问题决定。${tr} 个训练问题只提供给规则改写步骤，以检验改后的规则对未见过的问题是否同样有效。`, sb_train_score: (t, a) => `训练问题得分：${t}（准确率 ${a}）。`, sb_acc_heldout: (c, n) => `${n} 个验证问题中答对 ${c} 个。`, sb_train_questions: n => `训练问题判定 · ${n} 个（用于改写规则）`,
+    fail_doc_dropped: "依据文档未进入任何文件", fail_routing_miss: "路由错误 — 依据在其他文件中", fail_content_lost: "内容丢失 — 所选文件包含依据文档但仍答错", fail_no_evidence: "在原文中未找到依据",
+    evidence_at: "依据位置", evidence_holders: "包含依据的文件", structure_warnings: n => `${n} 处结构缺陷（无需 LLM 判定即可确认）`,
     sb_questions: n => `逐题判定 · ${n} 个`, th_expected: "期望答案", th_answer: "按结构给出的答案",
     n_chars: n => `${n} 字`, n_sources: n => `${n} 个来源`, file_previews: "预览提案文件内容", score_trend: "各次尝试的分数走势",
     routing: "最佳结构的逐题路由", th_q: "问题", th_picked: "读取的文件", th_chars: "字数", th_correct: "正确",
@@ -1311,18 +1317,28 @@ function scoreBlock(cur, p, rep, isBest) {
       <div class="sb-row"><b>${t("acc_short")} ${sc.accuracy}</b><span>${nQ != null && correct != null ? t(hasSplit ? "sb_acc_heldout" : "sb_acc", correct, nQ) + " " : ""}${t("sb_acc_how")}</span></div>
       <div class="sb-row"><b>${t("eff_short")} ${sc.efficiency}</b><span>${sc.avg_read != null && raw ? t("sb_eff", fmt(Math.round(sc.avg_read)), fmt(raw)) + " " : ""}${t("sb_eff_how")}</span></div>
     </div>`;
+  // 틀린 질문의 실패 유형·근거 위치 (evidence.py, 결정론) — train/held-out 둘 다 질문으로 찾는다
+  const evMap = new Map([...(cur.evidence || []), ...(cur.heldout_evidence || [])].map(e => [e.q, e]));
+  const why = d => {
+    const e = !d.score && evMap.get(d.q);
+    if (!e) return "";
+    const hit = (e.evidence || [])[0];
+    const where = hit ? ` · ${t("evidence_at")} <b>${esc(hit.doc)}</b>${hit.heading ? ` › ${esc(hit.heading)}` : ""}` : "";
+    const holders = e.holders && e.holders.length && e.type !== "content_lost" ? ` · ${t("evidence_holders")}: ${e.holders.map(esc).join(", ")}` : "";
+    return `<div class="why"><span class="why-type why-${esc(e.type)}">${t("fail_" + e.type) || esc(e.type)}</span>${where}${holders}</div>`;
+  };
+  const qRow = d => `<tr class="${d.score ? "q-ok" : "q-bad"}"><td>${esc(d.q)}${why(d)}</td><td>${esc(ans[d.q] || "")}</td><td>${(d.picked || []).map(esc).join(", ")}</td>
+        <td>${esc(d.pred || "")}</td><td>${fmt(d.read_chars)}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`;
+  const qHead = `<tr><th>${t("th_q")}</th><th>${t("th_expected")}</th><th>${t("th_picked")}</th><th>${t("th_answer")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>`;
+  if (cur.warnings && cur.warnings.length) {
+    html += `<div class="sb-warnings"><b>${t("structure_warnings", cur.warnings.length)}</b><ul>${cur.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>`;
+  }
   if (det.length) {
-    html += `<details class="sb-table" open><summary>${t("sb_questions", det.length)}</summary>${wrapTable(
-      `<tr><th>${t("th_q")}</th><th>${t("th_expected")}</th><th>${t("th_picked")}</th><th>${t("th_answer")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
-      det.map(d => `<tr class="${d.score ? "q-ok" : "q-bad"}"><td>${esc(d.q)}</td><td>${esc(ans[d.q] || "")}</td><td>${(d.picked || []).map(esc).join(", ")}</td>
-        <td>${esc(d.pred || "")}</td><td>${fmt(d.read_chars)}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}</details>`;
+    html += `<details class="sb-table" open><summary>${t("sb_questions", det.length)}</summary>${wrapTable(qHead + det.map(qRow).join(""))}</details>`;
   }
   const trd = cur.train_details || [];
   if (hasSplit && trd.length) {
-    html += `<details class="sb-table"><summary>${t("sb_train_questions", trd.length)}</summary>${wrapTable(
-      `<tr><th>${t("th_q")}</th><th>${t("th_expected")}</th><th>${t("th_picked")}</th><th>${t("th_answer")}</th><th>${t("th_chars")}</th><th>${t("th_correct")}</th></tr>` +
-      trd.map(d => `<tr class="${d.score ? "q-ok" : "q-bad"}"><td>${esc(d.q)}</td><td>${esc(ans[d.q] || "")}</td><td>${(d.picked || []).map(esc).join(", ")}</td>
-        <td>${esc(d.pred || "")}</td><td>${fmt(d.read_chars)}</td><td>${d.score ? "⭕" : "❌"}</td></tr>`).join(""))}</details>`;
+    html += `<details class="sb-table"><summary>${t("sb_train_questions", trd.length)}</summary>${wrapTable(qHead + trd.map(qRow).join(""))}</details>`;
   }
   return html + "</div>";
 }
