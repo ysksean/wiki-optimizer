@@ -32,6 +32,7 @@ import llm
 import provenance
 import structure
 import evolve
+import evidence
 
 
 SEED_STRATEGY = (
@@ -52,8 +53,12 @@ def load_docs(n, raw_dir="data/raw", files=None):
     return {os.path.splitext(os.path.basename(f))[0]: open(f).read() for f in files}
 
 
-def reflect(strategy, result):
-    """채점 결과를 보고 분할 전략을 개선한다."""
+def reflect(strategy, result, enriched=None, warnings=None):
+    """채점 결과를 보고 분할 전략을 개선한다.
+
+    enriched/warnings를 주면(informed arm) 틀린 질문마다 원본 근거 문단·실패 유형과
+    구조의 결정론적 결함(출처 없는 문서 등)을 함께 보여준다. 기대 답은 넣지 않는다.
+    """
     missed = [d for d in result["details"] if d.get("score", 0) < 1]
     heavy = sorted(result["details"], key=lambda d: d["read_chars"], reverse=True)[:2]
 
@@ -73,19 +78,33 @@ def reflect(strategy, result):
         f"[답 못한 질문들 — 관련 정보가 흩어졌거나 엉뚱한 파일 선택]\n{missed_str}\n\n"
         f"[많이 읽은 질문들 — 파일이 너무 크거나 관련없는 내용 섞임]\n{heavy_str}\n\n"
         f"[현재 파일 수] {result['n_files']}, 정확도 {result['accuracy']}, 효율 {result['efficiency']}\n\n"
-        "[개선된 분할 전략]:"
     )
+    if enriched is not None:
+        ev_block, warn_block = evidence.render_for_reflector(enriched, warnings or [])
+        prompt += (
+            "[답 못한 질문의 근거 위치와 실패 유형 — 근거 문단이 어느 파일에 들어가야 하는지, "
+            "라우팅이 왜 빗나갔는지를 전략에 반영하라. 근거 문장을 그대로 베끼라는 지시는 쓰지 말고 "
+            "어떤 주제를 어느 파일에 모을지로 말하라]\n"
+            f"{ev_block}\n\n"
+            f"[구조 결함 — 반드시 고칠 것]\n{warn_block}\n\n"
+        )
+    prompt += "[개선된 분할 전략]:"
     new_strategy = llm.generate(prompt, num_predict=300, temperature=0.5)
     return new_strategy.strip() or strategy
 
 
 def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
-                     no_evolve=False, question_set=None):
-    """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장)."""
+                     no_evolve=False, question_set=None, informed=False):
+    """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
+
+    informed=True(evolve-informed arm): Reflector에 근거 문단·실패 유형·구조 결함을
+    추가로 준다. 근거 탐색 자체는 결정론이라 모든 arm에서 계산해 history에 남긴다 —
+    차이는 Reflector가 그것을 보느냐뿐이다.
+    """
     docs = load_docs(n_docs, files=files)
     total_raw = sum(len(t) for t in docs.values())
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    arm = "control" if no_evolve else "evolve"
+    arm = "control" if no_evolve else ("evolve-informed" if informed else "evolve")
     run_dir = os.path.join(out_dir, f"structure-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
@@ -134,6 +153,11 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
                 result = fut_test.result()
         dt = time.time() - t
 
+        # 틀린 train 질문의 근거 위치와 실패 유형 + 구조 결함. train이 없으면(control) held-out 기준
+        enriched = evidence.enrich((r_train or result).get("details", []), question_set, docs, struct)
+        heldout_enriched = evidence.enrich(result.get("details", []), question_set, docs, struct)
+        warnings = evidence.structure_warnings(docs, struct)
+
         # 판정 파싱 실패 세대는 점수가 자리만 채운 0이다 — best 후보에서 제외
         parse_failed = bool(result.get("parse_failed")
                             or (r_train is not None and r_train.get("parse_failed")))
@@ -163,12 +187,17 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             "train_score": ({k: v for k, v in r_train.items() if k != "details"}
                             if r_train is not None else None),
             "train_details": r_train.get("details", []) if r_train is not None else [],
+            # 결정론 근거 탐색 — Reflector가 보든 안 보든 기록한다 (UI·비교용)
+            "evidence": enriched,
+            "heldout_evidence": heldout_enriched,
+            "warnings": warnings,
             "elapsed_sec": round(dt, 1),
         })
 
         if improved:
             best = {"total": result["total"], "generation": g, "strategy": strategy,
-                    "struct": struct, "result": result, "train_result": r_train}
+                    "struct": struct, "result": result, "train_result": r_train,
+                    "evidence": enriched, "warnings": warnings}
 
         with open(os.path.join(run_dir, "progress.json"), "w") as pf:
             json.dump({
@@ -183,7 +212,12 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         if not no_evolve and g < generations - 1 and best["strategy"] is not None:
             # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도.
             # reflect는 train 판정만 본다 — held-out 실패를 보여주면 채택 점수가 오염된다.
-            strategy = reflect(best["strategy"], best["train_result"] or best["result"])
+            train_result = best["train_result"] or best["result"]
+            if informed:
+                strategy = reflect(best["strategy"], train_result,
+                                   enriched=best.get("evidence"), warnings=best.get("warnings"))
+            else:
+                strategy = reflect(best["strategy"], train_result)
 
     print(f"\n[done] best gen={best['generation']} total={best['total']}")
     best_files = best["struct"]["files"] if best["struct"] else []
@@ -197,7 +231,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "provenance": provenance.collect(
             question_set=question_set,
             params={"generations": generations, "n_qa": n_qa, "n_docs": n_docs,
-                    "no_evolve": no_evolve},
+                    "no_evolve": no_evolve, "informed": informed},
         ),
         "total_raw_chars": total_raw,
         "generations": generations,
@@ -223,6 +257,8 @@ if __name__ == "__main__":
     ap.add_argument("--generations", type=int, default=2)
     ap.add_argument("--n-qa", type=int, default=4)
     ap.add_argument("--control", action="store_true", help="진화 없이 seed 재샘플링(대조군)")
+    ap.add_argument("--informed", action="store_true",
+                    help="Reflector에 근거 문단·실패 유형·구조 결함을 추가로 준다 (evolve-informed arm)")
     args = ap.parse_args()
     evolve_structure(n_docs=args.docs, generations=args.generations, n_qa=args.n_qa,
-                     no_evolve=args.control)
+                     no_evolve=args.control, informed=args.informed)

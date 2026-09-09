@@ -596,6 +596,7 @@
   .arm-evolve, .arm-evolve-wiki { background: var(--acc-soft); color: var(--acc); }
   .arm-control { background: var(--hover); color: var(--dim); }
   .arm-evolve-nohist { background: var(--warn-soft); color: var(--warn); }
+  .arm-evolve-informed { background: var(--ok-soft); color: var(--ok); }
   .prov { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border: 1px solid var(--line);
     border-radius: 99px; color: var(--dim); font: 500 var(--fs-caption) var(--font-mono); cursor: help; }
   .parse-failed-note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: var(--fs-secondary); }
@@ -805,3 +806,14 @@
   .mobile-workbench button:not([id=mobileRun]) { background: var(--card); color: var(--tx-secondary); border: 1px solid var(--line); }
   .mobile-workbench button[aria-pressed=true] { background: var(--acc-soft); color: var(--acc); border-color: var(--acc); }
 }
+
+  /* ---------- 점수 근거: 실패 유형·근거 위치·구조 결함 (evidence.py) ---------- */
+  .why { margin-top: 5px; color: var(--dim); font-size: var(--fs-caption); line-height: 1.5; }
+  .why b { color: var(--tx-secondary); font-weight: 600; }
+  .why-type { display: inline-block; padding: 1px 7px; border-radius: 99px; font-weight: 600; background: var(--hover); color: var(--tx-secondary); }
+  .why-doc_dropped { background: var(--bad-soft); color: var(--bad); }
+  .why-routing_miss { background: var(--warn-soft); color: var(--warn); }
+  .why-content_lost { background: var(--acc-soft); color: var(--acc); }
+  .sb-warnings { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: var(--fs-caption); }
+  .sb-warnings b { display: block; margin-bottom: 4px; }
+  .sb-warnings ul { margin: 0; padding-left: 18px; line-height: 1.6; }
