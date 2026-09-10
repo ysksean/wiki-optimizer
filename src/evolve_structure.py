@@ -94,17 +94,19 @@ def reflect(strategy, result, enriched=None, warnings=None):
 
 
 def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
-                     no_evolve=False, question_set=None, informed=False):
+                     no_evolve=False, question_set=None, informed=False, incremental=False):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
 
     informed=True(evolve-informed arm): Reflector에 근거 문단·실패 유형·구조 결함을
     추가로 준다. 근거 탐색 자체는 결정론이라 모든 arm에서 계산해 history에 남긴다 —
     차이는 Reflector가 그것을 보느냐뿐이다.
+    incremental=True(evolve-incremental arm): 세대 g+1의 Organizer가 백지가 아니라 세대 g까지의
+    best 구조를 받아 새 전략대로 고친다 (1차 실험 결과: 백지 재조직의 분산이 진화 효과를 덮었다).
     """
     docs = load_docs(n_docs, files=files)
     total_raw = sum(len(t) for t in docs.values())
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    arm = "control" if no_evolve else ("evolve-informed" if informed else "evolve")
+    arm = "control" if no_evolve else ("evolve-incremental" if incremental else "evolve-informed" if informed else "evolve")
     run_dir = os.path.join(out_dir, f"structure-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
@@ -139,7 +141,9 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
 
     for g in range(generations):
         t = time.time()
-        struct = structure.organize(docs, strategy)
+        # 증분 조직: 첫 세대는 백지, 이후는 지금까지의 best 구조 위에서 고친다
+        previous = best["struct"] if (incremental and best["struct"]) else None
+        struct = structure.organize(docs, strategy, previous=previous) if previous else structure.organize(docs, strategy)
         # held-out은 항상, train은 reflect가 필요한 arm(evolve)에서만 — control은 채점 절약.
         # 질문이 적어 분리를 포기한 경우(degenerate) 한 번만 채점해 둘 다로 쓴다.
         if no_evolve or degenerate:
@@ -231,7 +235,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "provenance": provenance.collect(
             question_set=question_set,
             params={"generations": generations, "n_qa": n_qa, "n_docs": n_docs,
-                    "no_evolve": no_evolve, "informed": informed},
+                    "no_evolve": no_evolve, "informed": informed, "incremental": incremental},
         ),
         "total_raw_chars": total_raw,
         "generations": generations,
@@ -259,6 +263,8 @@ if __name__ == "__main__":
     ap.add_argument("--control", action="store_true", help="진화 없이 seed 재샘플링(대조군)")
     ap.add_argument("--informed", action="store_true",
                     help="Reflector에 근거 문단·실패 유형·구조 결함을 추가로 준다 (evolve-informed arm)")
+    ap.add_argument("--incremental", action="store_true",
+                    help="세대마다 백지 대신 best 구조를 고친다 (evolve-incremental arm)")
     args = ap.parse_args()
     evolve_structure(n_docs=args.docs, generations=args.generations, n_qa=args.n_qa,
-                     no_evolve=args.control, informed=args.informed)
+                     no_evolve=args.control, informed=args.informed, incremental=args.incremental)

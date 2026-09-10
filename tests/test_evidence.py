@@ -129,3 +129,39 @@ def test_batch_structure_arms_accept_informed():
         batch.resolve_arms(["evolve-wiki"], stage="structure")
     with pytest.raises(ValueError):
         batch.resolve_arms(["evolve-informed"], stage="summary")
+
+
+def test_incremental_organize_edits_previous_structure(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(structure.llm, "generate", lambda prompt, **kw: prompts.append(prompt) or
+                        '{"files":[{"title":"T","content":"c","sources":["redis"]}]}')
+    prev = {"files": [{"title": "옛 파일", "content": "옛 본문", "sources": ["claude"]}]}
+    structure.organize(DOCS, "규칙", previous=prev)
+    assert "[현재 구조]" in prompts[0] and "옛 파일" in prompts[0] and "옛 본문" in prompts[0]
+    assert "고쳐라" in prompts[0] and "=== 문서: redis ===" in prompts[0]
+    structure.organize(DOCS, "규칙")
+    assert "[현재 구조]" not in prompts[1]                      # 백지 조직은 그대로
+
+
+def test_incremental_arm_passes_best_struct_from_second_generation(docs_env, monkeypatch):
+    qs = [{"q": f"q{i} 유실 작업 자료구조", "a": "Stream을 사용한다"} for i in range(6)]
+    seen = []
+
+    def fake_organize(docs, strategy, previous=None):
+        seen.append(previous)
+        return dict(STRUCT, index=[])
+
+    monkeypatch.setattr(structure, "organize", fake_organize)
+    monkeypatch.setattr(structure, "score_structure", lambda struct, q, total_raw: _score(q))
+    monkeypatch.setattr(evolve_structure, "reflect", lambda s, r: "S1")
+    report = evolve_structure.evolve_structure(
+        files=docs_env["files"], generations=3, out_dir=docs_env["out"],
+        question_set=qs, incremental=True)
+    assert report["arm"] == "evolve-incremental"
+    assert seen[0] is None and seen[1] is not None and seen[2] is not None   # 2세대부터 best 구조
+    assert seen[1]["files"][0]["title"] == "인프라"
+    assert report["provenance"]["params"]["incremental"] is True
+
+
+def test_batch_structure_arms_accept_incremental():
+    assert "evolve-incremental" in batch.resolve_arms(["control", "evolve-incremental"], stage="structure")
