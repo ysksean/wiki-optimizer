@@ -317,8 +317,12 @@ BOOTSTRAP_SEED = 20260831  # 고정 — 같은 입력이면 항상 같은 CI/p�
 ALPHA = 0.05
 
 
-def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTRAP_SEED):
+def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTRAP_SEED,
+                         key="improvement"):
     """문서 단위 paired bootstrap으로 net 효과의 신뢰구간과 양측 p값을 낸다.
+
+    key: 비교할 레코드 필드. 기본은 향상폭(best - gen0). gen0가 무작위 표본 하나라
+    향상폭이 노이즈에 잠기는 B단계에서는 "best_total"(절대 점수)로 비교한다.
 
     표본 단위는 run이 아니라 **문서**다. 같은 문서의 run들은 질문 세트
     (train/held-out 분할 포함)를 공유하므로 독립 표본이 아니다 — run을 단위로
@@ -332,7 +336,7 @@ def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTR
     """
     per_doc = {}
     for r in valid:
-        per_doc.setdefault(r["doc"], {}).setdefault(r["arm"], []).append(r["improvement"])
+        per_doc.setdefault(r["doc"], {}).setdefault(r["arm"], []).append(r[key])
     deltas = [
         statistics.mean(arms[treat]) - statistics.mean(arms[base])
         for arms in per_doc.values()
@@ -360,9 +364,9 @@ def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTR
     }
 
 
-def _significance_lines(valid, treat, base, positive_msg, null_msg):
+def _significance_lines(valid, treat, base, positive_msg, null_msg, key="improvement"):
     """net 유의성 판정 줄들. bootstrap이 불가능하면 그 사실을 명시한다."""
-    b = paired_bootstrap_net(valid, treat, base)
+    b = paired_bootstrap_net(valid, treat, base, key=key)
     if b is None:
         return [
             "- 유의성 **판정 불가** — 두 arm이 모두 있는 문서가 2개 미만이다. "
@@ -380,6 +384,57 @@ def _significance_lines(valid, treat, base, positive_msg, null_msg):
     else:
         out.append(f"- {null_msg} (p={b['p']:.3f}, 유의수준 {ALPHA} 미달)")
     return out
+
+
+def _gen0_noise(valid):
+    """같은 문서·같은 seed 규칙인데 gen0 점수가 얼마나 흔들리는지 — 문서별 표준편차의 평균.
+
+    gen0는 arm과 무관한 무작위 표본 하나라, 이 값이 크면 '향상폭(best - gen0)'은
+    진화 효과가 아니라 gen0 운을 재는 지표가 된다.
+    """
+    per_doc = {}
+    for r in valid:
+        per_doc.setdefault(r["doc"], []).append(r["gen0_total"])
+    sds = [statistics.pstdev(v) for v in per_doc.values() if len(v) >= 2]
+    return statistics.mean(sds) if sds else None
+
+
+def _absolute_score_lines(valid, by_arm):
+    """절대 점수(best held-out) 비교 — gen0 노이즈에 잠기지 않는 arm 비교.
+
+    2026-09-10 1차 실험(B단계, 묶음 3 x run 2 x arm 3)에서 gen0가 같은 묶음에서 0.0~0.97로
+    튀어 '향상폭' 기준 net이 방향까지 뒤집혔다(control이 최고). 그래서 절대 best를 함께 낸다.
+    """
+    noise = _gen0_noise(valid)
+    lines = ["\n## 절대 점수 비교 (best held-out — gen0와 무관)"]
+    if noise is not None:
+        lines.append(f"- gen0 노이즈(같은 문서 안 gen0 표준편차 평균): {noise:.3f}"
+                     + (" — **0.1 이상이면 위 '향상폭'은 gen0 운에 좌우된다. 아래 절대 점수로 판단할 것.**"
+                        if noise >= 0.1 else ""))
+    lines.append("| arm | runs | 평균 best | 표준편차 | 평균 gen0 |")
+    lines.append("|---|---|---|---|---|")
+    for arm in sorted(by_arm):
+        rs = by_arm[arm]
+        bests = [r["best_total"] for r in rs]
+        lines.append(f"| {arm} | {len(rs)} | {statistics.mean(bests):.3f} | "
+                     f"{statistics.pstdev(bests) if len(bests) > 1 else 0.0:.3f} | "
+                     f"{statistics.mean(r['gen0_total'] for r in rs):.3f} |")
+    base = "control" if "control" in by_arm else ("evolve" if "evolve" in by_arm else None)
+    if base:
+        for arm in sorted(by_arm):
+            if arm == base:
+                continue
+            b = paired_bootstrap_net(valid, arm, base, key="best_total")
+            if b is None:
+                lines.append(f"- {arm} vs {base}: 판정 불가(짝지을 문서 2개 미만)")
+                continue
+            verdict = ("**유의하게 높다**" if b["p"] < ALPHA and b["net"] > 0
+                       else "**유의하게 낮다**" if b["p"] < ALPHA and b["net"] < 0
+                       else "구분되지 않는다")
+            lines.append(f"- {arm} vs {base} (best 절대 점수, 문서짝 {b['n_docs']}개): "
+                         f"{b['net']:+.3f}, 95% CI [{b['ci_low']:+.3f}, {b['ci_high']:+.3f}], "
+                         f"p={b['p']:.3f} → {verdict}")
+    return lines
 
 
 def _arm_stats(rs):
@@ -452,6 +507,8 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
         g0 = statistics.mean(r["gen0_total"] for r in rs)
         bs = statistics.mean(r["best_total"] for r in rs)
         lines.append(f"| {doc} | {rs[0]['size']} | {arm} | {g0:.3f} | {bs:.3f} | {bs-g0:+.3f} |")
+
+    lines += _absolute_score_lines(valid, by_arm)
 
     lines.append("\n## 해석")
     ev = _arm_stats(by_arm.get("evolve", []))

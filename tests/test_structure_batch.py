@@ -174,3 +174,21 @@ def test_batch_structure_bundles_become_separate_samples(docs_env, monkeypatch):
 
     assert sorted({r["doc"] for r in records}) == ["a", "b"]   # 묶음이 표본 단위(doc)
     assert [r["arm"] for r in records] == ["evolve", "control", "evolve", "control"]
+
+
+def test_summary_reports_absolute_best_and_gen0_noise(docs_env, monkeypatch):
+    # gen0가 arm과 무관하게 튀는 상황: control gen0 0.1→best 0.9, evolve gen0 0.9→best 0.9.
+    # 향상폭으로는 control이 이기지만 절대 best는 같다 — 절대 점수 비교와 노이즈 경고가 있어야 한다
+    _install_fakes(monkeypatch, totals=[0.9, 0.9, 0.1, 0.9])
+    monkeypatch.setattr(structure, "build_cross_question_set", lambda docs, n=4: QS)
+    records, batch_dir = batch.run_batch(
+        docs_env["files"], runs=1, generations=2, n_qa=2,
+        with_control=True, out_dir=docs_env["out"], stage="structure")
+    import pathlib
+    summary = (pathlib.Path(batch_dir) / "summary.md").read_text()
+    assert "## 절대 점수 비교 (best held-out — gen0와 무관)" in summary
+    assert "gen0 노이즈" in summary and "위 '향상폭'은 gen0 운에 좌우된다" in summary
+    assert "| control | 1 | 0.900 |" in summary and "| evolve | 1 | 0.900 |" in summary
+    assert "evolve vs control: 판정 불가" in summary        # 문서 1개 → 짝 부족
+    b = batch.paired_bootstrap_net(records, "evolve", "control", key="best_total")
+    assert b is None
