@@ -309,8 +309,9 @@ Reflector는 시도당 여기에 organize 1회 + reflect 1회. 에이전트는 �
 3.5. **측정 신뢰성** (1차 실험 결과로 추가) — (a) B단계 1차 지표를 절대 best held-out으로
    (PR: batch 절대 점수 비교 + gen0 노이즈 경고), (b) **증분 조직 arm `evolve-incremental`**:
    세대 g+1의 Organizer가 세대 g best 구조를 받아 규칙대로 고친다 — 에이전트 설계의
-   "초기안 위의 수정"을 고정 파이프라인에 먼저 이식, (c) 질문 12(held-out 5), 조직
-   temperature 0. 2차 실험 `control/evolve/evolve-incremental`로 판정. incremental이
+   "초기안 위의 수정"을 고정 파이프라인에 먼저 이식, (c) 질문 12(held-out 5). 조직 temperature는
+   `claude -p`가 받지 않아 손댈 수 없다 — 증분 조직이 조직 분산을 줄이는 유일한 손잡이.
+   2차 실험 `control/evolve/evolve-incremental`로 판정. incremental이
    control을 유의하게 이길 때만 4단계로 간다.
 4. **환경 + 도구 서버** — workspace ↔ struct 변환(skeleton 포맷 파서), `evaluate`(기대 답 비노출,
    frontmatter 오류는 is_error), 스냅샷, stdio MCP 서버. 스텁 테스트.

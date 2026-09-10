@@ -80,10 +80,11 @@ summary.md의 원래 판정은 "진화 효과 net = −0.202, p=0.000, 유의하
    best 구조를 입력으로 받아 규칙에 따라 고친다.** 에이전트 설계의 핵심("초기안 위의 수정")을
    고정 파이프라인에 먼저 이식하는 것이고, "백지 재조직이 문제"라는 가설을 가장 싸게
    검증한다. content_lost가 줄어야 한다.
-3. **측정 노이즈**: 질문 12개(train 7 / held-out 5)로 양자화를 0.2 단위로. 조직 temperature를
-   0.3 → 0으로 내려 arm 간 차이만 남긴다(진화 손잡이가 규칙이므로 조직은 결정적일수록 좋다).
-4. **2차 실험**: `control / evolve / evolve-incremental`, 같은 묶음 3개, run 2, 질문 12,
-   temperature 0. 판정은 절대 best. 여기서 incremental이 control을 유의하게 이기면 그 위에
+3. **측정 노이즈**: 질문 12개(train 7 / held-out 5)로 양자화를 0.2 단위로. 조직 단계의
+   무작위성 자체는 줄일 수 없다 — `claude -p`는 temperature를 받지 않는다(`llm.py` 주석).
+   그래서 "매번 새로 굴리지 않는" 증분 조직이 조직 분산을 줄이는 유일한 손잡이다.
+4. **2차 실험**: `control / evolve / evolve-incremental`, 같은 묶음 3개, run 2, 질문 12.
+   판정은 절대 best. 여기서 incremental이 control을 유의하게 이기면 그 위에
    에이전트 arm(4~6단계)을 얹을 가치가 생기고, 못 이기면 "이 채점기 아래에서는 어떤
    Reflector도 재샘플링을 못 이긴다"는 결론이고 채점기(judge 엄격도·질문 생성)를 먼저 본다.
 
