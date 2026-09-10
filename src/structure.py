@@ -15,6 +15,7 @@ Query 성능(정확도 x 효율)으로 평가한다.
 """
 
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
@@ -150,22 +151,42 @@ def route(question, index):
 
 # ---------- 채점 ----------
 
-def _answer(context, question):
-    prompt = (
-        "아래 '컨텍스트'에 근거해서만 질문에 답하라. 없으면 '모름'. 한 문장 이내.\n\n"
-        f"컨텍스트:\n{context}\n\n질문: {question}\n답:"
-    )
+# 답변 방식. free = 자유 서술(기본). extractive = 컨텍스트 문장을 그대로 인용 —
+# 2026-09-11 반복성 측정에서 채점 노이즈 대부분이 답변 생성 단계에서 나왔다(같은 구조 5회 채점에
+# 질문 17~42%의 판정이 뒤집힘, 같은 답 재판정은 0~17%). 인용 강제는 그 분산을 줄이려는 손잡이다.
+ANSWER_MODE = os.environ.get("STRUCTURE_ANSWER_MODE", "free")
+# 채점 반복 횟수. 라우팅은 1회, 답변+판정을 이 횟수만큼 돌려 정확도를 평균한다 (노이즈 바닥 ↓, 비용 ×N)
+SCORE_REPEATS = max(1, int(os.environ.get("STRUCTURE_SCORE_REPEATS", "1")))
+
+
+def _answer(context, question, mode=None):
+    mode = mode or ANSWER_MODE
+    if mode == "extractive":
+        prompt = (
+            "아래 '컨텍스트'에서 질문의 답이 되는 문장(또는 구절)을 **그대로 인용**해 답하라. "
+            "바꿔 쓰거나 요약하지 말 것. 컨텍스트에 답이 없으면 '모름'.\n\n"
+            f"컨텍스트:\n{context}\n\n질문: {question}\n인용:"
+        )
+    else:
+        prompt = (
+            "아래 '컨텍스트'에 근거해서만 질문에 답하라. 없으면 '모름'. 한 문장 이내.\n\n"
+            f"컨텍스트:\n{context}\n\n질문: {question}\n답:"
+        )
     return llm.generate(prompt, num_predict=80, temperature=0.0)
 
 
-def score_structure(struct, question_set, total_raw_chars):
+def score_structure(struct, question_set, total_raw_chars, repeats=None):
     """구조 전체를 Query 성능으로 채점한다.
 
     각 질문마다: Router가 파일 선택 -> 그 파일만 읽어 답 -> 읽은 글자수 기록.
     정확도 = 평균 정답률. 효율 = 1 - (평균 읽은 글자 / 전체 원본 글자).
     종합 = 정확도 x 효율.
     판정은 scoring.judge_all 공용 — parse_failed=True면 점수는 신뢰 불가.
+
+    repeats(기본 SCORE_REPEATS): 라우팅은 한 번, 답변+판정을 repeats번 돌려 질문별 정답률을
+    평균한다. details[i]["score"]는 그 평균(0~1), "score_rounds"에 회차별 0/1이 남는다.
     """
+    repeats = repeats or SCORE_REPEATS
     files = struct.get("files", [])
     index = struct.get("index", [])
     if not files:
@@ -179,7 +200,8 @@ def score_structure(struct, question_set, total_raw_chars):
         chosen_titles = [index[p]["title"] for p in picks]
         context = "\n\n".join(by_title.get(t, "") for t in chosen_titles)
         return {"q": qa["q"], "picked": chosen_titles,
-                "read_chars": len(context), "pred": _answer(context, qa["q"])}
+                "read_chars": len(context), "pred": _answer(context, qa["q"]),
+                "_context": context}
 
     # 질문별 route→answer 체인은 상호 독립 — 병렬로 세대당 2n회 직렬 호출을
     # 4폭으로 접는다. ex.map은 입력 순서를 보존하므로 judge와의 짝이 안 틀어진다.
@@ -189,8 +211,20 @@ def score_structure(struct, question_set, total_raw_chars):
     reads = [d["read_chars"] for d in details]
 
     scores, parse_failed = scoring.judge_all(question_set, preds)
-    for d, s in zip(details, scores):
-        d["score"] = s
+    rounds = [scores]
+    # 추가 회차: 같은 컨텍스트로 답변·판정만 다시 (라우팅 결과는 고정)
+    for _ in range(repeats - 1):
+        with ThreadPoolExecutor(max_workers=min(4, len(question_set))) as ex:
+            more = list(ex.map(lambda pair: _answer(pair[0], pair[1]),
+                               [(d["_context"], d["q"]) for d in details]))
+        s_more, failed_more = scoring.judge_all(question_set, more)
+        parse_failed = parse_failed or failed_more
+        rounds.append(s_more)
+    for i, d in enumerate(details):
+        d.pop("_context", None)
+        d["score_rounds"] = [r[i] for r in rounds]
+        d["score"] = round(sum(d["score_rounds"]) / len(rounds), 3)
+    scores = [d["score"] for d in details]
 
     acc = sum(scores) / len(question_set)
     avg_read = sum(reads) / len(reads)

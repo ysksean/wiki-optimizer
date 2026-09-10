@@ -54,3 +54,26 @@ def test_render_mentions_flips():
     runs = [_result(0.9, [["A"], ["B"]], [1, 1]), _result(0.5, [["A"], ["C"]], [1, 0])]
     lines = repeat_score.render(repeat_score.summarize_runs(runs, QS))
     assert any("뒤집힘" in l for l in lines) and lines[0].startswith("- 반복 2회")
+
+
+def test_extractive_answer_mode_changes_prompt(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(structure.llm, "generate", lambda prompt, **kw: prompts.append(prompt) or "x")
+    structure._answer("ctx", "q?", mode="extractive")
+    structure._answer("ctx", "q?", mode="free")
+    assert "그대로 인용" in prompts[0] and "그대로 인용" not in prompts[1]
+
+
+def test_score_structure_repeats_average_answer_and_judge_rounds(monkeypatch):
+    struct = {"files": [{"title": "A", "content": "aaa"}, {"title": "B", "content": "bbb"}],
+              "index": [{"title": "A", "desc": "a"}, {"title": "B", "desc": "b"}]}
+    monkeypatch.setattr(structure, "route", lambda q, index: [0])
+    answers = iter(["p1", "p2", "p1'", "p2'", "p1''", "p2''"])
+    monkeypatch.setattr(structure, "_answer", lambda ctx, q, mode=None: next(answers))
+    judged = iter([([1, 0], False), ([1, 1], False), ([0, 1], False)])
+    monkeypatch.setattr(scoring, "judge_all", lambda qs, preds, retries=1: next(judged))
+    r = structure.score_structure(struct, QS, 100, repeats=3)
+    assert r["details"][0]["score_rounds"] == [1, 1, 0] and r["details"][0]["score"] == 0.667
+    assert r["details"][1]["score_rounds"] == [0, 1, 1]
+    assert r["accuracy"] == 0.667 and r["parse_failed"] is False
+    assert "_context" not in r["details"][0] and r["details"][0]["pred"] == "p1"   # 첫 회차 답만 남긴다

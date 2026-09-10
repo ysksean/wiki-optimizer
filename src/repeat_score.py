@@ -124,7 +124,11 @@ def main():
     ap.add_argument("--rejudge", type=int, default=0, help="첫 반복의 답을 이 횟수만큼 다시 판정")
     ap.add_argument("--heldout-only", action="store_true")
     ap.add_argument("--out", default=None, help="결과 JSON 경로 (기본: report 옆 repeat_score.json)")
+    ap.add_argument("--answer-mode", choices=["free", "extractive"], default=None,
+                    help="답변 방식 override (기본: STRUCTURE_ANSWER_MODE 환경변수 또는 free)")
     args = ap.parse_args()
+    if args.answer_mode:
+        structure.ANSWER_MODE = args.answer_mode
 
     with open(args.report) as f:
         rep = json.load(f)
@@ -140,7 +144,7 @@ def main():
         struct["index"] = [{"title": f["title"], "desc": structure._one_line(f["content"])} for f in struct["files"]]
     total_raw = rep.get("total_raw_chars") or 1
 
-    print(f"[repeat] 구조 파일 {len(struct['files'])}개, 질문 {len(qs)}개, 반복 {args.repeats}회")
+    print(f"[repeat] 구조 파일 {len(struct['files'])}개, 질문 {len(qs)}개, 반복 {args.repeats}회, 답변 {structure.ANSWER_MODE}")
     res = repeat_score(struct, qs, total_raw, repeats=args.repeats)
     rj = None
     if args.rejudge and res["runs"] and not res["runs"][0].get("parse_failed"):
@@ -148,7 +152,8 @@ def main():
         rj = rejudge(qs, preds, repeats=args.rejudge)
     out_path = args.out or os.path.join(os.path.dirname(args.report), "repeat_score.json")
     with open(out_path, "w") as f:
-        json.dump({"report": args.report, "n_questions": len(qs), "summary": res["summary"],
+        json.dump({"report": args.report, "n_questions": len(qs), "answer_mode": structure.ANSWER_MODE,
+                   "summary": res["summary"],
                    "rejudge": rj, "runs": res["runs"]}, f, ensure_ascii=False, indent=1)
     print("\n".join(render(res["summary"], rj)))
     print(f"[repeat] 저장: {out_path}")
