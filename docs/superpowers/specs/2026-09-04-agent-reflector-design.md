@@ -1,7 +1,7 @@
 # 에이전트 Reflector — B 구조 최적화의 "고치는 쪽"을 도구 기반 에이전트로
 
 날짜: 2026-09-04
-상태: 1~3단계 완료. 1차 실험 결과(`2026-09-10-agent-reflector-result-1.md`)로 3.5단계(측정 신뢰성) 추가, 에이전트 인프라(4~6단계)는 그 결과를 본 뒤 결정
+상태: 1~3.5단계 완료. 2차 실험·반복성 측정(`2026-09-11-agent-reflector-result-2.md`)으로 **최적화기 개발 보류** — 채점기 단일 채점 sd ≈ 0.07이 arm 차이보다 크다. 3.6단계(채점기 반복성)로 전환
 선행 논의: 2026-09-04 세션 — "스킬 기반 말고 에이전트로 만드는 건 어때"
 
 ## 한 줄 요약
@@ -311,7 +311,12 @@ Reflector는 시도당 여기에 organize 1회 + reflect 1회. 에이전트는 �
    세대 g+1의 Organizer가 세대 g best 구조를 받아 규칙대로 고친다 — 에이전트 설계의
    "초기안 위의 수정"을 고정 파이프라인에 먼저 이식, (c) 질문 12(held-out 5). 조직 temperature는
    `claude -p`가 받지 않아 손댈 수 없다 — 증분 조직이 조직 분산을 줄이는 유일한 손잡이.
-   2차 실험 `control/evolve/evolve-incremental`로 판정. incremental이
+   2차 실험 `control/evolve/evolve-incremental`로 판정.
+   → **2026-09-11 완료.** incremental vs control +0.002 (p=0.71). 분산은 줄었으나 천장 동일.
+3.6. **채점기 반복성** (2차 결과로 추가) — 같은 구조 5회 채점 sd ≈ 0.07, 뒤집힘 17~42%,
+   노이즈 대부분이 답변 생성. `repeat_score.py`로 측정, `STRUCTURE_ANSWER_MODE=extractive`
+   (sd −15~30%) + `STRUCTURE_SCORE_REPEATS=3`으로 sd ≈ 0.03 목표. 이 채점기로 1·2차 best
+   구조들을 재채점해 arm 차이가 실재하는지 본 뒤에야 4단계(에이전트)를 다시 논한다. incremental이
    control을 유의하게 이길 때만 4단계로 간다.
 4. **환경 + 도구 서버** — workspace ↔ struct 변환(skeleton 포맷 파서), `evaluate`(기대 답 비노출,
    frontmatter 오류는 is_error), 스냅샷, stdio MCP 서버. 스텁 테스트.

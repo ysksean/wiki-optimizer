@@ -1,0 +1,197 @@
+{
+ "report": "/tmp/feat-incremental/runs/batch-20260910-211515/structure-evolve-20260911-003128/report.json",
+ "n_questions": 12,
+ "answer_mode": "extractive",
+ "summary": {
+  "repeats": 5,
+  "parse_failed": 0,
+  "total": {
+   "mean": 0.862,
+   "sd": 0.04,
+   "min": 0.812,
+   "max": 0.897
+  },
+  "accuracy": {
+   "mean": 0.883,
+   "sd": 0.041,
+   "min": 0.833,
+   "max": 0.917
+  },
+  "efficiency": {
+   "mean": 0.976,
+   "sd": 0.001,
+   "min": 0.974,
+   "max": 0.978
+  },
+  "per_question": [
+   {
+    "q": "에이전틱 엔지니어링에서 Agent가 chatbot과 가장 다른 점은?",
+    "pick_agreement": 0.6,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Context Engineering의 3가지 레이어란?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "CLAUDE.md가 자동 로드되는 4가지 위치를 모두 나열하면?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "좋은 CLAUDE.md의 첫 번째 작성 원칙은?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Transformer에서 학습 시 모든 위치의 예측을 병렬로 처리하는 방법은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Positional encoding은 어떤 함수를 사용하며 무엇을 표현하는가?",
+    "pick_agreement": 0.4,
+    "n_distinct_picks": 3,
+    "correct_rate": 0.8,
+    "flips": true
+   },
+   {
+    "q": "멱등키에 입력 버전을 넣어야 하는 이유는?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Read-through 캐시에서 refresh와 replace는 어떻게 다른가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.0,
+    "flips": false
+   },
+   {
+    "q": "평가 항목별 LLM judge에 문서 근거를 항목별 top-k로 제한한 이유는?",
+    "pick_agreement": 0.6,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Reference-free LLM 평가가 정답 셋 없이도 가능한 이유는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Wiki-optimizer 실험에서 이력 누적 run의 향상폭이 백지 run보다 몇 배 큰가?",
+    "pick_agreement": 0.4,
+    "n_distinct_picks": 3,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Karpathy LLM Wiki의 3계층 구조는?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 0.8,
+    "flips": true
+   }
+  ],
+  "mean_pick_agreement": 0.783,
+  "flip_rate": 0.167
+ },
+ "rejudge": {
+  "repeats": 5,
+  "per_question": [
+   {
+    "q": "에이전틱 엔지니어링에서 Agent가 chatbot과 가장 다른 점은?",
+    "pred": "\"**Agent**는 단순한 챗봇이 아니라 목표를 해석하고, 계획을 세우고, 도구를 사용해 자율적으로 실행하는 주체다.\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Context Engineering의 3가지 레이어란?",
+    "pred": "| 레이어 | 설명 | 예시 |\n|---|---|---|\n| **System Context** | 에이전트가 항상 참조하는 기본 설정 | CLAUDE.md, 프로젝트 규칙, 아키텍처 문서 |\n| **Conversation Context** | 대화 과정에서 누적되는 정보 | 이전 대화, 실행 결과, 사용자 피드백 |\n| **Tool & Environment Context** | 도구 실행으로 얻는 실시간 정보 | 파일 내용, API 응답, 테스트 결과, MCP 데이터 |",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "CLAUDE.md가 자동 로드되는 4가지 위치를 모두 나열하면?",
+    "pred": "| 위치 | 용도 | 비유 |\n|------|------|------|\n| `~/.claude/CLAUDE.md` | **전역** — 모든 프로젝트 공통 | 내 개인 노트 |\n| `<repo>/.claude/CLAUDE.md` | **팀 공유** — 소스컨트롤에 체크인 | 회사 가이드 |\n| `<repo>/CLAUDE.local.md` | **개인 per-repo** — `.gitignore`에 추가 | 책상 위 메모 |\n| `<subdir>/CLAUDE.md` | **서브디렉토리** — 특정 폴더만 적용 | 부서별 규칙 |",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "좋은 CLAUDE.md의 첫 번째 작성 원칙은?",
+    "pred": "### \"Non-obvious invariants only\" — 첫 번째 원칙\n\n**코드만 봐도 알 수 있는 건 쓰지 마세요.**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Transformer에서 학습 시 모든 위치의 예측을 병렬로 처리하는 방법은?",
+    "pred": "**Teacher Forcing** + **Causal Mask** + **행렬 곱셈 병렬성**이 함께 작동합니다.\n\n인용:\n\n1. \"학습 시 정답 시퀀스 전체를 디코더 입력으로 **한 번에** 투입\"\n\n2. \"한 번의 forward pass로 모든 위치 예측 가능\" (Causal Mask가 보장)\n\n3. \"토큰들을 행렬로 묶어 한 번의 행렬 곱셈으로 처리\" + \"GPU 코어가 모든 원소를 동시 계산\"\n\n결과: \"1 forward pass에 N개 예측을 동시 계산\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Positional encoding은 어떤 함수를 사용하며 무엇을 표현하는가?",
+    "pred": "**함수**: \"Sin/Cos 함수: `PE_(pos,2i) = sin(pos / 10000^(2i/d_model))`\"\n\n**표현 대상**: \n- \"Transformer는 순서를 모르므로 위치 정보를 주입해야 함\"\n- \"차원마다 다른 주파수 (멀티 스케일)\"\n- \"상대적 위치를 선형 변환으로 표현 가능\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "멱등키에 입력 버전을 넣어야 하는 이유는?",
+    "pred": "> 같은 입력의 중복 트리거는 키가 같아 종전대로 접힘 — 멱등키의 원래 목적은 유지\n> 입력이 바뀌면 키가 바뀌어 재채점이 진행됨",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Read-through 캐시에서 refresh와 replace는 어떻게 다른가?",
+    "pred": "**Refresh** (항상 재수집 + 교체 저장): 빠르게 변하는 데이터 또는 무효화 어려운 소스\n\n**Replace** (캐시 재사용 + 검증): 느리게 변하는 데이터, 캐시 효율 필요",
+    "correct_rate": 0.0,
+    "flips": false
+   },
+   {
+    "q": "평가 항목별 LLM judge에 문서 근거를 항목별 top-k로 제한한 이유는?",
+    "pred": "**항목 수 × 문서 크기만큼 토큰, 대형 문서면 컨텍스트 초과 + needle-in-haystack**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Reference-free LLM 평가가 정답 셋 없이도 가능한 이유는?",
+    "pred": "**인용:**\n\n> 각 생성 Task가 자기 프롬프트에서 스스로에게 건 규칙(출처 표기·수준 정의·정본 준수)을 뒤집어 평가 지표로 만든다.\n>\n> \"프롬프트가 약속한 것을 산출물이 지켰는가\"는 golden set 없이도 판정 가능하다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Wiki-optimizer 실험에서 이력 누적 run의 향상폭이 백지 run보다 몇 배 큰가?",
+    "pred": "\"이력이 쌓인 뒤의 run이 백지 run보다 **4~5배** 향상폭이 크다.\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Karpathy LLM Wiki의 3계층 구조는?",
+    "pred": "**Raw** `raw/` — 원본 소스 (Immutable, 사람 또는 자동 수집)\n**Wiki** `wiki/` — 구성된 지식 (LLM 소유, concept별 .md + [[backlink]])\n**Index** `index.md` + `log.md` (가이드 + 변경 이력)",
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "flip_rate": 0.0,
+  "accuracy": {
+   "mean": 0.917,
+   "sd": 0.0
+  }
+ }
+}

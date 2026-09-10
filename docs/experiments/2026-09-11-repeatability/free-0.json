@@ -1,0 +1,196 @@
+{
+ "report": "/tmp/feat-incremental/runs/batch-20260910-211515/structure-evolve-incremental-20260911-000429/report.json",
+ "n_questions": 12,
+ "summary": {
+  "repeats": 5,
+  "parse_failed": 0,
+  "total": {
+   "mean": 0.875,
+   "sd": 0.071,
+   "min": 0.796,
+   "max": 0.955
+  },
+  "accuracy": {
+   "mean": 0.917,
+   "sd": 0.075,
+   "min": 0.833,
+   "max": 1.0
+  },
+  "efficiency": {
+   "mean": 0.955,
+   "sd": 0.0,
+   "min": 0.955,
+   "max": 0.955
+  },
+  "per_question": [
+   {
+    "q": "Karpathy가 말하는 Software 3.0의 가장 핵심적인 특징은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.8,
+    "flips": true
+   },
+   {
+    "q": "Claude Code에서 Plan Mode와 Accept Mode를 토글하는 단축키는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.8,
+    "flips": true
+   },
+   {
+    "q": "에이전틱 엔지니어링의 5가지 기둥 중 AI가 스스로 자기 코드를 검증하게 만드는 기둥의 이름은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Redis의 List, Stream, Pub/Sub 중에서 메시지를 저장하고 ACK·consumer group을 지원하는 것은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "출처 지칭 오염 버그(판단의견이 라벨을 무시하는 문제)를 근본적으로 고쳤을 때 사용한 방법은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "WikiSkill 논문이 에이전트 경험을 관리하기 위해 제안한 3계층 구조는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.8,
+    "flips": true
+   },
+   {
+    "q": "프롬프트 규칙 보강으로 같은 사고가 재발했을 때 Anthropic이 권장하는 다음 단계는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.6,
+    "flips": true
+   },
+   {
+    "q": "Pub/Sub의 가장 중요한 제약사항은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "BE와 AI 서버 간에 양방향 통신을 위해 Redis List를 몇 개 만들어야 하는가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Karpathy가 말하는 '디렉터'가 버려도 되는 능력은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "PII 마스킹/복원 모델에서 복원이 가능한 이유는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 /clear 대신 /compact를 써야 하는 경우는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "mean_pick_agreement": 1.0,
+  "flip_rate": 0.333
+ },
+ "rejudge": {
+  "repeats": 5,
+  "per_question": [
+   {
+    "q": "Karpathy가 말하는 Software 3.0의 가장 핵심적인 특징은 무엇인가?",
+    "pred": "1.0 패러다임에서 불가능했던 것들(지식 그래프 자동 생성, 느슨한 명세로 작동)이 가능해지는 **새로운 기회 창출**입니다. (속도가 아니라 근본적인 능력 확장)",
+    "correct_rate": 0.4,
+    "flips": true
+   },
+   {
+    "q": "Claude Code에서 Plan Mode와 Accept Mode를 토글하는 단축키는?",
+    "pred": "**Shift + Tab**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "에이전틱 엔지니어링의 5가지 기둥 중 AI가 스스로 자기 코드를 검증하게 만드는 기둥의 이름은?",
+    "pred": "에이전틱 검증(Agentic Validation)이다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Redis의 List, Stream, Pub/Sub 중에서 메시지를 저장하고 ACK·consumer group을 지원하는 것은?",
+    "pred": "Stream입니다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "출처 지칭 오염 버그(판단의견이 라벨을 무시하는 문제)를 근본적으로 고쳤을 때 사용한 방법은?",
+    "pred": "Judge 산출 직후 코드 기반 사후 게이트로, 본문의 출처 지칭을 cited_indexes 라벨로만 교정하고 중복 시 무치환+경고하는 구조.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "WikiSkill 논문이 에이전트 경험을 관리하기 위해 제안한 3계층 구조는?",
+    "pred": "**raw 트레이스**(불변 실행 기록) / **wiki**(누적 지식) / **skills**(실행 skill) 분리.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "프롬프트 규칙 보강으로 같은 사고가 재발했을 때 Anthropic이 권장하는 다음 단계는?",
+    "pred": "모름. 컨텍스트에 Anthropic 공식 권장사항이 없습니다.\n\n다만 컨텍스트는 **같은 사고가 두 번 관측되면 프롬프트 강화만으로는 부족 → 사후 게이트(코드 레벨 검증)로 승격**하라는 패턴을 보여줍니다.",
+    "correct_rate": 0.2,
+    "flips": true
+   },
+   {
+    "q": "Pub/Sub의 가장 중요한 제약사항은 무엇인가?",
+    "pred": "메시지를 저장하지 않아, 발행 순간 현재 듣고 있는 구독자에게만 1회 전달되고 그 후 연결한 구독자는 그 메시지를 영영 못 받는다(유실).",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "BE와 AI 서버 간에 양방향 통신을 위해 Redis List를 몇 개 만들어야 하는가?",
+    "pred": "**2개** — 요청 큐(BE→AI)와 응답 큐(AI→BE)를 분리해야 하는데, List는 단방향 FIFO이므로 양방향 통신에는 2개가 필수입니다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Karpathy가 말하는 '디렉터'가 버려도 되는 능력은 무엇인가?",
+    "pred": "API 문법 같은 구현 디테일. \"디테일은 버리고, fundamentals는 지킨다\"는 문장에서 명확히 나온다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "PII 마스킹/복원 모델에서 복원이 가능한 이유는?",
+    "pred": "Vault에 원본값을 저장했다가 마스킹 텍스트의 토큰(예: `[PII_PHONE_0]`)으로 결정론적으로 조회하기 때문입니다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 /clear 대신 /compact를 써야 하는 경우는?",
+    "pred": "진행 중인 작업의 맥락이 필요할 때. `/clear`는 완전히 새로 시작하지만, `/compact`는 기존 대화의 핵심을 유지하면서 토큰만 절약한다.",
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "flip_rate": 0.167,
+  "accuracy": {
+   "mean": 0.883,
+   "sd": 0.041
+  }
+ }
+}
