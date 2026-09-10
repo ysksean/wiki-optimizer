@@ -143,3 +143,34 @@ def test_batch_stage_structure_skips_when_question_set_fails(
 
     assert records == []
     assert "질문 세트 실패" in capsys.readouterr().out
+
+
+def test_split_bundles_round_robin_by_size(tmp_path):
+    files = []
+    for name, size in [("a", 50), ("b", 40), ("c", 30), ("d", 20), ("e", 10)]:
+        p = tmp_path / f"{name}.md"
+        p.write_text("x" * size)
+        files.append(str(p))
+    bundles = batch.split_bundles(files, 2)
+    names = [[pathlib_stem(f) for f in b] for b in bundles]
+    assert names == [["a", "d"], ["b", "e"], ["c"]]          # 크기 내림차순 round-robin
+    assert batch.split_bundles(files, None) == [files]
+    assert batch.split_bundles(files, 5) == [files]
+
+
+def pathlib_stem(f):
+    import pathlib
+    return pathlib.Path(f).stem
+
+
+def test_batch_structure_bundles_become_separate_samples(docs_env, monkeypatch):
+    # 문서 2개, bundle_size 1 → 묶음 2개 x [evolve, control] x gen 1 → score 4회
+    _install_fakes(monkeypatch, totals=[0.5, 0.2, 0.6, 0.3])
+    monkeypatch.setattr(structure, "build_cross_question_set", lambda docs, n=4: QS)
+
+    records, batch_dir = batch.run_batch(
+        docs_env["files"], runs=1, generations=1, n_qa=2,
+        with_control=True, out_dir=docs_env["out"], stage="structure", bundle_size=1)
+
+    assert sorted({r["doc"] for r in records}) == ["a", "b"]   # 묶음이 표본 단위(doc)
+    assert [r["arm"] for r in records] == ["evolve", "control", "evolve", "control"]

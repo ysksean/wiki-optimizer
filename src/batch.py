@@ -89,8 +89,24 @@ def resolve_arms(arms=None, with_control=False, ablation=False, stage="summary")
     return ["evolve", "control"] if with_control else ["evolve"]
 
 
+def split_bundles(files, bundle_size):
+    """B단계용 문서 묶음 나누기 — 크기 내림차순 round-robin이라 묶음별 총 글자수가 비슷해진다.
+
+    묶음이 곧 표본 단위(paired_bootstrap_net)이므로, 손으로 고르지 않고 결정론으로 나눈다.
+    bundle_size가 없거나 파일 수 이하면 묶음 하나.
+    """
+    if not bundle_size or bundle_size >= len(files):
+        return [list(files)]
+    n_bundles = -(-len(files) // bundle_size)   # ceil
+    ordered = sorted(files, key=lambda f: -os.path.getsize(f))
+    bundles = [[] for _ in range(n_bundles)]
+    for i, f in enumerate(ordered):
+        bundles[i % n_bundles].append(f)
+    return bundles
+
+
 def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
-              out_dir="runs", parallel=1, stage="summary", arms=None):
+              out_dir="runs", parallel=1, stage="summary", arms=None, bundle_size=None):
     """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
 
     문서끼리는 질문 세트·run 디렉터리·구조화 위키(evolve-wiki arm,
@@ -108,17 +124,28 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
 
     arms = resolve_arms(arms, with_control=with_control, ablation=ablation, stage=stage)
     records = []
-    # structure는 문서 묶음 전체가 하나의 실험 단위 — 문서별 루프가 없다
-    total = (runs * len(arms)) if stage == "structure" else (len(files) * runs * len(arms))
+    # structure는 문서 묶음이 실험 단위 — --bundle-size로 여러 묶음을 나눠 돌릴 수 있다
+    bundles = split_bundles(files, bundle_size) if stage == "structure" else None
+    total = (len(bundles) * runs * len(arms)) if stage == "structure" else (len(files) * runs * len(arms))
     progress = {"done": 0, "total": total, "lock": threading.Lock()}
     t_batch = time.time()
 
-    print(f"[batch] stage={stage} 문서 {len(files)}개 x run {runs} x arm {arms} "
-          f"x gen {generations} = {total} runs (parallel={parallel})")
+    print(f"[batch] stage={stage} 문서 {len(files)}개"
+          + (f" (묶음 {len(bundles)}개)" if bundles and len(bundles) > 1 else "")
+          + f" x run {runs} x arm {arms} x gen {generations} = {total} runs (parallel={parallel})")
     try:
         if stage == "structure":
-            _run_structure(files, runs, arms, generations, n_qa, batch_dir,
-                           state_path, records, total)
+            if parallel > 1 and len(bundles) > 1:
+                with ThreadPoolExecutor(max_workers=parallel) as ex:
+                    futures = [ex.submit(_run_structure, b, runs, arms, generations, n_qa,
+                                         batch_dir, state_path, records, total, progress)
+                               for b in bundles]
+                    for fut in futures:
+                        fut.result()
+            else:
+                for b in bundles:
+                    _run_structure(b, runs, arms, generations, n_qa, batch_dir,
+                                   state_path, records, total, progress)
         elif parallel > 1:
             with ThreadPoolExecutor(max_workers=parallel) as ex:
                 futures = [
@@ -160,8 +187,9 @@ def _prepare_cross_question_set(files, n_qa):
 
 
 def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
-                   records, total):
-    """문서 묶음 하나에 대해 run x arm으로 구조 진화를 돌린다."""
+                   records, total, progress=None):
+    """문서 묶음 하나에 대해 run x arm으로 구조 진화를 돌린다. records 갱신은 progress 락으로 보호."""
+    lock = progress["lock"] if progress else threading.Lock()
     doc = "+".join(os.path.splitext(os.path.basename(f))[0] for f in files)
     size = sum(os.path.getsize(f) for f in files)
     # 질문 세트는 묶음당 1회 생성해 모든 arm/run이 공유 (공정 비교)
@@ -170,10 +198,14 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
         print(f"[batch] {doc}: 질문 세트 실패, 중단")
         return
 
-    done = 0
     for r in range(runs):
         for arm in arms:
-            done += 1
+            if progress:
+                with lock:
+                    progress["done"] += 1
+                    done = progress["done"]
+            else:
+                done = len(records) + 1
             print(f"\n[batch {done}/{total}] {doc} (size={size}) run={r} arm={arm}")
             t = time.time()
             try:
@@ -191,9 +223,10 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
                 continue
 
             rec = _record(report, doc, size, r, arm, dt)
-            records.append(rec)
-            with open(state_path, "w") as sf:
-                json.dump(records, sf, ensure_ascii=False, indent=2)
+            with lock:
+                records.append(rec)
+                with open(state_path, "w") as sf:
+                    json.dump(records, sf, ensure_ascii=False, indent=2)
             flag = "  [judge 파싱 실패 — 집계 제외]" if rec["parse_failed"] else ""
             print(f"[batch] gen0={rec['gen0_total']} best={rec['best_total']} "
                   f"improvement={rec['improvement']} ({dt:.0f}s){flag}")
@@ -529,7 +562,9 @@ if __name__ == "__main__":
     ap.add_argument("--ablation", action="store_true",
                     help="영속 이력 ablation: evolve vs evolve-nohist 두 arm (A단계 전용)")
     ap.add_argument("--parallel", type=int, default=1,
-                    help="동시에 돌릴 문서 수 (기본 1=순차, A단계 전용). CLI 세션 rate limit에 주의")
+                    help="동시에 돌릴 문서(A단계) 또는 묶음(B단계, --bundle-size와 함께) 수. 기본 1=순차. CLI 세션 rate limit에 주의")
+    ap.add_argument("--bundle-size", type=int, default=None,
+                    help="B단계: 문서를 이 크기의 묶음 여러 개로 나눠 돌린다 (크기순 round-robin, 묶음이 표본 단위)")
     ap.add_argument("--stage", choices=["summary", "structure"], default="summary",
                     help="summary=A단계(문서별 요약), structure=B단계(폴더 구조)")
     ap.add_argument("--arms", default=None,
@@ -552,4 +587,5 @@ if __name__ == "__main__":
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)}B)")
     run_batch(files, args.runs, args.generations, args.n_qa,
               with_control=args.with_control, ablation=args.ablation,
-              parallel=args.parallel, stage=args.stage, arms=arm_list)
+              parallel=args.parallel, stage=args.stage, arms=arm_list,
+              bundle_size=args.bundle_size)
