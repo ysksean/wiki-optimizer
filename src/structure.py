@@ -24,24 +24,51 @@ import scoring
 
 # ---------- Organizer ----------
 
-def organize(docs, strategy):
+def _render_previous(previous):
+    """증분 조직용 — 이전 best 구조를 프롬프트에 넣을 형태로."""
+    parts = []
+    for f in previous.get("files", []):
+        srcs = ", ".join(f.get("sources") or [])
+        parts.append(f"--- 파일: {f.get('title', '')} (sources: {srcs}) ---\n{f.get('content', '')}")
+    return "\n\n".join(parts)
+
+
+def organize(docs, strategy, previous=None):
     """문서들(dict: name->text)을 분할 전략에 따라 구조로 조직한다.
 
-    반환: {"files": [{"title","content"}...], "index": [{"title","desc"}...]}
+    previous를 주면(증분 조직, evolve-incremental arm) 백지가 아니라 **그 구조를 전략에 맞게
+    고친다** — 잘 된 파일은 그대로 두고 필요한 부분만 분할·병합·보강한다. 매 세대 백지에서
+    재조직할 때 생기는 조직 분산과 요약 손실(content_lost)을 줄이려는 것이다.
+
+    반환: {"files": [{"title","content","sources"}...], "index": [{"title","desc"}...]}
     """
     joined = "\n\n".join(
         f"=== 문서: {name} ===\n{text}" for name, text in docs.items()
     )
-    prompt = (
-        "너는 지식베이스 구조 설계자다. 아래 원본 문서들을 '분할 전략'에 따라 "
-        "여러 개의 위키 파일로 재조직하라.\n"
-        f"[분할 전략]\n{strategy}\n\n"
+    common = (
         "각 파일은 제목(title), 내용(content), 출처(sources)를 가진다. content는 원본에서 "
         "관련 내용을 추려 간결히 정리한다. sources는 그 파일 내용의 근거가 된 원본 문서 이름 "
-        "목록이다 (위 '=== 문서: 이름 ===' 의 이름을 그대로). 파일 개수와 분할 방식은 전략을 따르라.\n"
+        "목록이다 (아래 '=== 문서: 이름 ===' 의 이름을 그대로). 파일 개수와 분할 방식은 전략을 따르라.\n"
         '출력은 JSON만: {"files":[{"title":"...","content":"...","sources":["문서이름",...]}]}  다른 텍스트 금지.\n\n'
-        f"{joined}"
     )
+    if previous and previous.get("files"):
+        prompt = (
+            "너는 지식베이스 구조 설계자다. 아래 '현재 구조'를 '분할 전략'에 맞게 **고쳐라**. "
+            "백지에서 다시 만들지 말고, 전략에 맞는 파일은 그대로 두고 필요한 파일만 분할·병합·보강하라. "
+            "빠진 내용은 아래 원본 문서에서 다시 가져와 채워라. 모든 원본 문서가 최소 한 파일의 sources에 "
+            "들어가야 한다.\n"
+            f"[분할 전략]\n{strategy}\n\n"
+            + common
+            + f"[현재 구조]\n{_render_previous(previous)}\n\n[원본 문서]\n{joined}"
+        )
+    else:
+        prompt = (
+            "너는 지식베이스 구조 설계자다. 아래 원본 문서들을 '분할 전략'에 따라 "
+            "여러 개의 위키 파일로 재조직하라.\n"
+            f"[분할 전략]\n{strategy}\n\n"
+            + common
+            + f"{joined}"
+        )
     out = llm.generate(prompt, num_predict=1500, temperature=0.3)
     struct = _parse_struct(out, docs)
     # 파싱 실패 시 1회 재시도, 그래도 실패하면 문서 자체를 파일로 두는 fallback

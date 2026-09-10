@@ -597,6 +597,7 @@
   .arm-control { background: var(--hover); color: var(--dim); }
   .arm-evolve-nohist { background: var(--warn-soft); color: var(--warn); }
   .arm-evolve-informed { background: var(--ok-soft); color: var(--ok); }
+  .arm-evolve-incremental { background: var(--ok-soft); color: var(--ok); }
   .prov { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border: 1px solid var(--line);
     border-radius: 99px; color: var(--dim); font: 500 var(--fs-caption) var(--font-mono); cursor: help; }
   .parse-failed-note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: var(--fs-secondary); }

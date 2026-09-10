@@ -67,8 +67,9 @@ def select_docs(n, raw_dir="data/raw"):
 
 
 KNOWN_ARMS = ("evolve", "evolve-wiki", "evolve-nohist", "control")
-# B단계 arm: evolve-informed는 Reflector에 근거 문단·실패 유형을 추가로 준 고정 Reflector
-STRUCTURE_ARMS = ("evolve", "evolve-informed", "control")
+# B단계 arm: evolve-informed는 Reflector에 근거 문단·실패 유형을 추가로 준 고정 Reflector,
+# evolve-incremental은 세대마다 백지 대신 best 구조를 고치는 Organizer
+STRUCTURE_ARMS = ("evolve", "evolve-informed", "evolve-incremental", "control")
 
 
 def resolve_arms(arms=None, with_control=False, ablation=False, stage="summary"):
@@ -213,6 +214,7 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
                     files=files, generations=generations, n_qa=n_qa,
                     out_dir=batch_dir, no_evolve=(arm == "control"),
                     informed=(arm == "evolve-informed"),
+                    incremental=(arm == "evolve-incremental"),
                     question_set=question_set,
                 )
             except Exception as e:  # 한 run 실패해도 배치는 계속
