@@ -120,7 +120,7 @@ hermes_call() { # $1=프롬프트 → stdout. 일회용 read-only worktree에서
 }
 
 claude_call() { # $1=프롬프트 → stdout. 읽기 도구만, MCP 없음
-  # Grokbot은 Opus 5 고정 — Executor(Fable 5)와 모델을 갈라 리뷰 독립성 확보 + 비용 절감
+  # Grokbot은 Opus 5 고정 — Executor(Fable 5.1, ~/.claude/settings.json model)와 모델을 갈라 리뷰 독립성 확보 + 비용 절감
   timeout 600 claude -p "$1" --model claude-opus-5 --allowedTools "Read,Glob,Grep" --max-turns 40 2>>"$WORK/stderr.log"
 }
 
