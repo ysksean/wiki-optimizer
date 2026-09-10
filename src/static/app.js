@@ -513,6 +513,7 @@ Object.assign(I18N.ko, {"choose_strategy": "이 요약 전략 사용", "apply_sc
 Object.assign(I18N.en, {"choose_strategy": "Use this summary strategy", "apply_scope": "Generate new summaries for selected source documents only. Export structure files from the result card.", "strategy_custom": "Enter or review the summary strategy", "btn_apply": "Summarize selected documents", "need_strategy": "Choose a strategy from a summary result or enter one.", "strategy_selected": "Selected strategy", "export_best": "Export best structure files", "export_path": "Folder for generated files", "export_safe": "Exports the highest-scoring structure. Existing files are preserved.", "no_matches": "No matching results", "reset_filters": "Reset filters", "connection_lost": "Server disconnected. Reconnecting automatically.", "compared_count": "Matched documents compared", "new_count": "New summaries", "after_all": "All generated documents average", "setup_tab": "Setup", "result_tab": "Results", "source_manual": "Entered manually", "audit_scope": "Audit covers the entire folder."});
 Object.assign(I18N.zh, {"choose_strategy": "使用此摘要策略", "apply_scope": "仅为选中的原始文档生成新摘要。结构文件请从结果卡片导出。", "strategy_custom": "输入或查看摘要策略", "btn_apply": "生成所选文档摘要", "need_strategy": "请从摘要结果选择策略或直接输入。", "strategy_selected": "所选策略", "export_best": "导出最佳结构文件", "export_path": "保存新文件的文件夹路径", "export_safe": "保存最高分结构，保留已有文件。", "no_matches": "没有匹配结果", "reset_filters": "重置筛选", "connection_lost": "服务器连接断开，正在自动重连。", "compared_count": "相同文档比较", "new_count": "新摘要", "after_all": "所有生成文档平均分", "setup_tab": "设置", "result_tab": "结果", "source_manual": "手动输入", "audit_scope": "诊断覆盖整个文件夹。"});
 
+for (const lang of Object.keys(UPDATE_I18N)) Object.assign(I18N[lang], UPDATE_I18N[lang]);
 let LANG = "ko";
 try { LANG = localStorage.getItem("wikiopt_lang") || "ko"; } catch (e) {}
 if (!I18N[LANG]) LANG = "ko";
@@ -569,6 +570,8 @@ function savePrefs() {
       dir: $("dir").value.trim(), backend: $("backend").value,
       gens: $("gens").value, nqa: $("nqa").value,
       mode: $("mode").value, srcState, propTask: $("propTask").value, view: curView,
+      updateRoot: $("updateRoot").value, updateSource: $("updateSource").value,
+      updateTask: $("updateTask").value, updateBackend: $("updateBackend").value,
     }));
   } catch (e) {}
 }
@@ -577,6 +580,10 @@ function loadPrefs() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem("wikiopt_prefs") || "{}"); } catch (e) {}
   if (p.dir) $("dir").value = p.dir;
+  $("updateRoot").value = p.updateRoot || p.dir || "";
+  $("updateSource").value = p.updateSource || "";
+  $("updateTask").value = p.updateTask || "";
+  $("updateBackend").value = p.updateBackend || p.backend || "claude";
   if (p.backend) $("backend").value = p.backend;
   if (p.gens) $("gens").value = p.gens;
   if (p.nqa) $("nqa").value = p.nqa;
@@ -631,6 +638,8 @@ function syncActionStates() {
   $("applyBtn").disabled = !ready || selected === 0 || !$("strategy").value.trim() || busy;
   $("go").disabled = selected === 0 || busy;
   $("propGo").disabled = busy;
+  $("updateGo").disabled = busy || incrementalUploading;
+  $("updateGo").textContent = t(busy && activeJobMode === "incremental" ? "action_running" : "update_prepare");
   $("mobileRun").disabled = selected === 0 || busy;
   const actions = [["go", "run", "run_exp"], ["auditBtn", "audit", "btn_audit"], ["applyBtn", "apply", "btn_apply"], ["propGo", "propose", "btn_propose"]];
   actions.forEach(([id, mode, label]) => {
@@ -1469,7 +1478,9 @@ async function renderJob(j) {
     if (d.error && !d.result && !d.runs?.length) body = `<div class="err">${esc(d.error)}</div>`;
     else {
       if (d.status === "error") body += `<div class="err runbox">${t("failed")}: ${esc(d.error)}</div>`;
-      if (j.mode === "audit" || j.mode === "apply") {
+      if (j.mode === "incremental") {
+        body += d.result ? incrementalView(d.result, j.id) : `<div class="runbox">${esc(t('update_questions'))}</div>`;
+      } else if (j.mode === "audit" || j.mode === "apply") {
         body += d.result
           ? (j.mode === "audit" ? auditView(d.result, d.status) : applyView(d.result, d.status))
           : `<div class="runbox" style="color:var(--dim)">${t("preparing_q")}</div>`;

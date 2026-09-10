@@ -1,79 +1,90 @@
 ---
 name: wiki-optimize
 description: >
-  Run and interpret wiki-optimizer experiments from chat: point at a wiki folder,
-  evolve summary strategies (stage A) or folder structures (stage B), judge whether
-  the improvement is real (held-out + control arm), and apply the best strategy.
-  Use when the user says "위키 최적화", "optimize my wiki", "audit my wiki",
-  "요약 전략 실험", "구조 실험 돌려", "실험 결과 해석해줘", "best 전략 적용해줘",
-  or asks whether their wiki summaries/structure are any good.
+  Design and improve source-grounded Markdown wikis with wiki-optimizer: translate
+  the user's work into questions, design pages and navigation, inspect knowledge
+  gaps, evaluate summary/structure experiments, and prepare verified document
+  additions. Use for "위키 설계", "위키 구조 잡아줘", "위키 최적화",
+  "optimize my wiki", or "이 자료로 위키 만들어줘". For simply asking an existing
+  wiki a question, use the user's normal wiki query workflow.
 ---
 
-# wiki-optimize — run, interpret, apply
+# wiki-optimize
 
-Drive this repo's experiment tooling from chat. Do not modify the code; use only
-the entry points below.
+Design the wiki around the work its reader needs to do. A useful result explains
+which page answers each important question, what original evidence supports it,
+how the reader finds it, and what happens when the source changes.
 
-## 0. Preconditions
+Default to the Karpathy-style workspace: preserve originals in `raw/`, maintain
+derived knowledge in `wiki/`, and enter through `wiki/index.md`. Adapt page
+boundaries, subfolders and links inside `wiki/` to the user's work. Keep an
+operational log separate from knowledge pages, respecting existing conventions.
+Honor an explicitly requested alternative layout; do not migrate an existing
+vault merely to match the default. See the path contract in the design workflow.
 
-- The backend is a logged-in CLI: `LLM_BACKEND=claude|codex` (default claude). No API keys.
-- Output language: `LLM_LANG=ko|en|zh` (default ko).
-- Never modify source documents. All artifacts go under `runs/` only.
-- If you don't know the user's wiki folder path, ask first (e.g. `~/dev/llm_wiki`).
+## Choose the requested outcome
 
-## 1. Running experiments
+| User needs | Read and use |
+|---|---|
+| A new wiki, task-specific structure, or redesign of an existing wiki | [Design workflow](references/design.md) |
+| Audit, A/B experiments, interpretation, or exporting an existing result | [Tool recipes and evidence rules](references/tools.md) |
+| Compare folder layouts and summaries for a user's workload | [Joint evaluation design](references/evaluation.md), then tool recipes for current limitations |
+| Add one new document to an existing `raw/` + `wiki/` workspace | The incremental-update section in [Tool recipes](references/tools.md) |
 
-**Interactive / small scale** — launch the web dashboard for the user:
+Read only the relevant reference. A request for a sketch does not require running
+an experiment; a request to build a wiki includes content and navigation, not
+just a proposed folder tree. Do not expand a design request into changing the
+optimizer's engine or configuring a scheduled watcher.
 
-```bash
-python3 src/web.py   # http://localhost:8765
-```
+## Establish context once
 
-**When statistical evidence is needed** — always batch with a control arm:
+- Reuse the conversation's purpose, source paths, target wiki and constraints.
+  Ask only for missing information that changes the design: who reads the wiki,
+  what they must accomplish, and where the source material is.
+- Inspect the existing wiki and its local instructions before proposing changes.
+  Preserve established page paths, links and curated content where practical.
+- Locate this repository from the skill's location; verify `src/evolve_proposal.py`
+  exists. Run recipes from the repo root. Use the user's source paths explicitly;
+  commands defaulting to `data/raw/` would evaluate the repository's sample data.
+- Use the selected logged-in CLI (`LLM_BACKEND=claude|codex`) and output language
+  (`LLM_LANG=ko|en|zh`). Keep the selected backend consistent between Python
+  recipes and CLI calls. Do not create API credentials for this workflow.
 
-```bash
-python3 src/batch.py --files <md files> --runs 2 --generations 3 --with-control
-```
+## Completion and evidence
 
-Quick single-document run: `python3 src/evolve.py <md file> --generations 3`
-Structure (stage B): `python3 src/evolve_structure.py --docs 3 --generations 2 --n-qa 4`
+For a design request, deliver the recommended structure, question-to-page routes,
+source evidence, unresolved gaps and the next implementation step. Save a reusable
+design artifact when the task calls for one. Clearly distinguish a sketch, a
+source-reviewed design, a scored proposal, a generated wiki and an applied update.
 
-Runs take minutes per document. Run in the background, poll
-`runs/**/progress.json`, and relay progress to the user.
+For a build request, populate grounded pages, create a navigable index, check
+links and exercise the agreed questions against the actual written pages. Keep
+unsupported facts as explicit gaps. Stage 0 creates stubs and cannot by itself
+complete a build request.
 
-## 2. Interpreting results — never read the numbers naively
+Treat scores according to what was actually measured:
 
-Read `runs/batch-*/summary.md` and `report.json`, then judge in this order:
+- Stage 0 scores source routing through a proposed skeleton, not finished page
+  contents. `grounded` means a source reference exists, not that every claim was
+  established. Read the supporting passage before accepting it as evidence.
+- A/B held-out scores participate in candidate selection; do not describe them as
+  an untouched final test. Show uncertainty, parsing failures and missing coverage.
+- A control comparison supports an improvement claim; a single run can still
+  yield a useful draft. Do not block ordinary design work on statistical testing.
+- Prioritize must-answer questions and preserving correct answers over shorter
+  text or a larger aggregate score. Identify regressions by question.
 
-1. **The net effect is the criterion**: evolution effect = mean evolve gain −
-   mean control gain. The evolve gain alone is biased upward (max of noisy
-   samples) and is not evidence.
-2. **Quote held-out scores only.** Train scores feed the reflector and are
-   overfit by construction.
-3. Verdict guide: net > +0.05 with a majority of improved runs → recommend
-   adoption / 0 to +0.05 → "increase runs/generations and re-check" /
-   ≤ 0 → say honestly that there is no effect under the current setup.
-4. Accuracy is quantized per question (6 questions → 0.167 steps) — never call
-   a difference smaller than one step an improvement.
+## Writes and follow-through
 
-Report to the user as "adopt or not + two lines of evidence", not a table dump.
+Keep experiments and review candidates in a fresh task-specific `runs/` directory
+unless the user chose another destination. Preserve original source documents.
+Generating new files in an authorized output directory can proceed directly.
 
-## 3. Applying the best strategy
+For replacing an existing wiki, prepare the exact candidate and diff first. Honor
+authorization already given for that replacement; otherwise obtain approval for
+that concrete change before applying it. Do not rerun generation between review
+and apply. Verify source and destination snapshots before replacing files.
 
-Read `best.strategy` (summary prompt) or `best.struct` (file layout) from report.json.
-
-- **Stage A apply**: summarize the target raw documents with the best strategy
-  into a user-chosen output folder (default `runs/apply-<date>/`), one
-  `<docname>.md` each. To overwrite existing wiki files, always show a diff and
-  get confirmation first.
-- **Stage B apply**: export `best.struct.files` (title/content) as files verbatim.
-- Append the strategy used to `runs/strategies.json` as
-  `{doc_type, strategy, score, date}` for reuse (try the stored strategy first
-  for same-type documents before re-evolving).
-
-## 4. Never do
-
-- Conclude "it improved" without a control arm
-- Adopt a strategy based on train scores
-- Overwrite the user's wiki without confirmation
-- Modify the experiment scripts (unless asked)
+Reuse the accepted design and question baseline on the next update. Explain any
+compatibility gap between a design's source layout and the incremental tool's
+`raw/` + `wiki/` requirement instead of inventing an automatic handoff.

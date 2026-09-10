@@ -40,6 +40,24 @@
   <section id="view-opt" class="view view-shell" data-mobile-panel="setup">
   <div class="mobile-workbench"><button id="panel-setup" type="button" aria-pressed="true" onclick="mobilePanel('setup')" data-i18n="setup_tab"></button><button id="panel-result" type="button" aria-pressed="false" onclick="mobilePanel('result')" data-i18n="result_tab"></button><button id="mobileRun" type="button" onclick="startRun()" data-i18n="run_exp" disabled></button></div>
   <div class="page-intro"><div><h2 data-i18n="opt_title"></h2><p data-i18n="opt_desc"></p><div class="live-status" id="liveStatus" aria-live="polite" hidden></div></div><div class="path-chip" id="pathChip"><code id="currentPath" data-i18n="path_not_set"></code><button type="button" onclick="focusFolder()" data-i18n="change_folder"></button></div></div>
+  <details class="card incremental-panel">
+    <summary data-i18n="update_title"></summary>
+    <p data-i18n="update_intro"></p>
+    <form id="updateForm" onsubmit="event.preventDefault(); startIncremental()">
+      <label for="updateRoot" data-i18n="update_root"></label>
+      <input id="updateRoot" type="text" required placeholder="~/dev/llm_wiki">
+      <label for="updateSource" data-i18n="update_source"></label>
+      <div class="folder-tools"><input id="updateSource" type="text" required placeholder="~/Downloads/new-document.md"><button type="button" class="ghost" onclick="document.getElementById('updateFile').click()" data-i18n="src_add_files"></button></div>
+      <input id="updateFile" type="file" accept=".md" hidden aria-label="Markdown" onchange="uploadIncremental(this.files)">
+      <label class="sr-only" for="updateFile" data-i18n="update_source"></label>
+      <label for="updateTask" data-i18n="update_task"></label>
+      <textarea id="updateTask" rows="2"></textarea>
+      <label for="updateBackend" data-i18n="backend"></label>
+      <select id="updateBackend"><option value="claude">Claude</option><option value="codex">Codex</option></select>
+      <button id="updateGo" type="submit" data-i18n="update_prepare"></button>
+      <span id="updateMessage" role="status" aria-live="polite" class="err view-message"></span>
+    </form>
+  </details>
   <div class="workbench-grid">
   <div class="setup-rail">
     <div class="rail-head"><h2 data-i18n="rail_title"></h2><p data-i18n="rail_desc"></p></div>
@@ -127,6 +145,7 @@
 <nav class="mobile-nav" data-i18n-aria-label="mobile_menu"><button type="button" id="mobile-opt" class="on" aria-current="page" onclick="showView('opt')"><span class="ico" aria-hidden="true">▤</span><span data-i18n="nav_opt"></span></button><button type="button" id="mobile-propose" onclick="showView('propose')"><span class="ico" aria-hidden="true">✦</span><span data-i18n="nav_propose"></span></button><button type="button" id="mobile-runs" onclick="showView('runs')"><span class="ico" aria-hidden="true">≡</span><span data-i18n="nav_runs"></span></button></nav>
 <div class="toast-region" id="toastRegion" role="status" aria-live="polite" aria-atomic="true"></div>
 
+<script src="/static/incremental.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

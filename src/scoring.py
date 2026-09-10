@@ -125,7 +125,7 @@ def _judge_prompt(question_set, predictions):
     )
 
 
-def judge_all(question_set, predictions, retries=JUDGE_RETRIES):
+def judge_all(question_set, predictions, retries=JUDGE_RETRIES, text_only=False):
     """모든 (정답 vs 예측)을 한 번의 호출로 판정한다 (배치).
 
     반환: (scores, parse_failed).
@@ -136,7 +136,8 @@ def judge_all(question_set, predictions, retries=JUDGE_RETRIES):
     n = len(question_set)
     prompt = _judge_prompt(question_set, predictions)
     for attempt in range(retries + 1):
-        out = llm.generate(prompt, num_predict=60, temperature=0.0)
+        options = {"text_only": True} if text_only else {}
+        out = llm.generate(prompt, num_predict=60, temperature=0.0, **options)
         scores = parse_judgement(out, n)
         if scores is not None:
             return scores, False
