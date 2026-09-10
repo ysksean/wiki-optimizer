@@ -1,7 +1,7 @@
 # 에이전트 Reflector — B 구조 최적화의 "고치는 쪽"을 도구 기반 에이전트로
 
 날짜: 2026-09-04
-상태: 설계 검토 완료 — critic 반박 13건 중 3건 설계 반영, 9건 문서 보강, 1건 기각 (하단 '반박과 반영')
+상태: 1~3단계 완료. 1차 실험 결과(`2026-09-10-agent-reflector-result-1.md`)로 3.5단계(측정 신뢰성) 추가, 에이전트 인프라(4~6단계)는 그 결과를 본 뒤 결정
 선행 논의: 2026-09-04 세션 — "스킬 기반 말고 에이전트로 만드는 건 어때"
 
 ## 한 줄 요약
@@ -303,6 +303,15 @@ Reflector는 시도당 여기에 organize 1회 + reflect 1회. 에이전트는 �
    `ValueError`, critic #4). 스텁 테스트.
 3. **1차 실험** — `control/evolve/evolve-informed`, 묶음 3 × run 2. 결과를
    `docs/superpowers/specs/…-agent-reflector-result.md`에 기록. **여기서 멈출 수 있다.**
+   → **2026-09-10 완료.** informed는 evolve와 구분 안 됨(p=0.79)이고, 더 중요하게 **어느 진화
+   arm도 대조군(seed 재샘플링 최고값)을 못 이긴다**(best 0.90/0.91/0.89). gen0 노이즈 0.26,
+   held-out 3문항 양자화, 파일 수 폭주. 결과 문서 참조.
+3.5. **측정 신뢰성** (1차 실험 결과로 추가) — (a) B단계 1차 지표를 절대 best held-out으로
+   (PR: batch 절대 점수 비교 + gen0 노이즈 경고), (b) **증분 조직 arm `evolve-incremental`**:
+   세대 g+1의 Organizer가 세대 g best 구조를 받아 규칙대로 고친다 — 에이전트 설계의
+   "초기안 위의 수정"을 고정 파이프라인에 먼저 이식, (c) 질문 12(held-out 5), 조직
+   temperature 0. 2차 실험 `control/evolve/evolve-incremental`로 판정. incremental이
+   control을 유의하게 이길 때만 4단계로 간다.
 4. **환경 + 도구 서버** — workspace ↔ struct 변환(skeleton 포맷 파서), `evaluate`(기대 답 비노출,
    frontmatter 오류는 is_error), 스냅샷, stdio MCP 서버. 스텁 테스트.
 5. **에이전트 러너** — `src/agent_structure.py`: 초기안 → `timeout` + `claude -p --restricted
