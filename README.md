@@ -61,9 +61,21 @@ Two experimental safeguards on top:
 python3 src/web.py            # → http://localhost:8765
 ```
 
-Everything happens in the dashboard: point it at a wiki folder, pick documents,
-choose Stage A or B and the backend (claude / codex), run, and watch scores,
-strategies, and structures evolve per generation.
+Start with one folder: drop it, use the folder picker, or enter a local path.
+The landing screen streams the actual file inventory, then offers structure
+optimization and, for folders containing `raw/` and `wiki/`, an existing-wiki audit.
+Inspection is local and does not call an LLM. Folder uploads preserve relative paths;
+inspection supports up to 400 Markdown documents and 20 MB (uploads: 2 MB per file).
+README.md, hidden directories, and symlinked files/directories are skipped.
+
+The glassbox uses server-sent events to show question generation, organization,
+evaluation, and reflection as they happen. Expand results to inspect questions,
+scores, strategies, and proposed files. Structure jobs can stop after the current
+stage; reconnecting or reloading resumes observation of the same job. These are
+execution events and saved artifacts, not streamed model reasoning or token output.
+The new landing flow uses Korean copy; advanced screens retain Korean/English/Chinese.
+Advanced work still exposes document selection, Stage A/B, and detailed settings.
+The landing screen respects reduced-motion preferences and supports light/dark themes.
 
 The dashboard keeps the two output actions explicit:
 

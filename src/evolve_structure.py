@@ -81,7 +81,7 @@ def reflect(strategy, result):
 
 
 def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
-                     no_evolve=False, question_set=None):
+                     no_evolve=False, question_set=None, progress_cb=None, cancel_event=None):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장)."""
     docs = load_docs(n_docs, files=files)
     total_raw = sum(len(t) for t in docs.values())
@@ -90,13 +90,23 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     run_dir = os.path.join(out_dir, f"structure-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
+    def notify(stage, message, detail=""):
+        if progress_cb:
+            progress_cb({"stage": stage, "message": message, "detail": detail})
+
+    def cancelled():
+        return cancel_event is not None and cancel_event.is_set()
+
     print(f"[setup] 문서 {len(docs)}개, 총 {total_raw} chars: {list(docs.keys())}  arm={arm}")
     if question_set is None:
+        notify("questions", "원본에서 평가 질문을 만들고 있어요", f"문서 {len(docs)}개")
         print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
         question_set = structure.build_cross_question_set(docs, n=n_qa)
     if not question_set:
         print("[error] 질문 세트 실패. 중단.")
         return
+    notify("questions_ready", f"평가 질문 {len(question_set)}개를 준비했어요",
+           "\n".join(qa["q"] for qa in question_set))
     # train/held-out 분리 — A 모드(evolve.split_questions)와 같은 규칙, 시드는 문서 묶음 이름.
     # reflect는 train 판정만 보고, best 판정과 리포트 점수는 held-out으로만 낸다.
     bundle = "+".join(docs.keys())
@@ -120,8 +130,15 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     parse_failed_gens = []
 
     for g in range(generations):
+        if cancelled():
+            break
         t = time.time()
+        notify("organizing", f"{g + 1}번째 파일 구조를 만들고 있어요", strategy)
         struct = structure.organize(docs, strategy)
+        notify("evaluating", f"{g + 1}번째 구조로 질문에 답하고 있어요",
+               " · ".join(f["title"] for f in struct.get("files", [])))
+        if cancelled():
+            break
         # held-out은 항상, train은 reflect가 필요한 arm(evolve)에서만 — control은 채점 절약.
         # 질문이 적어 분리를 포기한 경우(degenerate) 한 번만 채점해 둘 다로 쓴다.
         if no_evolve or degenerate:
@@ -181,7 +198,12 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
                 "history": history,
             }, pf, ensure_ascii=False)
 
-        if not no_evolve and g < generations - 1 and best["strategy"] is not None:
+        notify("evaluated", f"{g + 1}번째 구조 평가를 마쳤어요",
+               "판정 파싱 실패 — 점수 제외" if parse_failed else
+               f"정확도 {result['accuracy']} · 평균 읽은 글자 {result['avg_read']}")
+
+        if not cancelled() and not no_evolve and g < generations - 1 and best["strategy"] is not None:
+            notify("reflecting", "평가 결과로 다음 전략을 개선하고 있어요")
             # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도.
             # reflect는 train 판정만 본다 — held-out 실패를 보여주면 채택 점수가 오염된다.
             strategy = reflect(best["strategy"], best["train_result"] or best["result"])
@@ -208,6 +230,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "parse_failed_generations": parse_failed_gens,
         "best": best,
         "history": history,
+        "cancelled": cancelled(),
     }
     with open(os.path.join(run_dir, "report.json"), "w") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)

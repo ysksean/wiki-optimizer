@@ -4,6 +4,9 @@ const open_ = new Set();   // 펼쳐둔 job id
 // ---------- 뷰 전환 (좌측 네비) ----------
 let curView = "opt";
 function showView(v, save = true) {
+  if (!["opt", "propose", "runs"].includes(v)) v = "opt";
+  document.body.classList.remove("home-active");
+  if ($("view-home")) $("view-home").hidden = true;
   curView = v;
   for (const k of ["opt", "propose", "runs"]) {
     $("view-" + k).hidden = k !== v;
@@ -1184,7 +1187,7 @@ function summaryRun(run, jobId) {
 }
 // ---------- B 구조 결과 카드 — "N차 시도" · 분할 규칙 · 문서→파일 매핑 다이어그램 ----------
 const selectedAttempt = {};   // runKey -> generation (기본은 best)
-function selectAttempt(key, gen) { selectedAttempt[key] = gen; poll(); }
+function selectAttempt(key, gen) { selectedAttempt[key] = gen; window.refreshHomeResult?.(); poll(); }
 // 파일 제목 "주제: 부제" → 파일명(01-주제.md)과 부제
 function structFileName(title, j) {
   const i = title.indexOf(":");
@@ -1477,9 +1480,9 @@ async function renderJob(j) {
     }
     inner = `<div class="job-body" id="job-${j.id}-body">${body}</div>`;
   }
-  // summary만 실행 중 취소 지점이 있다 — 다른 모드는 대기 중(queued)에만 중지 가능
+  // 요약/구조는 단계 경계에서 중단하며, 나머지 모드는 대기 중에만 중지 가능.
   const stoppable = j.status === "queued" ||
-    (j.status === "running" && j.mode === "summary");
+    (j.status === "running" && ["summary", "structure"].includes(j.mode));
   const stopUi = !stoppable ? ""
     : j.cancel_requested
       ? `<span class="job-stop">${t("stopping")}</span>`
