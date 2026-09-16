@@ -2,6 +2,24 @@
      Design tokens — 라이트가 기본, 다크는 시스템 설정 또는 data-theme으로.
      토큰 이름은 기존 규칙(--bg, --card, --acc …)을 그대로 유지한다.
      ========================================================================== */
+  .incremental-panel { margin-bottom: 24px; padding: 20px; }
+  .incremental-panel > summary { font-size: 18px; font-weight: 650; cursor: pointer; }
+  .incremental-panel form { display: grid; gap: 10px; max-width: 760px; }
+  .incremental-panel label { margin-top: 8px; }
+  .incremental-panel p, .incremental-result p { line-height: 1.7; }
+  .incremental-panel input, .incremental-panel textarea { width: 100%; min-width: 0; }
+  .incremental-panel select, .incremental-panel button[type=submit] { width: fit-content; }
+  .incremental-result details { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .incremental-result summary { cursor: pointer; overflow-wrap: anywhere; }
+  .incremental-result code, .incremental-result blockquote { overflow-wrap: anywhere; }
+  .incremental-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px; }
+  .incremental-answers > div { min-width: 0; overflow-wrap: anywhere; }
+  .incremental-answers small { color: var(--dim); font-size: 14px; }
+  .incremental-check.regression { border-left: 3px solid var(--bad); padding-left: 12px; }
+  .incremental-diff { overflow: auto; max-height: 480px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+  .incremental-diff .added { color: var(--ok); background: var(--ok-soft); }
+  .incremental-diff .removed { color: var(--bad); background: var(--bad-soft); }
+  @media (max-width: 680px) { .incremental-answers { grid-template-columns: 1fr; } }
   :root {
     color-scheme: light;
     --font-sans: "Pretendard Variable", Pretendard, Inter, -apple-system, BlinkMacSystemFont,

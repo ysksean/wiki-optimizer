@@ -36,8 +36,9 @@ import evidence
 
 
 SEED_STRATEGY = (
-    "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, "
-    "각 파일은 하나의 주제에 집중하게 하라."
+    "raw/ 원본을 보존하고 wiki/에 둘 지식 페이지를 질문과 주제에 맞게 구성하라. "
+    "관련된 개념은 한 파일에 모으고, 각 파일은 하나의 질문 축에 집중하게 하라. "
+    "페이지 개수는 고정하지 말고 자료와 사용 목적에 필요한 만큼 정하라."
 )
 
 
@@ -94,8 +95,11 @@ def reflect(strategy, result, enriched=None, warnings=None):
 
 
 def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
-                     no_evolve=False, question_set=None, informed=False, incremental=False):
+                     no_evolve=False, question_set=None, informed=False, incremental=False,
+                     progress_cb=None, cancel_event=None):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
+
+    progress_cb(stage, message, detail) / cancel_event: 대시보드 글래스박스 스트리밍과 단계 경계 중단.
 
     informed=True(evolve-informed arm): Reflector에 근거 문단·실패 유형·구조 결함을
     추가로 준다. 근거 탐색 자체는 결정론이라 모든 arm에서 계산해 history에 남긴다 —
@@ -110,13 +114,23 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     run_dir = os.path.join(out_dir, f"structure-{arm}-{stamp}")
     os.makedirs(run_dir, exist_ok=True)
 
+    def notify(stage, message, detail=""):
+        if progress_cb:
+            progress_cb({"stage": stage, "message": message, "detail": detail})
+
+    def cancelled():
+        return cancel_event is not None and cancel_event.is_set()
+
     print(f"[setup] 문서 {len(docs)}개, 총 {total_raw} chars: {list(docs.keys())}  arm={arm}")
     if question_set is None:
+        notify("questions", "원본에서 평가 질문을 만들고 있어요", f"문서 {len(docs)}개")
         print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
         question_set = structure.build_cross_question_set(docs, n=n_qa)
     if not question_set:
         print("[error] 질문 세트 실패. 중단.")
         return
+    notify("questions_ready", f"평가 질문 {len(question_set)}개를 준비했어요",
+           "\n".join(qa["q"] for qa in question_set))
     # train/held-out 분리 — A 모드(evolve.split_questions)와 같은 규칙, 시드는 문서 묶음 이름.
     # reflect는 train 판정만 보고, best 판정과 리포트 점수는 held-out으로만 낸다.
     bundle = "+".join(docs.keys())
@@ -140,10 +154,17 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     parse_failed_gens = []
 
     for g in range(generations):
+        if cancelled():
+            break
         t = time.time()
+        notify("organizing", f"{g + 1}번째 파일 구조를 만들고 있어요", strategy)
         # 증분 조직: 첫 세대는 백지, 이후는 지금까지의 best 구조 위에서 고친다
         previous = best["struct"] if (incremental and best["struct"]) else None
         struct = structure.organize(docs, strategy, previous=previous) if previous else structure.organize(docs, strategy)
+        notify("evaluating", f"{g + 1}번째 구조로 질문에 답하고 있어요",
+               " · ".join(f["title"] for f in struct.get("files", [])))
+        if cancelled():
+            break
         # held-out은 항상, train은 reflect가 필요한 arm(evolve)에서만 — control은 채점 절약.
         # 질문이 적어 분리를 포기한 경우(degenerate) 한 번만 채점해 둘 다로 쓴다.
         if no_evolve or degenerate:
@@ -213,7 +234,12 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
                 "history": history,
             }, pf, ensure_ascii=False)
 
-        if not no_evolve and g < generations - 1 and best["strategy"] is not None:
+        notify("evaluated", f"{g + 1}번째 구조 평가를 마쳤어요",
+               "판정 파싱 실패 — 점수 제외" if parse_failed else
+               f"정확도 {result['accuracy']} · 평균 읽은 글자 {result['avg_read']}")
+
+        if not cancelled() and not no_evolve and g < generations - 1 and best["strategy"] is not None:
+            notify("reflecting", "평가 결과로 다음 전략을 개선하고 있어요")
             # 유효한 best가 없으면(전 세대 판정 실패) 현재 전략을 그대로 재시도.
             # reflect는 train 판정만 본다 — held-out 실패를 보여주면 채택 점수가 오염된다.
             train_result = best["train_result"] or best["result"]
@@ -245,6 +271,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "parse_failed_generations": parse_failed_gens,
         "best": best,
         "history": history,
+        "cancelled": cancelled(),
     }
     with open(os.path.join(run_dir, "report.json"), "w") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)

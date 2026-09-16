@@ -46,6 +46,7 @@ def main():
                 errors = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(f'http://127.0.0.1:{srv.server_port}')
+                page.get_by_role('button', name='고급 작업', exact=True).click()
                 page.locator('#nav-propose').click()
                 form = page.locator('#proposeTimeline .export-form')
                 form.wait_for()

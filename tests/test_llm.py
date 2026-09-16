@@ -26,6 +26,17 @@ def test_generate_returns_output(monkeypatch):
     assert llm.generate("p") == "응답"
 
 
+def test_text_only_disables_builtin_tools_mcp_and_skills(monkeypatch):
+    calls = []
+    monkeypatch.setattr(llm.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or _proc("{}"))
+    assert llm.generate("p", text_only=True) == "{}"
+    cmd = calls[0]
+    assert cmd[cmd.index("--tools") + 1] == ""
+    assert "--strict-mcp-config" in cmd
+    assert cmd[cmd.index("--mcp-config") + 1] == '{"mcpServers":{}}'
+    assert "--disable-slash-commands" in cmd
+
+
 def test_missing_cli_fails_immediately_without_retry(monkeypatch):
     monkeypatch.setattr(llm.shutil, "which", lambda cmd: None)
     calls = []

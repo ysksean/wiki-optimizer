@@ -43,6 +43,7 @@ def generate(
     think=False,
     timeout=300,
     retries=2,
+    text_only=False,
 ):
     """프롬프트를 보내고 응답 텍스트를 반환한다.
 
@@ -62,6 +63,8 @@ def generate(
         try:
             if BACKEND == "codex":
                 out = _generate_codex(prompt, timeout=timeout)
+            elif text_only:
+                out = _generate_claude(prompt, timeout=timeout, text_only=True)
             else:
                 out = _generate_claude(prompt, timeout=timeout)
             _record_stat(prompt, out, time.time() - t0, attempt, ok=True)
@@ -105,9 +108,13 @@ def _prompt_kind(prompt):
     return "other"
 
 
-def _generate_claude(prompt, timeout=300):
+def _generate_claude(prompt, timeout=300, text_only=False):
+    cmd = ["claude", "-p", "--model", CLAUDE_MODEL]
+    if text_only:
+        cmd += ["--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+                "--disable-slash-commands"]
     proc = subprocess.run(
-        ["claude", "-p", "--model", CLAUDE_MODEL],
+        cmd,
         input=prompt,
         capture_output=True,
         text=True,

@@ -46,7 +46,12 @@ def organize(docs, strategy, previous=None):
     joined = "\n\n".join(
         f"=== 문서: {name} ===\n{text}" for name, text in docs.items()
     )
+    # 기본 레이아웃(Karpathy LLM Wiki): raw/ 원본 보존 + wiki/ 파생 지식 — 두 프롬프트 변형에 공통
     common = (
+        "기본은 Karpathy LLM Wiki의 raw/ 원본 보존 + wiki/ 파생 지식 구조다. "
+        "여기서 생성하는 files는 wiki/ 내부의 지식 페이지이며 원본, 운영 로그, "
+        "탐색 전용 인덱스는 포함하지 않는다. 실제 인덱스는 후속 단계에서 만든다. "
+        "명시적인 다른 레이아웃 요구가 있으면 그 요구를 우선한다.\n"
         "각 파일은 제목(title), 내용(content), 출처(sources)를 가진다. content는 원본에서 "
         "관련 내용을 추려 간결히 정리한다. sources는 그 파일 내용의 근거가 된 원본 문서 이름 "
         "목록이다 (아래 '=== 문서: 이름 ===' 의 이름을 그대로). 파일 개수와 분할 방식은 전략을 따르라.\n"

@@ -61,9 +61,21 @@ Two experimental safeguards on top:
 python3 src/web.py            # → http://localhost:8765
 ```
 
-Everything happens in the dashboard: point it at a wiki folder, pick documents,
-choose Stage A or B and the backend (claude / codex), run, and watch scores,
-strategies, and structures evolve per generation.
+Start with one folder: drop it, use the folder picker, or enter a local path.
+The landing screen streams the actual file inventory, then offers structure
+optimization and, for folders containing `raw/` and `wiki/`, an existing-wiki audit.
+Inspection is local and does not call an LLM. Folder uploads preserve relative paths;
+inspection supports up to 400 Markdown documents and 20 MB (uploads: 2 MB per file).
+README.md, hidden directories, and symlinked files/directories are skipped.
+
+The glassbox uses server-sent events to show question generation, organization,
+evaluation, and reflection as they happen. Expand results to inspect questions,
+scores, strategies, and proposed files. Structure jobs can stop after the current
+stage; reconnecting or reloading resumes observation of the same job. These are
+execution events and saved artifacts, not streamed model reasoning or token output.
+The new landing flow uses Korean copy; advanced screens retain Korean/English/Chinese.
+Advanced work still exposes document selection, Stage A/B, and detailed settings.
+The landing screen respects reduced-motion preferences and supports light/dark themes.
 
 The dashboard keeps the two output actions explicit:
 
@@ -93,6 +105,62 @@ generation) instead of the flat strategy history, testing whether the
 ```bash
 python3 src/batch.py --arms evolve,evolve-wiki,control --docs 5 --runs 2
 ```
+
+## Add one document and update an existing wiki
+
+Open **새 문서로 위키 갱신 / Update wiki with a new document** on the dashboard.
+Choose a wiki root containing `raw/` and `wiki/`, then enter or upload one new
+Markdown source. Optionally describe what you use the wiki for.
+
+The update flow:
+
+1. Reuses questions from previous accepted updates and generates questions for
+   new sources. Each generated question must cite a passage present in the raw source.
+2. Selects up to five affected pages from the wiki index and proposes changes to
+   those pages only. If none match, it creates a page under `wiki/updates/`.
+3. Evaluates the existing wiki and the candidate with the same old and new
+   questions. The page writer never sees the evaluation questions or their answers;
+   this is one candidate and one comparison, with no score-driven retry loop.
+4. Shows affected-page reasons, file diffs, expected answers, source evidence,
+   answers before/after, and the body/index characters read.
+5. Enables **Apply verified update** only when previously correct old questions
+   do not regress, all new questions pass, and the writer reports no source conflicts.
+
+Preparation writes only to the run directory. Applying copies the source into
+`raw/`, updates the proposed pages, and persists the question suite in
+`.wiki-optimizer/questions.json`. The next addition starts from that state.
+Original versions are saved under the run's `backup/`; **Undo this update** restores
+them, removes files created by that update, and restores the previous question suite.
+Apply and undo reject changes to any raw/wiki file or question baseline since
+verification/application, so a later edit or another update is never silently replaced.
+
+CLI equivalents (no extra runtime dependencies):
+
+```bash
+python3 src/incremental.py --wiki ~/dev/llm_wiki --source ~/Downloads/new.md \
+  --out runs/update-001 --task "Questions I need this wiki to answer" --backend claude
+python3 src/incremental.py --out runs/update-001 --apply
+python3 src/incremental.py --out runs/update-001 --undo
+```
+
+Use a fresh `--out` directory for each preparation. Read `report.json` and
+`candidate/wiki/` there before applying. The new document can already be in `raw/`
+if it has not been incorporated by this flow; a different file at the import
+destination is a conflict. Existing incorporated sources cannot be replaced yet.
+
+This first version handles small local Markdown wikis: at most 400 files and
+240,000 characters per raw/wiki tree, and a 60,000-character incoming document.
+It uses sampled LLM judgments, not exhaustive knowledge-preservation proofs.
+Claude calls for this flow disable built-in tools, MCP servers and skills;
+Codex uses the existing read-only CLI sandbox.
+Question evidence is checked for presence in the raw text, not independently
+fact-checked. Impact selection uses a 600-character excerpt per page; reported
+conflicts and non-regression checks cannot guarantee that all omissions are caught.
+There is no file watcher or automatic scheduling. Ordinary write failures roll
+back touched files. A process crash can leave `.wiki-optimizer/pending.json`;
+further apply/undo operations stop until the recorded transaction is recovered
+using its `report.json` mutation list and `backup/` originals. Multi-file writes
+are not atomic across a process crash.
 
 ## Requirements
 
