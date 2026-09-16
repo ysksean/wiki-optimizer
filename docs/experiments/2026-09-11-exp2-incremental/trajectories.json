@@ -1,0 +1,1305 @@
+[
+ {
+  "run_dir": "structure-control-20260910-211602",
+  "arm": "control",
+  "docs": [
+   "harness-engineering-concept",
+   "claude-code-workflow",
+   "claude-code-agent-teams",
+   "aipmo-1.5-design-judgments-2026-06",
+   "llm-judge-scoring-principles",
+   "reward-model-rl",
+   "alignment-rlhf-constitutional-ai"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.389,
+    "heldout_acc": 0.4,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.762,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.751,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": [
+     "문서 'reward-model-rl'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'alignment-rlhf-constitutional-ai'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "파일 'LLM 모델 학습과 정렬 — RL부터 Constitutional AI까지'에 sources가 없음 — 어느 원본에서 왔는지 알 수 없다"
+    ]
+   },
+   {
+    "generation": 3,
+    "heldout": 0.584,
+    "heldout_acc": 0.6,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 1
+ },
+ {
+  "run_dir": "structure-control-20260910-220622",
+  "arm": "control",
+  "docs": [
+   "harness-engineering-concept",
+   "claude-code-workflow",
+   "claude-code-agent-teams",
+   "aipmo-1.5-design-judgments-2026-06",
+   "llm-judge-scoring-principles",
+   "reward-model-rl",
+   "alignment-rlhf-constitutional-ai"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.947,
+    "heldout_acc": 1.0,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.937,
+    "heldout_acc": 1.0,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.756,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.576,
+    "heldout_acc": 0.6,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss",
+     "routing_miss"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-control-20260910-225514",
+  "arm": "control",
+  "docs": [
+   "karpathy-vibe-to-agentic",
+   "agentic-engineering-pillars",
+   "claude-code-basics",
+   "redis-be-ai-realtime-communication",
+   "llm-deterministic-post-gates",
+   "wikiskill-persistent-knowledge-skill-evolution",
+   "pii-model-design-session-2026-06"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.574,
+    "heldout_acc": 0.6,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.745,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.944,
+    "heldout_acc": 1.0,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.934,
+    "heldout_acc": 1.0,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": [
+     "문서 'pii-model-design-session-2026-06'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "파일 'PII 모델 개발의 실전 사례 — 탐지·마스킹·복원 통합 시스템'에 sources가 없음 — 어느 원본에서 왔는지 알 수 없다"
+    ]
+   }
+  ],
+  "best_generation": 2
+ },
+ {
+  "run_dir": "structure-control-20260910-233431",
+  "arm": "control",
+  "docs": [
+   "karpathy-vibe-to-agentic",
+   "agentic-engineering-pillars",
+   "claude-code-basics",
+   "redis-be-ai-realtime-communication",
+   "llm-deterministic-post-gates",
+   "wikiskill-persistent-knowledge-skill-evolution",
+   "pii-model-design-session-2026-06"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.771,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.559,
+    "heldout_acc": 0.6,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.763,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.384,
+    "heldout_acc": 0.4,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-control-20260911-002027",
+  "arm": "control",
+  "docs": [
+   "agentic-engineering-5-concepts",
+   "claude-md-guide",
+   "transformer-architecture",
+   "event-rescoring-idempotency-cache",
+   "scoring-rag-reference-free-eval",
+   "self-evolving-persistent-history-effect",
+   "karpathy-llm-wiki-pattern"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.551,
+    "heldout_acc": 0.6,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.722,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.394,
+    "heldout_acc": 0.4,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.966,
+    "heldout_acc": 1.0,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": []
+   }
+  ],
+  "best_generation": 3
+ },
+ {
+  "run_dir": "structure-control-20260911-010749",
+  "arm": "control",
+  "docs": [
+   "agentic-engineering-5-concepts",
+   "claude-md-guide",
+   "transformer-architecture",
+   "event-rescoring-idempotency-cache",
+   "scoring-rag-reference-free-eval",
+   "self-evolving-persistent-history-effect",
+   "karpathy-llm-wiki-pattern"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.905,
+    "heldout_acc": 1.0,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.371,
+    "heldout_acc": 0.4,
+    "train": null,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.764,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.735,
+    "heldout_acc": 0.8,
+    "train": null,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-evolve-20260910-212603",
+  "arm": "evolve",
+  "docs": [
+   "harness-engineering-concept",
+   "claude-code-workflow",
+   "claude-code-agent-teams",
+   "aipmo-1.5-design-judgments-2026-06",
+   "llm-judge-scoring-principles",
+   "reward-model-rl",
+   "alignment-rlhf-constitutional-ai"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.766,
+    "heldout_acc": 0.8,
+    "train": 0.801,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.581,
+    "heldout_acc": 0.6,
+    "train": 0.831,
+    "n_files": 9,
+    "strategy": "기초 개념층(Constitutional AI·Alignment·LLM 한계)을 먼저 정의하는 독립 파일로 분리하고, 아키텍처 선택과 비교(Sub-Agent↔Agent Teams·Harness 패턴)는 '구조별 의사결정' 파일로 통합한 뒤, LLM Judge 구현 원칙('침묵 ≠ 부정'·결정론 보존·JSON 견고성)을 섹션 헤더에 명시하여 검색 신호도 강화하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.556,
+    "heldout_acc": 0.6,
+    "train": 0.663,
+    "n_files": 5,
+    "strategy": "LLM Judge 파일에 판정 원칙(침묵 구분·결정론 보존)과 Constitutional AI 기초를 한곳에 모아 정렬하고, Agent Architecture를 별도 파일로 신설하여 Sub-Agent·Team·비교를 전담하게 하며, LLM Training은 Alignment 방법론(RLHF→Constitutional AI)에 집중하고, Harness는 구현 기초만 남겨 각 파일이 하나의 정보 흐름을 완전히 담도록 한다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.379,
+    "heldout_acc": 0.4,
+    "train": 0.522,
+    "n_files": 8,
+    "strategy": "LLM Judge 원칙들(침묵·결정론·프롬프트)을 각각 독립 섹션으로 명확히 구분하고, Agent 설계 패턴(Sub-Agent/Teams/구성)을 하나의 통합 파일로 옮기며, Training & Alignment를 Constitutional AI·RLHF·Hallucination 해결책으로 계층 분할하되, 각 파일마다 \"이 파일만으로 이 질문에 답할 수 있는가?\"를 검증하여 피의존성을 최소화하라.",
+    "failure_types": [
+     "content_lost",
+     "doc_dropped",
+     "doc_dropped"
+    ],
+    "warnings": [
+     "문서 'harness-engineering-concept'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'claude-code-workflow'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'aipmo-1.5-design-judgments-2026-06'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-evolve-20260910-222049",
+  "arm": "evolve",
+  "docs": [
+   "harness-engineering-concept",
+   "claude-code-workflow",
+   "claude-code-agent-teams",
+   "aipmo-1.5-design-judgments-2026-06",
+   "llm-judge-scoring-principles",
+   "reward-model-rl",
+   "alignment-rlhf-constitutional-ai"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.56,
+    "heldout_acc": 0.6,
+    "train": 0.67,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.76,
+    "heldout_acc": 0.8,
+    "train": 0.808,
+    "n_files": 8,
+    "strategy": "에이전트 개념 정의(Agent vs Sub-Agent vs Teams의 차이·선택 기준)를 별도 파일로 분리하고, LLM 채점의 실전 원칙(평가 기준·침묵≠부정·JSON 파싱 견고성)을 독립적인 파일로 추출하여, 에이전트 사용사례(병렬검토·협업 시나리오)와 LLM 학습기법(RLHF·Constitutional AI 등)과 구분하면, 답못한 질문은 작은 개념 파일에서 직접 찾고, 많이읽는 질문도 관련없는 내용을 스킵해 효율이 높아진다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.765,
+    "heldout_acc": 0.8,
+    "train": 0.936,
+    "n_files": 7,
+    "strategy": "에이전트 개념과 LLM 채점 원칙은 유지하되, \"LLM 학습 기법\" 파일에 각 기법의 역사적 동기(원본 LLM의 구체적 문제)를 \"배경\" 섹션으로 추가하고, 범위가 넓은 \"아키텍처 설계 판단\" 파일을 \"에이전트·MCP 선택 기준\"(일반 이론)과 \"도메인별 사용사례\"(입찰·계약·감시 등 구체 예시)로 분리하면, 기법의 \"왜\"는 작은 배경 섹션에서 정확히 찾고, 구체 사례는 도메인 파일에서 직접 매칭되어 스캔 글자는 줄고 정확도는 올라간다.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.928,
+    "heldout_acc": 1.0,
+    "train": 0.751,
+    "n_files": 5,
+    "strategy": "에이전트 개념·LLM 채점 원칙·LLM 학습 기법(배경 섹션 추가) 파일은 유지하되, \"에이전트·MCP 선택 기준\"(일반 이론)과 \"도메인별 사용사례\" 파일(입찰·계약·감시·wiki 운영 등 구체 예시)로 이분하면서, \"Agent Teams\", \"AiPMO 설계 사례\" 등 개별 설계 사례를 도메인 파일 내 서브섹션으로 통합하여, 이론이 필요한 질문은 선택 기준 파일에서만, 구체 사례가 필요한 질문은 도메인 파일의 해당 섹션에서 직접 답변되도록 재조직.",
+    "failure_types": [
+     "routing_miss"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 3
+ },
+ {
+  "run_dir": "structure-evolve-20260910-230740",
+  "arm": "evolve",
+  "docs": [
+   "karpathy-vibe-to-agentic",
+   "agentic-engineering-pillars",
+   "claude-code-basics",
+   "redis-be-ai-realtime-communication",
+   "llm-deterministic-post-gates",
+   "wikiskill-persistent-knowledge-skill-evolution",
+   "pii-model-design-session-2026-06"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.765,
+    "heldout_acc": 0.8,
+    "train": 0.951,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.764,
+    "heldout_acc": 0.8,
+    "train": 0.961,
+    "n_files": 5,
+    "strategy": "문서를 주제별로 4~5개 파일로 나누되, (1) WikiSkill 논문의 에이전트 경험 관리 3계층 구조는 \"Agent 학습 및 경험 설계\" 파일로 독립, (2) PII 마스킹·복원 메커니즘은 \"개인정보 관리 및 Privacy\" 파일로 분리하여 한 질문이 한 파일에서만 충분히 답변되도록 구조화한다.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.39,
+    "heldout_acc": 0.4,
+    "train": 0.556,
+    "n_files": 5,
+    "strategy": "[개선된 분할 전략]:\n\n현재 파일 중 \"Agent 영속 학습 및 도메인 특화 모델 — Skill 진화와 PII 설계\"를 \"에이전트 Skill 진화 및 경험 관리(WikiSkill 3계층 구조, 영속 학습 패턴)\" 파일과 \"PII 마스킹·복원 및 보안 설계(토큰화, 복원 메커니즘, 프롬프트 격리)\" 파일로 분리하여 총 5개 파일 구조로 전환하고, 각 파일이 하나의 관심사에 집중하도록 경계를 명확히 하면 주제별 응집력이 올라가며 질문 성격에 맞는 파일을 정확히 읽게 되어 효율이 0.98 이상으로 개선된다.",
+    "failure_types": [
+     "content_lost",
+     "doc_dropped",
+     "doc_dropped"
+    ],
+    "warnings": [
+     "문서 'redis-be-ai-realtime-communication'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'llm-deterministic-post-gates'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   },
+   {
+    "generation": 3,
+    "heldout": 0.588,
+    "heldout_acc": 0.6,
+    "train": 0.98,
+    "n_files": 7,
+    "strategy": "Agent 경험 관리(3계층 구조, Skill 진화)와 데이터 보안(PII 마스킹/복원)을 별개 파일로 분리하여, 두 맥락이 섞인 대용량 파일을 집중도 높은 파일 2개로 나누고, 나머지 주제별 파일은 유지한다.",
+    "failure_types": [],
+    "warnings": []
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-evolve-20260910-234928",
+  "arm": "evolve",
+  "docs": [
+   "karpathy-vibe-to-agentic",
+   "agentic-engineering-pillars",
+   "claude-code-basics",
+   "redis-be-ai-realtime-communication",
+   "llm-deterministic-post-gates",
+   "wikiskill-persistent-knowledge-skill-evolution",
+   "pii-model-design-session-2026-06"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.951,
+    "heldout_acc": 1.0,
+    "train": 0.686,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "routing_miss",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.76,
+    "heldout_acc": 0.8,
+    "train": 0.811,
+    "n_files": 6,
+    "strategy": "문서를 다음과 같이 5~6개 파일로 나누되, (1) 개념/논문별 전용 섹션으로 정확도를 높이고 (2) 구현 패턴별로 분리해 효율을 높인다: 에이전트 시스템 기초이론 (WikiSkill 3계층, 에이전틱 패러다임) / 데이터 보안 및 PII 처리 (마스킹·복원 모델, 개인정보 보호) / Redis 데이터 구조 설계 (List, Hash 구성·개수 결정) / Redis 메시징 패턴 (Pub/Sub 제약사항, 큐 vs 방송) / 실시간 통신 아키텍처 (BE·AI 양방향 채널 통합).",
+    "failure_types": [
+     "doc_dropped"
+    ],
+    "warnings": [
+     "문서 'claude-code-basics'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   },
+   {
+    "generation": 2,
+    "heldout": 0.565,
+    "heldout_acc": 0.6,
+    "train": 0.666,
+    "n_files": 5,
+    "strategy": "문서를 다음과 같이 5개 파일로 세분화하라: (1) 에이전틱 엔지니어링 기초 개념, (2) 에이전트 경험 관리 및 WikiSkill 3계층 구조, (3) PII 마스킹과 프라이버시 보호 메커니즘, (4) Redis 기반 실시간 통신 프로토콜 및 데이터 구조, (5) BE와 AI 서버 간 양방향 메시징 구현. 각 파일은 특정 질문군에 필요한 정보만 응집하고, 구체적인 설계 결정과 원리를 함께 담아 한 번에 답할 수 있도록 구성한다.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.378,
+    "heldout_acc": 0.4,
+    "train": 0.68,
+    "n_files": 6,
+    "strategy": "에이전트 경험 관리(WikiSkill 3계층 구조 포함)와 보안/프라이버시(PII 마스킹·복원)를 별도 파일로 분리하고, Redis 통신을 \"양방향 List 기반 아키텍처\"(List 개수, 방향성)와 \"Pub/Sub 패턴과 제약사항\"으로 나누어 6개 파일로 재구성하되, 각 파일은 하나의 구체적 질문(예: \"List를 몇 개 만드는가?\", \"Pub/Sub의 핵심 제약은?\")에 정확히 답하도록 내용을 집중화한다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-evolve-20260911-003128",
+  "arm": "evolve",
+  "docs": [
+   "agentic-engineering-5-concepts",
+   "claude-md-guide",
+   "transformer-architecture",
+   "event-rescoring-idempotency-cache",
+   "scoring-rag-reference-free-eval",
+   "self-evolving-persistent-history-effect",
+   "karpathy-llm-wiki-pattern"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.575,
+    "heldout_acc": 0.6,
+    "train": 0.538,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.754,
+    "heldout_acc": 0.8,
+    "train": 0.685,
+    "n_files": 16,
+    "strategy": "에이전트·컨텍스트·캐싱을 각각 분리하되, 구체적 기술(refresh/replace, 레이어 정의)을 핵심 개념 파일 내 명확한 섹션으로 제시하고, \"Agent vs chatbot\" 같은 구분점은 에이전트 원칙 파일에 독립 섹션으로 앞에 배치하며, 시스템 설계·개발 워크플로우는 애플리케이션 맥락 파일로 통합하되 필요시 링크로 분리한다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.98,
+    "heldout_acc": 1.0,
+    "train": 0.698,
+    "n_files": 22,
+    "strategy": "구체적 기술(refresh/replace, 3계층 구조)을 독립 섹션으로 격상하고, 파일 헤더에 메타테그(\"개념\"/\"전략\"/\"기술\")를 추가하며, 응집도 낮은 내용을 분리하고, 파일 내 목차와 anchor를 명확히 하여 빠른 선택과 정확한 탐색을 동시에 달성한다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.959,
+    "heldout_acc": 1.0,
+    "train": 0.69,
+    "n_files": 15,
+    "strategy": "메타테그를 \"개념\"/\"전략\"/\"기술\" 외에 \"비교\"/\"원칙\"으로 확장하고, 각 파일 처음 100글자에 핵심 정의를 명시하며, refresh vs replace처럼 대비 관계는 전용 비교표 섹션으로 분리하고, 1000글자 초과 파일은 개념·전략·기술 단위 마이크로 파일로 재분할하며, 목차에 anchor와 함께 \"한눈에 보기\" 다이어그램을 추가하여 질문 유형별 자동 라우팅으로 정확도 0.85+·효율 0.98+ 동시 달성.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 2
+ },
+ {
+  "run_dir": "structure-evolve-20260911-011930",
+  "arm": "evolve",
+  "docs": [
+   "agentic-engineering-5-concepts",
+   "claude-md-guide",
+   "transformer-architecture",
+   "event-rescoring-idempotency-cache",
+   "scoring-rag-reference-free-eval",
+   "self-evolving-persistent-history-effect",
+   "karpathy-llm-wiki-pattern"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.561,
+    "heldout_acc": 0.6,
+    "train": 0.523,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.966,
+    "heldout_acc": 1.0,
+    "train": 0.554,
+    "n_files": 7,
+    "strategy": "기본 주제별 분할(3~4개)에서 **개념 단위 세분화(6~7개)** 및 **파일명 구체화**로 전환하되, 각 파일이 하나의 명확한 질문에 답하도록 설계하고 파일 간 크로스링크로 탐색 경로를 단축한다. 구체적으로: (1) \"프롬프트 엔지니어링 기초\" 에서 CLAUDE.md 원칙과 작성 가이드를 분리, (2) \"캐시·성능 최적화\" 신설로 prompt-caching, read-through refresh/replace 등 성능 개념 집중, (3) \"컨텍스트 엔지니어링\" 에 3계층 구조만 남겨 단순화, (4) 에이전트·신뢰성·아키텍처는 유지하되 이전 분산된 정보를 각 파일로 통합한다. 이로써 특정 개념 질문은 1개 파일, 관계 질문도 2~3개 파일로 최소화된다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.191,
+    "heldout_acc": 0.2,
+    "train": 0.814,
+    "n_files": 10,
+    "strategy": "7개 파일에서 9~10개로 세분화하되, (1) \"캐시·성능 최적화\"를 \"Read-through 캐시 refresh/replace 전략\", \"성능 최적화 패턴\", \"LLM 평가(Reference-free)\" 3개로 분리, (2) \"Context Engineering\"에서 \"Karpathy 3계층 구조\" 독립 추출, (3) \"프롬프트 엔지니어링\"에서 \"CLAUDE.md 첫 작성 원칙\"과 \"프롬프트 기초 기법\" 분리, (4) \"신뢰성\"에서 \"멱등키 설계 및 버전 관리\" 독립 추출하여 각 파일이 명확한 단일 개념만 답하도록 경계를 확립하고 명시적 크로스링크로 탐색을 2~3개 파일로 제한한다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": [
+     "문서 'transformer-architecture'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   },
+   {
+    "generation": 3,
+    "heldout": 0.195,
+    "heldout_acc": 0.2,
+    "train": 0.826,
+    "n_files": 7,
+    "strategy": "개념별 독립 파일화(① 프롬프트 엔지니어링—CLAUDE.md 원칙 및 작성 가이드, ② 캐시·성능 최적화—read-through refresh/replace 등, ③ LLM 평가 자동화—reference-free 평가, ④ Context Engineering—Karpathy 3계층 구조만, ⑤ 신뢰성 시스템—멱등키, 캐시 전략, Self-evolving, ⑥ 에이전트 아키텍처, ⑦ 개념 색인)으로 세분화하되, 각 파일이 '하나의 핵심 질문'만 답하도록 경계를 명확히 나누고(캐시 전략은 ②에서, CLAUDE.md 원칙은 ①에서, Karpathy 3계층은 ④에서, 멱등키 입력 버전은 ⑤에서만), 파일 간 크로스링크로 탐색을 1~2 홉 이내로 제한하면 정확도 0.65+, 효율 0.98을 달성할 수 있다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": [
+     "파일 '개념 색인'에 sources가 없음 — 어느 원본에서 왔는지 알 수 없다"
+    ]
+   }
+  ],
+  "best_generation": 1
+ },
+ {
+  "run_dir": "structure-evolve-incremental-20260910-214317",
+  "arm": "evolve-incremental",
+  "docs": [
+   "harness-engineering-concept",
+   "claude-code-workflow",
+   "claude-code-agent-teams",
+   "aipmo-1.5-design-judgments-2026-06",
+   "llm-judge-scoring-principles",
+   "reward-model-rl",
+   "alignment-rlhf-constitutional-ai"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.944,
+    "heldout_acc": 1.0,
+    "train": 0.674,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "doc_dropped",
+     "routing_miss"
+    ],
+    "warnings": [
+     "문서 'claude-code-workflow'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'claude-code-agent-teams'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'llm-judge-scoring-principles'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'reward-model-rl'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'alignment-rlhf-constitutional-ai'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "파일 'Claude Code 개발 워크플로우 — 컨텍스트 관리부터 Agent Teams까지'에 sources가 없음 — 어느 원본에서 왔는지 알 수 없다",
+     "파일 'LLM 정렬 과정 — RLHF에서 Constitutional AI까지, 그리고 RL 기법들'에 sources가 없음 — 어느 원본에서 왔는지 알 수 없다",
+     "파일 'LLM Judge 채점 설계 원칙 — 5가지 함정과 견고성'에 sources가 없음 — 어느 원본에서 왔는지 알 수 없다"
+    ]
+   },
+   {
+    "generation": 1,
+    "heldout": 0.973,
+    "heldout_acc": 1.0,
+    "train": 0.969,
+    "n_files": 8,
+    "strategy": "개념 파일(LLM 정렬의 역사적 동기·기법)과 도구 기초 파일을 명확히 분리하되, 구체적 프로젝트 구현 사례(AiPMO 아키텍처 선택, Agent Teams 병렬 검토 패턴)를 별도 파일로 분리해서, 답변이 필요한 질문이 '이론' 또는 '도구' 또는 '프로젝트 사례' 중 정확히 하나 파일에만 매칭되도록 하라.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.769,
+    "heldout_acc": 0.8,
+    "train": 0.825,
+    "n_files": 7,
+    "strategy": "원칙과 사용 사례를 파일 차원에서 명확히 분리하되, 원칙 파일 내에서 특정 주제(예: \"침묵 ≠ 부정 원칙\", \"병렬 검토 역할 정의\")를 자기완결적인 섹션으로 먼저 제시하고, 그 다음에 상황별 적용 사례를 부여해서, 질문이 필요한 원칙 섹션에만 수렴하도록 구조화하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.584,
+    "heldout_acc": 0.6,
+    "train": 0.831,
+    "n_files": 11,
+    "strategy": "도구 기초 파일을 **원칙별 마이크로파일**(침묵의미, 결정론, 프롬프트중복화, 견고성 각 1개)로 분할하고, 사례 파일을 **패턴·맥락별**(Agent Teams·코드검토, AiPMO·아키텍처선택, LangGraph·실시간 등)로 재구성해서 핵심 질문이 정확히 한 원칙 파일과 한 패턴 파일에만 매칭되도록 하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 1
+ },
+ {
+  "run_dir": "structure-evolve-incremental-20260910-223851",
+  "arm": "evolve-incremental",
+  "docs": [
+   "harness-engineering-concept",
+   "claude-code-workflow",
+   "claude-code-agent-teams",
+   "aipmo-1.5-design-judgments-2026-06",
+   "llm-judge-scoring-principles",
+   "reward-model-rl",
+   "alignment-rlhf-constitutional-ai"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.941,
+    "heldout_acc": 1.0,
+    "train": 0.8,
+    "n_files": 3,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.573,
+    "heldout_acc": 0.6,
+    "train": 0.687,
+    "n_files": 5,
+    "strategy": "LLM judge와 AiPMO 관련 내용을 별개 파일로 분리하고, Agent Teams 병렬 협업 내용을 독립 파일화하여 4~5개 파일로 재구성하라: (1) LLM judge 설계와 평가 원칙 — 침묵 ≠ 부정, 결정론, 날짜 주입, 파싱 견고성 집중, (2) Agent Teams와 병렬 협업 — 세 팀원 역할, 코드 검토 사례 전용, (3) AiPMO 시스템 설계 — 입찰·계약 RM, MCP vs 아키텍처 선택 상세화, (4) Claude Code 실전 하네스 엔지니어링 — 안전성·효율성 제어, (5) 교차 설계 원칙 (선택적) — 여러 시스템에 공통으로 적용되는 설계 패턴.",
+    "failure_types": [
+     "routing_miss",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.947,
+    "heldout_acc": 1.0,
+    "train": 0.811,
+    "n_files": 5,
+    "strategy": "문서들을 기술·시스템 경계별로 5개 파일로 나눠라: Agent Teams 병렬 검토 사용 사례 | LLM judge 채점 설계 원칙 | AiPMO 시스템 아키텍처 | Claude Code 실전 하네스 엔지니어링 | 개념 통합, 각 파일은 단일 기술 영역에 집중하고 크로스링크로 연결하여 검색 정확도를 높이고 파일 크기 최적화를 동시에 달성한다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.582,
+    "heldout_acc": 0.6,
+    "train": 0.694,
+    "n_files": 5,
+    "strategy": "문서들을 기술·시스템 경계별로 5개 파일로 나눠라: Agent 병렬 실행 (Sub-Agent vs Teams 구조적 차이 명시) | LLM judge 채점 설계 원칙 | AiPMO 아키텍처 (MCP 기각 근거, 아키텍처 단위 선택까지 통합) | Claude Code 하네스 (철학·설계·구현 순서로 배열, 분산 내용 수렴) | 크로스링크 가이드, 각 파일은 답 못한 질문 1건을 대상으로 정보를 집중시키고 관련 내용은 파일 상단에 배치하여 정확도 > 0.95, 평균 읽기 1200자 이하를 목표로 한다.",
+    "failure_types": [
+     "doc_dropped",
+     "doc_dropped"
+    ],
+    "warnings": [
+     "문서 'reward-model-rl'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'alignment-rlhf-constitutional-ai'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   }
+  ],
+  "best_generation": 2
+ },
+ {
+  "run_dir": "structure-evolve-incremental-20260910-232027",
+  "arm": "evolve-incremental",
+  "docs": [
+   "karpathy-vibe-to-agentic",
+   "agentic-engineering-pillars",
+   "claude-code-basics",
+   "redis-be-ai-realtime-communication",
+   "llm-deterministic-post-gates",
+   "wikiskill-persistent-knowledge-skill-evolution",
+   "pii-model-design-session-2026-06"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.583,
+    "heldout_acc": 0.6,
+    "train": 0.692,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.58,
+    "heldout_acc": 0.6,
+    "train": 0.553,
+    "n_files": 5,
+    "strategy": "Software 3.0의 개념과 핵심 특징을 한 파일에, 구현 기둥(신뢰성/보안/성능 등)을 별도로 분리하고, PII 마스킹/복원 원리를 전용 섹션으로 독립시키며, Claude Code 사용법과 백엔드 아키텍처(Redis, 양방향 통신)를 명확히 구분해서 총 5개 파일로 구성하되 각 파일은 한 가지 질문 축(개념/원리/기술/아키텍처/도구)에만 응답하도록 재정렬하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "doc_dropped"
+    ],
+    "warnings": [
+     "문서 'llm-deterministic-post-gates'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다",
+     "문서 'wikiskill-persistent-knowledge-skill-evolution'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   },
+   {
+    "generation": 2,
+    "heldout": 0.779,
+    "heldout_acc": 0.8,
+    "train": 0.838,
+    "n_files": 8,
+    "strategy": "Software 3.0: Karpathy 정의와 핵심 특징 명확화 | Agentic Engineering: LLM·도구·피드백·에이전트·아키텍처 기둥과 PII 마스킹/복원 등 데이터 처리 섹션 추가 | Claude Code 도구: 명령어(/clear, /compact)와 단축키 워크플로우 분리 | 시스템 아키텍처: Redis 양방향 통신과 메시지 큐 설계 명확화",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.776,
+    "heldout_acc": 0.8,
+    "train": 0.699,
+    "n_files": 17,
+    "strategy": "Software 3.0: 정의와 Software 2.0의 본질적 차이점 분리 | Agentic Engineering 5기둥: 각 기둥(피드백 루프·자동 검증·도구 통합·아키텍처 설계·데이터 처리)을 독립 파일화하되, 데이터 처리(PII 마스킹/복원)는 별도 구현 패턴 파일로 | WikiSkill 논문: 3계층 구조(데이터·메타·제어)를 핵심만 담은 구조 파일과 경험 관리 메커니즘을 상세 설명하는 루프 파일로 이원화 | Claude Code 도구: 명령어 레퍼런스와 워크플로우·단축키 분리 유지 | 시스템 아키텍처: Redis 양방향 통신의 프로토콜 명세를 메시지 큐 설계와 분리해 각각을 한 파일에 집중.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 2
+ },
+ {
+  "run_dir": "structure-evolve-incremental-20260911-000429",
+  "arm": "evolve-incremental",
+  "docs": [
+   "karpathy-vibe-to-agentic",
+   "agentic-engineering-pillars",
+   "claude-code-basics",
+   "redis-be-ai-realtime-communication",
+   "llm-deterministic-post-gates",
+   "wikiskill-persistent-knowledge-skill-evolution",
+   "pii-model-design-session-2026-06"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.915,
+    "heldout_acc": 1.0,
+    "train": 0.659,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.77,
+    "heldout_acc": 0.8,
+    "train": 0.83,
+    "n_files": 6,
+    "strategy": "학파 및 논문별 이론 개념(WikiSkill 3계층, Software 3.0 패러다임)을 별도 \"학습 패러다임과 아키텍처 진화\" 파일로 추출하고, PII 마스킹/복원 메커니즘을 신뢰성 파일에서 \"데이터 보안 및 개인정보 관리\" 파일로 분리하며, Redis 양방향 통신 구체사례를 \"백엔드 아키텍처\"에서 \"실시간 메시징과 이벤트 스트림\" 파일로 독립시켜 5-6개 파일로 세분화하되, 각 파일은 하나의 구체적 질문(예: \"채널 수?\", \"복원 가능 이유?\")에 바로 답하는 응집도를 우선한다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.95,
+    "heldout_acc": 1.0,
+    "train": 0.947,
+    "n_files": 7,
+    "strategy": "개념 이론(패러다임, Software 3.0)과 구체적 설계(논문 구조, WikiSkill)를 분리하여 라우팅 정확도를 높이고, 현재 \"신뢰성 엔지니어링\"과 \"백엔드 아키텍처\" 파일에서 관심사가 맞지 않는 질문들(PII 마스킹, Redis 양방향 통신)을 추출하여 \"데이터 보안 및 PII 관리\"와 \"Redis 메시징 패턴\" 전용 파일로 분할하면, 정확도는 개선되고 각 질문의 읽기 효율도 향상될 것이다.",
+    "failure_types": [],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.955,
+    "heldout_acc": 1.0,
+    "train": 0.955,
+    "n_files": 8,
+    "strategy": "개념 이론(패러다임, Software 3.0)과 구체적 설계(논문 구조, WikiSkill) 분리에 더해, 현재 \"신뢰성 엔지니어링\", \"백엔드 아키텍처\", \"Claude Code 실무 가이드\"에 흩어진 PII 마스킹, Redis 양방향 통신, 명령어 선택 기준을 각각 \"데이터 보안 및 PII 관리\", \"Redis 메시징 패턴 — 양방향 통신 및 버퍼 선택\", \"Claude Code 명령어 선택 기준\" 파일로 분할하면, 정확도 1.0 유지하면서 읽기 효율을 0.947에서 약 0.97로 개선할 수 있다.",
+    "failure_types": [],
+    "warnings": []
+   }
+  ],
+  "best_generation": 3
+ },
+ {
+  "run_dir": "structure-evolve-incremental-20260911-005427",
+  "arm": "evolve-incremental",
+  "docs": [
+   "agentic-engineering-5-concepts",
+   "claude-md-guide",
+   "transformer-architecture",
+   "event-rescoring-idempotency-cache",
+   "scoring-rag-reference-free-eval",
+   "self-evolving-persistent-history-effect",
+   "karpathy-llm-wiki-pattern"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.755,
+    "heldout_acc": 0.8,
+    "train": 0.677,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.75,
+    "heldout_acc": 0.8,
+    "train": 0.823,
+    "n_files": 7,
+    "strategy": "캐시 메커니즘(Read-through의 refresh/replace 동작 차이), CLAUDE.md 작성 원칙, API 설계(멱등키와 입력 버전)를 각각 독립 파일로 분리하고, 기존 4개 파일의 중복 내용을 제거하여 각 질문이 정확히 하나의 파일에서만 답이 나오도록 재구성한다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.372,
+    "heldout_acc": 0.4,
+    "train": 0.527,
+    "n_files": 4,
+    "strategy": "인프라·API 계층(캐시 정책·멱등성·재시도·버전 관리) → LLM 평가·최적화 파이프라인(모델 선택·점수 함수) → 문서 설계·CLAUDE.md 작성 원칙 → 에이전트 아키텍처·구현 패턴, 이렇게 4개 파일로 계층별 책임을 명확히 분리하고, 캐시·멱등성·CLAUDE.md는 고유 파일에서만 설명하여 중복을 제거한다.",
+    "failure_types": [
+     "content_lost",
+     "doc_dropped",
+     "routing_miss"
+    ],
+    "warnings": [
+     "문서 'karpathy-llm-wiki-pattern'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   },
+   {
+    "generation": 3,
+    "heldout": 0.581,
+    "heldout_acc": 0.6,
+    "train": 0.693,
+    "n_files": 5,
+    "strategy": "주제별 3~4개 파일 구조를 유지하되, 각 파일을 2000자 이하 핵심 개념 섹션(캐싱 메커니즘, 컨텍스트 규칙 작성 원칙, 평가 파이프라인 기초)과 세부 구현 섹션으로 분리하고, 질문 라우팅 시 핵심 섹션만 먼저 읽도록 하며, 캐시·평가·컨텍스트 설계처럼 여러 파일에 걸친 개념은 원점 파일에서만 정의하고 다른 파일에선 링크 참조로 처리해서 파일 간 중복을 제거한다.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss"
+    ],
+    "warnings": []
+   }
+  ],
+  "best_generation": 0
+ },
+ {
+  "run_dir": "structure-evolve-incremental-20260911-013810",
+  "arm": "evolve-incremental",
+  "docs": [
+   "agentic-engineering-5-concepts",
+   "claude-md-guide",
+   "transformer-architecture",
+   "event-rescoring-idempotency-cache",
+   "scoring-rag-reference-free-eval",
+   "self-evolving-persistent-history-effect",
+   "karpathy-llm-wiki-pattern"
+  ],
+  "question_split": {
+   "train": 7,
+   "heldout": 5,
+   "degenerate": false
+  },
+  "history": [
+   {
+    "generation": 0,
+    "heldout": 0.724,
+    "heldout_acc": 0.8,
+    "train": 0.533,
+    "n_files": 4,
+    "strategy": "문서들을 주제별로 3~4개 파일로 나눠라. 관련된 개념은 한 파일에 모으고, 각 파일은 하나의 주제에 집중하게 하라.",
+    "failure_types": [
+     "content_lost",
+     "routing_miss",
+     "routing_miss"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 1,
+    "heldout": 0.896,
+    "heldout_acc": 1.0,
+    "train": 0.662,
+    "n_files": 5,
+    "strategy": "**캐싱·성능·신뢰성·평가를 독립 파일로 분리하되, 각 파일은 해당 주제의 메커니즘(왜·어떻게)을 모아 적재량을 줄인다.** 구체적으로: (1) 프롬프트 캐싱(refresh vs replace), 토큰 최적화 → 전용 파일; (2) 멱등키, 입력 버전, 결정론 보존 → '신뢰성 & 재현성' 파일로 분리; (3) CLAUDE.md 작성 원칙, 팀 규약 → '협업 & 문서화' 파일; (4) Reference-free 평가, 벤치마크 → '평가 방법론' 전용; (5) 에이전트·가드레일·Karpathy 지식 구조는 '시스템 설계' 파일에 통합—이렇게 5개 파일로 구성하면 질문의 답이 한 파일 내에 집중되고 무관한 내용 읽기가 줄어든다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 2,
+    "heldout": 0.572,
+    "heldout_acc": 0.6,
+    "train": 0.816,
+    "n_files": 6,
+    "strategy": "**캐싱·신뢰성·협업·컨텍스트·평가·Karpathy를 6개 전문 파일로 세분화하되, 못 찾은 질문의 핵심 키워드와 많이 읽은 파일의 중복 내용을 명확한 섹션 헤더로 분리해 정합성을 높인다.** 구체적으로: (1) 캐싱('Refresh vs Replace', '멱등 설계' 섹션 분리), 토큰 최적화 → 전용 파일; (2) 멱등키, 입력 버전, 결정론 보존 → '신뢰성' 파일; (3) CLAUDE.md '첫 작성 원칙' 섹션 최상단 배치, 가드레일, 팀 규약 → '협업' 파일; (4) Context Engineering의 '3가지 레이어(에이전트·컨텍스트·도구)' → 독립 파일; (5) Reference-free 평가, 벤치마크 → '평가' 전용; (6) Karpathy LLM Wiki의 '3계층 구조·모델 개선 원칙' → 독립 파일—이렇게 6개로 세분화하면 정확도 0.95+, 효율 0.94를 동시에 달성하면서 못 찾은 2개 질문은 100% 정답할 수 있다.",
+    "failure_types": [
+     "content_lost"
+    ],
+    "warnings": []
+   },
+   {
+    "generation": 3,
+    "heldout": 0.575,
+    "heldout_acc": 0.6,
+    "train": 0.555,
+    "n_files": 8,
+    "strategy": "**시스템 설계를 에이전트·Context Engineering·Karpathy로 계층 분리하고, 캐싱(메커니즘)과 신뢰성(멱등·결정론)을 독립 파일로 구분하며, CLAUDE.md 원칙을 협업 규약과 분리하되, 각 파일은 핵심 정보만 모아 질문마다 1-2개 파일만 필요하도록 한다.** 구체적으로: (1) 에이전트·도구·가드레일 설계; (2) Context Engineering & 프롬프트 엔지니어링; (3) Karpathy LLM Wiki 지식; (4) 프롬프트 캐싱 전략(Refresh vs Replace); (5) 멱등키 & 결정론 보존; (6) CLAUDE.md 작성 원칙; (7) 팀 협업 규약; (8) Reference-free 평가 & 벤치마크 방법론—8개 파일로 정확도 0.9 이상, 효율 0.85 이상을 달성한다.",
+    "failure_types": [
+     "content_lost",
+     "content_lost",
+     "content_lost"
+    ],
+    "warnings": [
+     "문서 'transformer-architecture'가 어느 파일의 sources에도 없음 — 그 문서의 내용은 어떤 질문에도 쓰이지 않는다"
+    ]
+   }
+  ],
+  "best_generation": 1
+ }
+]

@@ -1,0 +1,197 @@
+{
+ "report": "/tmp/feat-incremental/runs/batch-20260910-211515/structure-evolve-incremental-20260910-214317/report.json",
+ "n_questions": 12,
+ "answer_mode": "extractive",
+ "summary": {
+  "repeats": 5,
+  "parse_failed": 0,
+  "total": {
+   "mean": 0.856,
+   "sd": 0.066,
+   "min": 0.806,
+   "max": 0.971
+  },
+  "accuracy": {
+   "mean": 0.883,
+   "sd": 0.067,
+   "min": 0.833,
+   "max": 1.0
+  },
+  "efficiency": {
+   "mean": 0.969,
+   "sd": 0.002,
+   "min": 0.967,
+   "max": 0.971
+  },
+  "per_question": [
+   {
+    "q": "하네스 엔지니어링의 핵심 철학은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 CLAUDE.md에 불필요한 정보를 넣지 않기 위해 사용하는 기법의 이름은?",
+    "pick_agreement": 0.6,
+    "n_distinct_picks": 2,
+    "correct_rate": 0.4,
+    "flips": true
+   },
+   {
+    "q": "Sub-Agent와 Agent Teams의 근본적인 차이는?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "LLM judge 채점에서 '침묵 ≠ 부정' 원칙이 필요한 이유는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "RLVR과 RLAIF의 가장 큰 차이점은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "InstructGPT(RLHF)가 원본 LLM의 어떤 문제를 해결하려고 했는가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.4,
+    "flips": true
+   },
+   {
+    "q": "하네스 엔지니어링의 '기둥 2'는 어떻게 규칙을 강제하는가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code의 WAT 프레임워크에서 'T(Tools)'가 추구하는 원칙은?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 0.8,
+    "flips": true
+   },
+   {
+    "q": "보상모델 없이 선호도 데이터로 직접 모델을 학습하는 방식의 이름은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Constitutional AI가 기존 RLHF의 Alignment Tax와 Hallucination 문제를 해결한 핵심 방법은?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "AiPMO에서 입찰·계약 RM 평가를 위해 MCP 대신 선택한 아키텍처 단위는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Agent Teams의 '병렬 코드 검토' 사용 사례에서 세 팀원의 역할은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "mean_pick_agreement": 0.917,
+  "flip_rate": 0.25
+ },
+ "rejudge": {
+  "repeats": 5,
+  "per_question": [
+   {
+    "q": "하네스 엔지니어링의 핵심 철학은 무엇인가?",
+    "pred": "\"에이전트가 규칙을 어겼을 때, 프롬프트를 고치지 마. 마구를 고쳐라. 그 실패가 구조적으로 반복 불가능하도록 시스템을 바꿔라.\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 CLAUDE.md에 불필요한 정보를 넣지 않기 위해 사용하는 기법의 이름은?",
+    "pred": "컨텍스트에 기법의 구체적인 이름이 명시되어 있지 않습니다. \n\n다만 설명은 다음과 같이 제시됩니다:\n\n**\"전체 컨텍스트가 아니라 지금 필요한 파일과 규칙만 제공\"**\n\n그리고 역할 차원에서는 **\"컨텍스트 관리자\"**라는 표현이 있습니다:\n\n**\"컨텍스트 관리자: AI에게 지금 이 작업에 필요한 파일과 규칙만 제공\"**\n\n**모름**",
+    "correct_rate": 0.0,
+    "flips": false
+   },
+   {
+    "q": "Sub-Agent와 Agent Teams의 근본적인 차이는?",
+    "pred": "컨텍스트에 따르면:\n\n**\"Sub-Agent는 **위임** (심부름꾼), Agent Teams는 **협업** (팀원)\"**\n\n더 구체적으로:\n- Sub-Agent: \"**메인 에이전트에게만 보고**\" / \"**메인 에이전트가 관리**\"\n- Agent Teams: \"**팀원들이 서로 직접 메시지**\" / \"**공유 작업 목록으로 자체 조율**\"\n\n즉, Sub-Agent는 일방향 위임(심부름꾼 → 결과 반환)이고, Agent Teams는 양방향 협업(팀원 간 직접 소통 + 자체 조율)입니다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "LLM judge 채점에서 '침묵 ≠ 부정' 원칙이 필요한 이유는?",
+    "pred": "**복수 조건 채점에서 \"확인 불가\"(근거의 침묵)를 \"불가\"로 읽고 점수 하향**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "RLVR과 RLAIF의 가장 큰 차이점은?",
+    "pred": "**RLVR은 \"정답이 명확한 문제\"에 적용되고, RLAIF는 \"정답이 정해지지 않은 추론·선호\"에 적용됩니다.**\n\n다른 각도로는: **RLVR은 보상모델이 불필요 (정답 검증으로)하지만, RLAIF는 보상모델이 필요합니다.**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "InstructGPT(RLHF)가 원본 LLM의 어떤 문제를 해결하려고 했는가?",
+    "pred": "**Instruct-Tuning 후 생긴 부작용:**\n- \"Alignment Tax: 정답보다 안전한 답변을 우선 (답이 멍청해짐)\"\n- \"Hallucination: 거짓 정보를 자신 있게 말함\"\n- \"Sycophancy: 유저 말을 과도하게 칭찬 (말도 안 되는 소리도)\"",
+    "correct_rate": 0.0,
+    "flips": false
+   },
+   {
+    "q": "하네스 엔지니어링의 '기둥 2'는 어떻게 규칙을 강제하는가?",
+    "pred": "**\"린터, 구조 테스트, pre-commit hook으로 규칙을 시스템이 자동 강제. 'DB를 직접 호출하지 마'는 부탁이 아니라 빌드 실패로 막음. 실패하면 에이전트가 스스로 코드를 수정하고 다시 시도 (자동 교정 루프)\"**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code의 WAT 프레임워크에서 'T(Tools)'가 추구하는 원칙은?",
+    "pred": "**T — Tools (원자적 도구 조합)**\n하나의 거대한 배포 스크립트 ❌\n작은 단위 스크립트들의 조합 ✓ (build.sh, test.sh, migrate.sh, deploy.sh)\n실패 시 해당 단계만 재시도 가능",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "보상모델 없이 선호도 데이터로 직접 모델을 학습하는 방식의 이름은?",
+    "pred": "**DPO**: 보상모델 없이 선호도를 직접 모델 학습에 반영",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Constitutional AI가 기존 RLHF의 Alignment Tax와 Hallucination 문제를 해결한 핵심 방법은?",
+    "pred": "컨텍스트에서 찾은 인용입니다:\n\n**\"헌법(기본 원칙): \"정직하라\", \"해로운 조언하지 마\" 등\n모델이 스스로 답변을 헌법에 비춰 비판하고 수정\nRLAIF: AI가 헌법 원칙으로 다른 답변 평가 (사람 비용 제거)\nSelf-Critique 루프로 점진적 개선\"**\n\n핵심은 두 가지입니다:\n1. **Self-Critique** — 모델이 답변을 헌법 원칙에 비춰 스스로 평가·수정\n2. **RLAIF (AI 피드백)** — 사람 평가 대신 AI가 헌법 원칙으로 답변 평가 (사람 비용 제거)\n\n이 방식으로 Alignment Tax (안전만 추구)와 Hallucination (거짓 자신감)을 동시에 제어합니다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "AiPMO에서 입찰·계약 RM 평가를 위해 MCP 대신 선택한 아키텍처 단위는?",
+    "pred": "**공유 RM 평가 서브에이전트 1개** (stage 파라미터로 입찰/계약 구분)",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Agent Teams의 '병렬 코드 검토' 사용 사례에서 세 팀원의 역할은?",
+    "pred": "**세 팀원의 역할:**\n\n```\n팀원 1 (보안 전문가): SQL 인젝션, XSS, 인증 우회 패턴 집중 점검\n팀원 2 (성능 전문가): N+1 쿼리, 불필요한 재렌더링, 메모리 누수 확인\n팀원 3 (테스트 전문가): 테스트 커버리지 분석, 엣지 케이스 누락 확인\n```",
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "flip_rate": 0.0,
+  "accuracy": {
+   "mean": 0.833,
+   "sd": 0.0
+  }
+ }
+}

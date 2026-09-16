@@ -24,7 +24,7 @@ best는 노이즈 N개의 최댓값이라 진화가 없어도 best-gen0 > 0으�
 질문 세트(cross-doc)는 묶음당 1회 생성해 모든 arm/run이 공유한다.
 (B단계는 train/held-out 분할이 없어 향상폭은 전체 질문 세트 점수 기준이다.)
 
---arms로 arm 목록을 직접 지정할 수 있다 (A단계 전용). evolve-wiki arm은
+--arms로 arm 목록을 직접 지정할 수 있다 (B단계는 evolve, evolve-informed, control). evolve-wiki arm은
 flat 이력 대신 구조화 패턴 위키(wiki.py)를 reflect에 주입한다 — 논문
 (arxiv 2608.27454)의 "flat 이력 vs 구조화 위키" 대비축을 재현하는 arm이다.
 
@@ -67,16 +67,18 @@ def select_docs(n, raw_dir="data/raw"):
 
 
 KNOWN_ARMS = ("evolve", "evolve-wiki", "evolve-nohist", "control")
+# B단계 arm: evolve-informed는 Reflector에 근거 문단·실패 유형을 추가로 준 고정 Reflector,
+# evolve-incremental은 세대마다 백지 대신 best 구조를 고치는 Organizer
+STRUCTURE_ARMS = ("evolve", "evolve-informed", "evolve-incremental", "control")
 
 
 def resolve_arms(arms=None, with_control=False, ablation=False, stage="summary"):
     """arm 목록 결정. --arms 명시가 최우선, 없으면 기존 플래그 규칙."""
     if arms:
-        if stage == "structure":
-            raise ValueError("--arms는 A단계(summary) 전용이다")
-        unknown = [a for a in arms if a not in KNOWN_ARMS]
+        allowed = STRUCTURE_ARMS if stage == "structure" else KNOWN_ARMS
+        unknown = [a for a in arms if a not in allowed]
         if unknown:
-            raise ValueError(f"알 수 없는 arm: {unknown} (지원: {list(KNOWN_ARMS)})")
+            raise ValueError(f"알 수 없는 arm: {unknown} (지원: {list(allowed)})")
         if len(set(arms)) != len(arms):
             raise ValueError(f"arm 중복: {arms}")
         return list(arms)
@@ -88,8 +90,24 @@ def resolve_arms(arms=None, with_control=False, ablation=False, stage="summary")
     return ["evolve", "control"] if with_control else ["evolve"]
 
 
+def split_bundles(files, bundle_size):
+    """B단계용 문서 묶음 나누기 — 크기 내림차순 round-robin이라 묶음별 총 글자수가 비슷해진다.
+
+    묶음이 곧 표본 단위(paired_bootstrap_net)이므로, 손으로 고르지 않고 결정론으로 나눈다.
+    bundle_size가 없거나 파일 수 이하면 묶음 하나.
+    """
+    if not bundle_size or bundle_size >= len(files):
+        return [list(files)]
+    n_bundles = -(-len(files) // bundle_size)   # ceil
+    ordered = sorted(files, key=lambda f: -os.path.getsize(f))
+    bundles = [[] for _ in range(n_bundles)]
+    for i, f in enumerate(ordered):
+        bundles[i % n_bundles].append(f)
+    return bundles
+
+
 def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
-              out_dir="runs", parallel=1, stage="summary", arms=None):
+              out_dir="runs", parallel=1, stage="summary", arms=None, bundle_size=None):
     """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
 
     문서끼리는 질문 세트·run 디렉터리·구조화 위키(evolve-wiki arm,
@@ -107,17 +125,28 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
 
     arms = resolve_arms(arms, with_control=with_control, ablation=ablation, stage=stage)
     records = []
-    # structure는 문서 묶음 전체가 하나의 실험 단위 — 문서별 루프가 없다
-    total = (runs * len(arms)) if stage == "structure" else (len(files) * runs * len(arms))
+    # structure는 문서 묶음이 실험 단위 — --bundle-size로 여러 묶음을 나눠 돌릴 수 있다
+    bundles = split_bundles(files, bundle_size) if stage == "structure" else None
+    total = (len(bundles) * runs * len(arms)) if stage == "structure" else (len(files) * runs * len(arms))
     progress = {"done": 0, "total": total, "lock": threading.Lock()}
     t_batch = time.time()
 
-    print(f"[batch] stage={stage} 문서 {len(files)}개 x run {runs} x arm {arms} "
-          f"x gen {generations} = {total} runs (parallel={parallel})")
+    print(f"[batch] stage={stage} 문서 {len(files)}개"
+          + (f" (묶음 {len(bundles)}개)" if bundles and len(bundles) > 1 else "")
+          + f" x run {runs} x arm {arms} x gen {generations} = {total} runs (parallel={parallel})")
     try:
         if stage == "structure":
-            _run_structure(files, runs, arms, generations, n_qa, batch_dir,
-                           state_path, records, total)
+            if parallel > 1 and len(bundles) > 1:
+                with ThreadPoolExecutor(max_workers=parallel) as ex:
+                    futures = [ex.submit(_run_structure, b, runs, arms, generations, n_qa,
+                                         batch_dir, state_path, records, total, progress)
+                               for b in bundles]
+                    for fut in futures:
+                        fut.result()
+            else:
+                for b in bundles:
+                    _run_structure(b, runs, arms, generations, n_qa, batch_dir,
+                                   state_path, records, total, progress)
         elif parallel > 1:
             with ThreadPoolExecutor(max_workers=parallel) as ex:
                 futures = [
@@ -159,8 +188,9 @@ def _prepare_cross_question_set(files, n_qa):
 
 
 def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
-                   records, total):
-    """문서 묶음 하나에 대해 run x arm으로 구조 진화를 돌린다."""
+                   records, total, progress=None):
+    """문서 묶음 하나에 대해 run x arm으로 구조 진화를 돌린다. records 갱신은 progress 락으로 보호."""
+    lock = progress["lock"] if progress else threading.Lock()
     doc = "+".join(os.path.splitext(os.path.basename(f))[0] for f in files)
     size = sum(os.path.getsize(f) for f in files)
     # 질문 세트는 묶음당 1회 생성해 모든 arm/run이 공유 (공정 비교)
@@ -169,16 +199,22 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
         print(f"[batch] {doc}: 질문 세트 실패, 중단")
         return
 
-    done = 0
     for r in range(runs):
         for arm in arms:
-            done += 1
+            if progress:
+                with lock:
+                    progress["done"] += 1
+                    done = progress["done"]
+            else:
+                done = len(records) + 1
             print(f"\n[batch {done}/{total}] {doc} (size={size}) run={r} arm={arm}")
             t = time.time()
             try:
                 report = evolve_structure.evolve_structure(
                     files=files, generations=generations, n_qa=n_qa,
                     out_dir=batch_dir, no_evolve=(arm == "control"),
+                    informed=(arm == "evolve-informed"),
+                    incremental=(arm == "evolve-incremental"),
                     question_set=question_set,
                 )
             except Exception as e:  # 한 run 실패해도 배치는 계속
@@ -189,9 +225,10 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
                 continue
 
             rec = _record(report, doc, size, r, arm, dt)
-            records.append(rec)
-            with open(state_path, "w") as sf:
-                json.dump(records, sf, ensure_ascii=False, indent=2)
+            with lock:
+                records.append(rec)
+                with open(state_path, "w") as sf:
+                    json.dump(records, sf, ensure_ascii=False, indent=2)
             flag = "  [judge 파싱 실패 — 집계 제외]" if rec["parse_failed"] else ""
             print(f"[batch] gen0={rec['gen0_total']} best={rec['best_total']} "
                   f"improvement={rec['improvement']} ({dt:.0f}s){flag}")
@@ -282,8 +319,12 @@ BOOTSTRAP_SEED = 20260831  # 고정 — 같은 입력이면 항상 같은 CI/p�
 ALPHA = 0.05
 
 
-def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTRAP_SEED):
+def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTRAP_SEED,
+                         key="improvement"):
     """문서 단위 paired bootstrap으로 net 효과의 신뢰구간과 양측 p값을 낸다.
+
+    key: 비교할 레코드 필드. 기본은 향상폭(best - gen0). gen0가 무작위 표본 하나라
+    향상폭이 노이즈에 잠기는 B단계에서는 "best_total"(절대 점수)로 비교한다.
 
     표본 단위는 run이 아니라 **문서**다. 같은 문서의 run들은 질문 세트
     (train/held-out 분할 포함)를 공유하므로 독립 표본이 아니다 — run을 단위로
@@ -297,7 +338,7 @@ def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTR
     """
     per_doc = {}
     for r in valid:
-        per_doc.setdefault(r["doc"], {}).setdefault(r["arm"], []).append(r["improvement"])
+        per_doc.setdefault(r["doc"], {}).setdefault(r["arm"], []).append(r[key])
     deltas = [
         statistics.mean(arms[treat]) - statistics.mean(arms[base])
         for arms in per_doc.values()
@@ -325,9 +366,9 @@ def paired_bootstrap_net(valid, treat, base, iters=BOOTSTRAP_ITERS, seed=BOOTSTR
     }
 
 
-def _significance_lines(valid, treat, base, positive_msg, null_msg):
+def _significance_lines(valid, treat, base, positive_msg, null_msg, key="improvement"):
     """net 유의성 판정 줄들. bootstrap이 불가능하면 그 사실을 명시한다."""
-    b = paired_bootstrap_net(valid, treat, base)
+    b = paired_bootstrap_net(valid, treat, base, key=key)
     if b is None:
         return [
             "- 유의성 **판정 불가** — 두 arm이 모두 있는 문서가 2개 미만이다. "
@@ -345,6 +386,57 @@ def _significance_lines(valid, treat, base, positive_msg, null_msg):
     else:
         out.append(f"- {null_msg} (p={b['p']:.3f}, 유의수준 {ALPHA} 미달)")
     return out
+
+
+def _gen0_noise(valid):
+    """같은 문서·같은 seed 규칙인데 gen0 점수가 얼마나 흔들리는지 — 문서별 표준편차의 평균.
+
+    gen0는 arm과 무관한 무작위 표본 하나라, 이 값이 크면 '향상폭(best - gen0)'은
+    진화 효과가 아니라 gen0 운을 재는 지표가 된다.
+    """
+    per_doc = {}
+    for r in valid:
+        per_doc.setdefault(r["doc"], []).append(r["gen0_total"])
+    sds = [statistics.pstdev(v) for v in per_doc.values() if len(v) >= 2]
+    return statistics.mean(sds) if sds else None
+
+
+def _absolute_score_lines(valid, by_arm):
+    """절대 점수(best held-out) 비교 — gen0 노이즈에 잠기지 않는 arm 비교.
+
+    2026-09-10 1차 실험(B단계, 묶음 3 x run 2 x arm 3)에서 gen0가 같은 묶음에서 0.0~0.97로
+    튀어 '향상폭' 기준 net이 방향까지 뒤집혔다(control이 최고). 그래서 절대 best를 함께 낸다.
+    """
+    noise = _gen0_noise(valid)
+    lines = ["\n## 절대 점수 비교 (best held-out — gen0와 무관)"]
+    if noise is not None:
+        lines.append(f"- gen0 노이즈(같은 문서 안 gen0 표준편차 평균): {noise:.3f}"
+                     + (" — **0.1 이상이면 위 '향상폭'은 gen0 운에 좌우된다. 아래 절대 점수로 판단할 것.**"
+                        if noise >= 0.1 else ""))
+    lines.append("| arm | runs | 평균 best | 표준편차 | 평균 gen0 |")
+    lines.append("|---|---|---|---|---|")
+    for arm in sorted(by_arm):
+        rs = by_arm[arm]
+        bests = [r["best_total"] for r in rs]
+        lines.append(f"| {arm} | {len(rs)} | {statistics.mean(bests):.3f} | "
+                     f"{statistics.pstdev(bests) if len(bests) > 1 else 0.0:.3f} | "
+                     f"{statistics.mean(r['gen0_total'] for r in rs):.3f} |")
+    base = "control" if "control" in by_arm else ("evolve" if "evolve" in by_arm else None)
+    if base:
+        for arm in sorted(by_arm):
+            if arm == base:
+                continue
+            b = paired_bootstrap_net(valid, arm, base, key="best_total")
+            if b is None:
+                lines.append(f"- {arm} vs {base}: 판정 불가(짝지을 문서 2개 미만)")
+                continue
+            verdict = ("**유의하게 높다**" if b["p"] < ALPHA and b["net"] > 0
+                       else "**유의하게 낮다**" if b["p"] < ALPHA and b["net"] < 0
+                       else "구분되지 않는다")
+            lines.append(f"- {arm} vs {base} (best 절대 점수, 문서짝 {b['n_docs']}개): "
+                         f"{b['net']:+.3f}, 95% CI [{b['ci_low']:+.3f}, {b['ci_high']:+.3f}], "
+                         f"p={b['p']:.3f} → {verdict}")
+    return lines
 
 
 def _arm_stats(rs):
@@ -418,6 +510,8 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
         bs = statistics.mean(r["best_total"] for r in rs)
         lines.append(f"| {doc} | {rs[0]['size']} | {arm} | {g0:.3f} | {bs:.3f} | {bs-g0:+.3f} |")
 
+    lines += _absolute_score_lines(valid, by_arm)
+
     lines.append("\n## 해석")
     ev = _arm_stats(by_arm.get("evolve", []))
     if "evolve-wiki" in by_arm:
@@ -466,7 +560,24 @@ def aggregate(records, batch_dir, generations, runs, batch_elapsed):
             "- evolve-nohist arm이 있는데 비교 기준(evolve arm)이 없다 — "
             "영속 이력 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
         )
-    elif "control" in by_arm and "evolve" in by_arm:
+    if "evolve-informed" in by_arm and "evolve" in by_arm:
+        inf = _arm_stats(by_arm["evolve-informed"])
+        net_i = inf["mean_imp"] - ev["mean_imp"]
+        lines.append(
+            f"- 근거 정보 효과(net) = evolve-informed {inf['mean_imp']:+.3f} - "
+            f"evolve {ev['mean_imp']:+.3f} = **{net_i:+.3f}**"
+        )
+        lines += _significance_lines(
+            valid, "evolve-informed", "evolve",
+            "근거 문단·실패 유형을 본 Reflector가 **눈 감은 Reflector보다 실제로 개선**한다.",
+            "근거 정보 유무가 통계적으로 **구분되지 않는다** — 관측된 차이는 노이즈로 설명 가능.",
+        )
+    elif "evolve-informed" in by_arm:
+        lines.append(
+            "- evolve-informed arm이 있는데 비교 기준(evolve arm)이 없다 — "
+            "근거 정보 효과는 판정 불가. --arms에 evolve를 함께 넣을 것."
+        )
+    if "control" in by_arm and "evolve" in by_arm:
         ct = _arm_stats(by_arm["control"])
         net = ev["mean_imp"] - ct["mean_imp"]
         lines.append(
@@ -510,12 +621,14 @@ if __name__ == "__main__":
     ap.add_argument("--ablation", action="store_true",
                     help="영속 이력 ablation: evolve vs evolve-nohist 두 arm (A단계 전용)")
     ap.add_argument("--parallel", type=int, default=1,
-                    help="동시에 돌릴 문서 수 (기본 1=순차, A단계 전용). CLI 세션 rate limit에 주의")
+                    help="동시에 돌릴 문서(A단계) 또는 묶음(B단계, --bundle-size와 함께) 수. 기본 1=순차. CLI 세션 rate limit에 주의")
+    ap.add_argument("--bundle-size", type=int, default=None,
+                    help="B단계: 문서를 이 크기의 묶음 여러 개로 나눠 돌린다 (크기순 round-robin, 묶음이 표본 단위)")
     ap.add_argument("--stage", choices=["summary", "structure"], default="summary",
                     help="summary=A단계(문서별 요약), structure=B단계(폴더 구조)")
     ap.add_argument("--arms", default=None,
-                    help="쉼표 구분 arm 목록 (예: evolve,evolve-wiki,control) — A단계 전용, "
-                         "--with-control/--ablation보다 우선")
+                    help="쉼표 구분 arm 목록 (A단계: evolve,evolve-wiki,evolve-nohist,control / "
+                         "B단계: evolve,evolve-informed,control) — --with-control/--ablation보다 우선")
     args = ap.parse_args()
     if args.ablation and args.stage == "structure":
         ap.error("--ablation은 --stage structure와 함께 쓸 수 없다")
@@ -533,4 +646,5 @@ if __name__ == "__main__":
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)}B)")
     run_batch(files, args.runs, args.generations, args.n_qa,
               with_control=args.with_control, ablation=args.ablation,
-              parallel=args.parallel, stage=args.stage, arms=arm_list)
+              parallel=args.parallel, stage=args.stage, arms=arm_list,
+              bundle_size=args.bundle_size)

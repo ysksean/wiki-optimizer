@@ -1,0 +1,197 @@
+{
+ "report": "/tmp/feat-incremental/runs/batch-20260910-211515/structure-evolve-incremental-20260911-000429/report.json",
+ "n_questions": 12,
+ "answer_mode": "extractive",
+ "summary": {
+  "repeats": 5,
+  "parse_failed": 0,
+  "total": {
+   "mean": 0.859,
+   "sd": 0.059,
+   "min": 0.796,
+   "max": 0.955
+  },
+  "accuracy": {
+   "mean": 0.9,
+   "sd": 0.063,
+   "min": 0.833,
+   "max": 1.0
+  },
+  "efficiency": {
+   "mean": 0.954,
+   "sd": 0.002,
+   "min": 0.951,
+   "max": 0.955
+  },
+  "per_question": [
+   {
+    "q": "Karpathy가 말하는 Software 3.0의 가장 핵심적인 특징은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.4,
+    "flips": true
+   },
+   {
+    "q": "Claude Code에서 Plan Mode와 Accept Mode를 토글하는 단축키는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "에이전틱 엔지니어링의 5가지 기둥 중 AI가 스스로 자기 코드를 검증하게 만드는 기둥의 이름은?",
+    "pick_agreement": 0.8,
+    "n_distinct_picks": 2,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Redis의 List, Stream, Pub/Sub 중에서 메시지를 저장하고 ACK·consumer group을 지원하는 것은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "출처 지칭 오염 버그(판단의견이 라벨을 무시하는 문제)를 근본적으로 고쳤을 때 사용한 방법은?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "WikiSkill 논문이 에이전트 경험을 관리하기 위해 제안한 3계층 구조는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "프롬프트 규칙 보강으로 같은 사고가 재발했을 때 Anthropic이 권장하는 다음 단계는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.8,
+    "flips": true
+   },
+   {
+    "q": "Pub/Sub의 가장 중요한 제약사항은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "BE와 AI 서버 간에 양방향 통신을 위해 Redis List를 몇 개 만들어야 하는가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Karpathy가 말하는 '디렉터'가 버려도 되는 능력은 무엇인가?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 0.6,
+    "flips": true
+   },
+   {
+    "q": "PII 마스킹/복원 모델에서 복원이 가능한 이유는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 /clear 대신 /compact를 써야 하는 경우는?",
+    "pick_agreement": 1.0,
+    "n_distinct_picks": 1,
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "mean_pick_agreement": 0.983,
+  "flip_rate": 0.25
+ },
+ "rejudge": {
+  "repeats": 5,
+  "per_question": [
+   {
+    "q": "Karpathy가 말하는 Software 3.0의 가장 핵심적인 특징은 무엇인가?",
+    "pred": "\"**핵심은 '속도'가 아니라 '새로운 기회'다. 1.0 패러다임에서 불가능했던 것들(지식 그래프 자동 생성, 느슨한 명세로 작동)이 가능해진다.**\"",
+    "correct_rate": 0.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 Plan Mode와 Accept Mode를 토글하는 단축키는?",
+    "pred": "**Shift + Tab: Plan Mode ↔ Accept Mode**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "에이전틱 엔지니어링의 5가지 기둥 중 AI가 스스로 자기 코드를 검증하게 만드는 기둥의 이름은?",
+    "pred": "**기둥의 이름:** \"### 2. 에이전틱 검증\"\n\n**인용:**\n> \"AI가 코드를 만드는 건 창의적이라 실수하기 쉽지만, **이미 만든 코드가 맞는지 확인하는 건 상대적으로 단순하다.**\n>\n> **TDD**: 사람이 테스트 먼저 작성 → AI가 구현 → AI가 자동으로 테스트 실행 → 실패하면 스스로 수정.\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Redis의 List, Stream, Pub/Sub 중에서 메시지를 저장하고 ACK·consumer group을 지원하는 것은?",
+    "pred": "메시지를 저장하고 ACK·consumer group을 지원하는 것은 **Stream**입니다.\n\n인용: \"메시지가 로그처럼 **저장**되고 재조회·**ACK**·**consumer group**(여러 소비자 분산 처리) 지원.\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "출처 지칭 오염 버그(판단의견이 라벨을 무시하는 문제)를 근본적으로 고쳤을 때 사용한 방법은?",
+    "pred": "**\"2차 수리(완치)**: judge 산출 직후 **코드가 본문을 교정**하는 사후 게이트.\n\n게이트 설계의 핵심:\n- **내용 귀속 문형만 탐지** (\"X에 따르면/에는\") — 부재 서술(\"X가 등록되지 않아\")은 보존\n- **치환 출처는 그 문단의 cited_indexes 행 라벨에서만** 가져옴 → 게이트가 거짓 출처명을 만들 수 없는 구조\n- **치환 불가 상황**(문서 라벨 복수): 무치환 + 경고 로그 (fail-open)\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "WikiSkill 논문이 에이전트 경험을 관리하기 위해 제안한 3계층 구조는?",
+    "pred": "**raw 트레이스 / 누적 지식(wiki) / 실행 skill의 3계층 분리**\n\n구체적으로는:\n\n- **raw/**: 불변 실행 트레이스 (모든 롤아웃 기록)\n- **wiki/**: 누적 지식\n  - patterns/ — 관찰된 재현 가능 패턴\n  - logs.md — 채점 결과 요약\n  - skill-impact.md — 채택/기각된 skill 제안 + diff + 결과\n- **skills/**: 실행 skill (PURPOSE, 근거 패턴 역링크)",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "프롬프트 규칙 보강으로 같은 사고가 재발했을 때 Anthropic이 권장하는 다음 단계는?",
+    "pred": "컨텍스트에 **Anthropic의 공식 권장사항**이 명시되지 않았습니다.\n\n다만 컨텍스트에서 보이는 패턴은:\n\n\"**같은 사고가 두 번 관측되면** 프롬프트 강화만으로는 부족 → **결정론 게이트로 승격**.\"\n\n즉, 프롬프트 규칙 보강으로 같은 버그가 재발했을 때는 **코드가 직접 교정하는 사후 게이트**(결정론적 게이트)를 2차 방어로 도입하는 것입니다.",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Pub/Sub의 가장 중요한 제약사항은 무엇인가?",
+    "pred": "**\"발행하는 순간 듣고 있는 구독자에게만 1회 전달\"** (fire-and-forget, **at-most-once**).\n\n또는 더 구체적으로: **\"끊겨 있던 구독자는 그사이 메시지를 영영 못 받음\"**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "BE와 AI 서버 간에 양방향 통신을 위해 Redis List를 몇 개 만들어야 하는가?",
+    "pred": "\"큐(List)는 단방향 FIFO → 양방향 통신엔 큐를 분리한다. - **요청 큐**: BE → AI (작업 지시) - **응답 큐**: AI → BE (결과 반환)\"\n\n**답: 2개**",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Karpathy가 말하는 '디렉터'가 버려도 되는 능력은 무엇인가?",
+    "pred": "**\"API 문법은 인턴 작업이지만, 무엇이 가능하고 의미 있는지의 큰 그림은 디렉터가 봐야 한다.\"**",
+    "correct_rate": 0.6,
+    "flips": true
+   },
+   {
+    "q": "PII 마스킹/복원 모델에서 복원이 가능한 이유는?",
+    "pred": "**인용:**\n\n\"**마스킹·복원은 결정론적으로 처리**\"\n\n그리고 더 구체적으로:\n\n\"Vault에 저장(원본값 기록)\" 및 \"**일관성 보장**: 같은 값은 같은 마스킹 토큰 / 같은 Vault 키는 같은 원본값\"",
+    "correct_rate": 1.0,
+    "flips": false
+   },
+   {
+    "q": "Claude Code에서 /clear 대신 /compact를 써야 하는 경우는?",
+    "pred": "**\"/compact는 맥락 유지하면서 가볍게 만들기\"**\n\n컨텍스트에서:\n\n> `/clear`는 완전히 새로 시작, `/compact`는 맥락 유지하면서 가볍게 만들기.\n\n또한:\n\n> 컨텍스트 80% 이상: `/compact`로 요약 압축",
+    "correct_rate": 1.0,
+    "flips": false
+   }
+  ],
+  "flip_rate": 0.083,
+  "accuracy": {
+   "mean": 0.883,
+   "sd": 0.041
+  }
+ }
+}

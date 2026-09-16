@@ -189,3 +189,11 @@ def test_score_basis_marks_heldout_split():
     assert "const split = rep?.question_split || p.question_split;" in JS
     assert JS.count("sb_split:") == 3 and JS.count("sb_train_questions:") == 3
     assert 'cur.train_details' in JS and ".sb-tag {" in CSS
+
+
+def test_score_basis_shows_failure_type_and_evidence():
+    """evidence.py 결과(실패 유형·근거 위치·구조 결함)를 질문별 판정 표에 붙인다 (설계 2단계)."""
+    assert "cur.heldout_evidence" in JS and 'class="why-type why-' in JS and "cur.warnings" in JS
+    assert JS.count("fail_routing_miss:") == 3 and JS.count("structure_warnings:") == 3
+    assert JS.count('"arm_evolve-informed":') == 3 and ".arm-evolve-informed {" in CSS
+    assert ".why-doc_dropped {" in CSS and ".sb-warnings {" in CSS
