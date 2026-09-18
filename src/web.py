@@ -107,18 +107,36 @@ def cancel_job(job_id):
 
 
 def list_docs(wiki_dir):
-    """지정 폴더의 md 파일 목록. raw/ 하위 폴더가 있으면 그쪽 우선."""
-    base = os.path.expanduser(wiki_dir)
+    """List selectable Markdown sources without escaping through symlinks.
+
+    This is the legacy/advanced picker counterpart to ``inspection.inspect_folder``.
+    Keep its traversal rules aligned: a source directory can contain arbitrary local
+    files, but hidden and generated directories and symlinked entries are not inputs
+    to an LLM job.  Relative names keep same-named nested documents distinguishable.
+    """
+    base = os.path.abspath(os.path.expanduser(wiki_dir))
     if not os.path.isdir(base):
         return None
-    search = os.path.join(base, "raw") if os.path.isdir(os.path.join(base, "raw")) else base
-    files = sorted(
-        (f for f in glob.glob(os.path.join(search, "**", "*.md"), recursive=True)
-         if os.path.basename(f).lower() != "readme.md"),
-        key=os.path.getsize,
-    )
-    return [{"path": f, "name": os.path.splitext(os.path.basename(f))[0],
-             "size": os.path.getsize(f)} for f in files]
+    raw = os.path.join(base, "raw")
+    # A workspace-shaped folder with a linked raw/ must not fall back to listing
+    # wiki/ files as if they were source documents.
+    if os.path.lexists(raw) and os.path.islink(raw):
+        return []
+    search = raw if os.path.isdir(raw) else base
+    files = []
+    for parent, dirs, names in os.walk(search, followlinks=False):
+        dirs[:] = sorted(d for d in dirs
+                         if not d.startswith(".") and d not in inspection.SKIP_DIRS
+                         and not os.path.islink(os.path.join(parent, d)))
+        for name in sorted(names):
+            path = os.path.join(parent, name)
+            if (not name.lower().endswith(".md") or name.lower() == "readme.md"
+                    or os.path.islink(path)):
+                continue
+            size = os.path.getsize(path)
+            relative = os.path.relpath(path, search)
+            files.append({"path": path, "name": os.path.splitext(relative)[0], "size": size})
+    return sorted(files, key=lambda item: (item["size"], item["name"]))
 
 
 def _run_job(job):
