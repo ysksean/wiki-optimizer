@@ -37,6 +37,7 @@ from datetime import datetime
 
 import llm
 import provenance
+import question_filter
 import scoring
 import wiki
 
@@ -128,7 +129,8 @@ def load_question_set(raw_path, raw_text, n_qa):
             print(f"[setup] 수동 질문 세트 사용: {manual} ({len(qs)}개)")
             return qs
     print("[setup] 자동 질문 세트 생성 중...")
-    return scoring.build_question_set(raw_text, n=n_qa)
+    qs, _ = question_filter.filter_questions(lambda k: scoring.build_question_set(raw_text, n=k), n_qa)
+    return qs
 
 
 def split_questions(question_set, doc, holdout_ratio=HOLDOUT_RATIO):

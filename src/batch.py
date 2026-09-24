@@ -49,6 +49,7 @@ from datetime import datetime
 
 import evolve
 import evolve_structure
+import question_filter
 import structure
 
 
@@ -181,13 +182,15 @@ def _prepare_question_set(f, n_qa):
 
 
 def _prepare_cross_question_set(files, n_qa):
-    """구조 실험용 cross-doc 질문 세트. 실패(예외/빈 결과)는 None."""
+    """구조 실험용 cross-doc 질문 세트 + 거른 기록. 실패(예외/빈 결과)는 (None, None)."""
     try:
         docs = evolve_structure.load_docs(0, files=files)
-        return structure.build_cross_question_set(docs, n=n_qa) or None
+        qs, info = question_filter.filter_questions(
+            lambda k: structure.build_cross_question_set(docs, n=k), n_qa)
+        return (qs, info) if qs else (None, None)
     except Exception as e:  # LLMError, 타임아웃, 인코딩 오류 등
         print(f"[batch] 질문 세트 생성 중 예외: {e}")
-        return None
+        return None, None
 
 
 def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
@@ -197,7 +200,7 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
     doc = "+".join(os.path.splitext(os.path.basename(f))[0] for f in files)
     size = sum(os.path.getsize(f) for f in files)
     # 질문 세트는 묶음당 1회 생성해 모든 arm/run이 공유 (공정 비교)
-    question_set = _prepare_cross_question_set(files, n_qa)
+    question_set, question_info = _prepare_cross_question_set(files, n_qa)
     if not question_set:
         print(f"[batch] {doc}: 질문 세트 실패, 중단")
         return
@@ -218,7 +221,7 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
                     out_dir=batch_dir, no_evolve=(arm == "control"),
                     informed=(arm == "evolve-informed"),
                     incremental=(arm == "evolve-incremental"),
-                    question_set=question_set,
+                    question_set=question_set, question_info=question_info,
                     finalists=finalists, finalist_repeats=finalist_repeats,
                 )
             except Exception as e:  # 한 run 실패해도 배치는 계속
@@ -299,6 +302,8 @@ def _record(report, doc, size, r, arm, dt):
     # 최종 후보 재채점이 있었으면 그 값 — 단일 채점 최고값의 선택 편향을 뺀 비교용 점수
     sel = report.get("selection") or {}
     best_rescored = report["best"]["total"] if sel.get("winner") is not None and not parse_failed else None
+    # 기준선(held-out 정답률) — 묶음마다 같은 값이 arm·run 전부에 붙는다
+    base = report.get("baselines") or {}
     return {
         "doc": doc,
         "size": size,
@@ -312,6 +317,8 @@ def _record(report, doc, size, r, arm, dt):
         "improved": best > gen0,
         "gen0_acc": hist[0]["score"]["accuracy"],
         "best_acc": hist[best_gen]["score"]["accuracy"],
+        "ceiling_acc": (base.get("ceiling") or {}).get("accuracy"),
+        "floor_acc": (base.get("floor") or {}).get("accuracy"),
         "parse_failed": parse_failed,
         "elapsed_sec": round(dt, 1),
         # 재현성: 이 점수가 어떤 백엔드/모델/코드로 나왔는지 행 단위로 남긴다
@@ -409,6 +416,30 @@ def _gen0_noise(valid):
     return statistics.mean(sds) if sds else None
 
 
+def _baseline_lines(valid, by_arm):
+    """정답률 기준선 — 원본 전체를 읽을 때(위)와 문서 없이(아래) 사이 어디쯤인지.
+
+    묶음마다 한 번 잰 값이라 묶음 단위로 평균한다. best 정답률이 원본 전체에 붙어 있으면
+    구조를 더 다듬어도 올라갈 자리가 거의 없다."""
+    per_doc = {}
+    for r in valid:
+        if r.get("ceiling_acc") is not None or r.get("floor_acc") is not None:
+            per_doc[r["doc"]] = (r.get("ceiling_acc"), r.get("floor_acc"))
+    if not per_doc:
+        return []
+    ceilings = [c for c, _ in per_doc.values() if c is not None]
+    floors = [f for _, f in per_doc.values() if f is not None]
+    parts = []
+    if ceilings:
+        parts.append(f"원본 전체를 읽으면 {statistics.mean(ceilings):.3f}")
+    if floors:
+        parts.append(f"문서 없이 {statistics.mean(floors):.3f}")
+    arms = " · ".join(f"{arm} {statistics.mean(r['best_acc'] for r in by_arm[arm]):.3f}"
+                      for arm in sorted(by_arm))
+    return [f"- 정답률 기준선(held-out, 묶음 {len(per_doc)}개 평균): " + " · ".join(parts)
+            + f" — arm별 best 정답률: {arms}"]
+
+
 def _absolute_score_lines(valid, by_arm):
     """절대 점수(best held-out) 비교 — gen0 노이즈에 잠기지 않는 arm 비교.
 
@@ -424,6 +455,7 @@ def _absolute_score_lines(valid, by_arm):
         lines.append(f"- gen0 노이즈(같은 문서 안 gen0 표준편차 평균): {noise:.3f}"
                      + (" — **0.1 이상이면 위 '향상폭'은 gen0 운에 좌우된다. 아래 절대 점수로 판단할 것.**"
                         if noise >= 0.1 else ""))
+    lines += _baseline_lines(valid, by_arm)
     lines.append("| arm | runs | 평균 best | 표준편차 | 평균 gen0 |")
     lines.append("|---|---|---|---|---|")
     for arm in sorted(by_arm):

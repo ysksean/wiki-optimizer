@@ -256,9 +256,14 @@ def score_structure(struct, question_set, total_raw_chars, repeats=None, answer_
     }
 
 
+def join_docs(docs):
+    """문서 묶음 → 한 덩어리 텍스트 (질문 생성과 원본 전체 기준선이 같은 모양을 쓴다)."""
+    return "\n\n".join(f"=== {name} ===\n{text}" for name, text in docs.items())
+
+
 def build_cross_question_set(docs, n=4):
     """여러 문서 전체에 걸친 질문 세트를 만든다 (문서 경계 넘나드는 질문 포함)."""
-    joined = "\n\n".join(f"=== {name} ===\n{text}" for name, text in docs.items())
+    joined = join_docs(docs)
     prompt = (
         "다음 문서 묶음을 지식베이스로 쓸 때 실제로 물어볼 법한 질문과 정답을 "
         f"정확히 {n}개 만들어라. 서로 다른 문서의 내용을 묻는 질문을 섞어라. "

@@ -30,6 +30,7 @@ from datetime import datetime
 
 import llm
 import provenance
+import question_filter
 import structure
 import evolve
 import evidence
@@ -102,8 +103,12 @@ FINALIST_REPEATS_DEFAULT = int(os.environ.get("STRUCTURE_FINALIST_REPEATS", "3")
 def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
                      no_evolve=False, question_set=None, informed=False, incremental=False,
                      progress_cb=None, cancel_event=None, finalists=0, finalist_repeats=3,
-                     finalist_answer_mode="extractive"):
+                     finalist_answer_mode="extractive", question_info=None):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
+    question_info: 그 질문 세트를 거른 기록(question_filter.filter_questions의 info) — 리포트에 남긴다.
+
+    기준선(question_filter.baselines): held-out 질문을 문서 없이 / 원본 전체로 답한 정답률.
+    첫 세대를 만드는 동안 옆에서 재고, progress.json과 리포트의 "baselines"에 남긴다.
 
     progress_cb(stage, message, detail) / cancel_event: 대시보드 글래스박스 스트리밍과 단계 경계 중단.
     finalists=k: 세대 루프가 끝나면 단일 held-out 점수 상위 k개 구조를 인용형 답변 + finalist_repeats회
@@ -134,7 +139,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     if question_set is None:
         notify("questions", "원본에서 평가 질문을 만들고 있어요", f"문서 {len(docs)}개")
         print("[setup] 문서 전체에 걸친 질문 세트 생성 중...")
-        question_set = structure.build_cross_question_set(docs, n=n_qa)
+        question_set, question_info = question_filter.filter_questions(
+            lambda k: structure.build_cross_question_set(docs, n=k), n_qa)
     if not question_set:
         print("[error] 질문 세트 실패. 중단.")
         return
@@ -151,8 +157,22 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
           + ("  (질문이 적어 분리 포기 — 전부 겸용)" if degenerate else ""))
     for qa in question_set:
         tag = "H" if qa in test_qs and not degenerate else "T"
-        print(f"   - [{tag}] {qa['q']}")
+        print(f"   - [{tag}] {qa['q']}" + ("  (문서 없이 풀림)" if qa.get("closed_book") else ""))
     print()
+
+    # 기준선은 첫 세대 조직과 겹쳐서 잰다 — held-out 질문 기준(리포트 점수와 같은 질문)
+    baseline_pool = ThreadPoolExecutor(max_workers=1) if question_filter.BASELINES else None
+    baseline_future = (baseline_pool.submit(question_filter.baselines, test_qs, structure.join_docs(docs))
+                       if baseline_pool else None)
+
+    def current_baselines(wait=False):
+        if baseline_future is None or (not wait and not baseline_future.done()):
+            return None
+        try:
+            return baseline_future.result()
+        except Exception as e:  # 기준선 실패는 실행을 막지 않는다
+            print(f"[baseline] 실패: {e}")
+            return None
 
     strategy = SEED_STRATEGY
     # reflect에 넘길 채점 결과(train)는 반드시 best 전략과 짝이어야 한다 → 함께 저장.
@@ -240,7 +260,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             json.dump({
                 "mode": "structure", "arm": arm, "docs": list(docs.keys()),
                 "total_raw_chars": total_raw, "question_set": question_set,
-                "question_split": question_split,
+                "question_split": question_split, "question_filter": question_info,
+                "baselines": current_baselines(),
                 "generations": generations, "done_generations": g + 1,
                 "best_gen": best["generation"], "best_total": best["total"],
                 "history": history,
@@ -273,7 +294,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             json.dump({
                 "mode": "structure", "arm": arm, "docs": list(docs.keys()),
                 "total_raw_chars": total_raw, "question_set": question_set,
-                "question_split": question_split,
+                "question_split": question_split, "question_filter": question_info,
+                "baselines": current_baselines(),
                 "generations": generations, "done_generations": len(history),
                 "best_gen": best["generation"], "best_total": best["total"],
                 "history": history, "selection": selection,
@@ -299,6 +321,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "generations": generations,
         "question_set": question_set,
         "question_split": question_split,
+        "question_filter": question_info,
+        "baselines": current_baselines(wait=not cancelled()),
         "parse_failed": bool(parse_failed_gens),
         "parse_failed_generations": parse_failed_gens,
         "best": best,
@@ -306,6 +330,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "selection": selection,
         "cancelled": cancelled(),
     }
+    if baseline_pool:
+        baseline_pool.shutdown(wait=False)
     with open(os.path.join(run_dir, "report.json"), "w") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
