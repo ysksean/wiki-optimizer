@@ -6,7 +6,8 @@ Router 모드로 진단한다 — variant="auto"가 커버리지를 보고 고�
 
 공통 원칙:
 - 질문 세트는 raw에서 자동 생성 후 runs/qcache/에 캐시 (정답 근거는 항상 원본)
-- wiki/projects/ 하위는 진단에서 제외한다 (프로젝트/고객 정보 — 기술 위키가 아님)
+- wiki/projects/ 하위는 진단에서 제외한다 (프로젝트/고객 정보 — 기술 위키가 아님).
+  projects/ 페이지만 출처로 삼는 원본도 질문을 만들지 않는다 — 개념 위키가 답할 몫이 아니다
 
 Router 모드 (개념 위키):
 - 질문마다 wiki 페이지 index에서 읽을 페이지를 골라(Router) 그 페이지만 읽고 답한다
@@ -228,6 +229,9 @@ def router_audit(base_dir, n_qa=6, progress_cb=None, max_docs=None):
         raw_dir = base
     raws = sorted(_md_files(raw_dir).items(),
                   key=lambda kv: os.path.getsize(kv[1]))
+    project_only = project_only_sources(base_dir) if raw_dir != base else set()
+    excluded = [doc for doc, _ in raws if doc in project_only]
+    raws = [(doc, path) for doc, path in raws if doc not in project_only]
     if max_docs:
         raws = raws[:max_docs]
 
@@ -293,7 +297,45 @@ def router_audit(base_dir, n_qa=6, progress_cb=None, max_docs=None):
         "graph": graph,
         "questions": questions,
         "parse_failed_docs": parse_failed_docs,
+        "excluded_project_sources": excluded,
     }
+
+
+_RAW_MENTION = re.compile(r"raw/([^\s)\]`'\"]+?\.md)")
+
+
+def _cited_raw(text):
+    """페이지가 근거로 삼는 원본 이름들 — frontmatter sources + 본문의 raw/…md 언급. raw/ 기준, 확장자 없음."""
+    meta, body = frontmatter.split(text)
+    refs = meta.get("sources") or []
+    refs = [refs] if isinstance(refs, str) else refs
+    out = set()
+    for ref in list(refs) + _RAW_MENTION.findall(body):
+        ref = str(ref).strip()
+        while ref.startswith("./"):
+            ref = ref[2:]
+        if ref.startswith("/"):
+            continue                          # 위키 밖 절대경로 — raw/ 문서가 아니다
+        ref = ref[len("raw/"):] if ref.startswith("raw/") else ref
+        if ref:
+            out.add(ref.removesuffix(".md"))
+    return out
+
+
+def project_only_sources(base_dir):
+    """wiki/projects/ 페이지만 출처로 삼는 원본 이름들(raw/ 기준, 확장자 없음).
+
+    진단은 projects/ 페이지를 라우팅하지 않으므로, 이런 원본의 질문은 개념 위키로 답할 수 없다.
+    어느 페이지도 인용하지 않는 원본은 여기에 들지 않는다 — 위키의 빈틈이라 진단이 드러내야 한다."""
+    wiki_dir = os.path.join(os.path.expanduser(base_dir), "wiki")
+    if not os.path.isdir(wiki_dir):
+        return set()
+    by_project, by_concept = set(), set()
+    for name, path in _md_files(wiki_dir).items():
+        with open(path, encoding="utf-8", errors="replace") as f:
+            cited = _cited_raw(f.read())
+        (by_project if name.startswith("projects/") else by_concept).update(cited)
+    return by_project - by_concept
 
 
 def _page_rows(pages, page_stats, graph):
