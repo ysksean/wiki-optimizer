@@ -21,12 +21,18 @@ import json
 import os
 import re
 
+import frontmatter
 import llm
 import scoring
 import structure
 
 QCACHE_DIR = os.path.join("runs", "qcache")
 PAIR_COVERAGE_THRESHOLD = 0.6  # 이름 짝 비율이 이보다 낮으면 Router 모드
+# 탐색용 페이지(Karpathy 패턴의 색인·로그) — 내용 페이지가 아니므로 라우팅 후보에서 뺀다
+NAV_PAGES = {"index", "log"}
+_INDEX_ENTRY = re.compile(r"^\s*(?:[-*+]\s+)?\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]\s*[—–:-]\s*(.+?)\s*$")
+_MD_NOISE = re.compile(r"\*\*|__|`")
+_WIKILINK = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]")
 
 
 def _md_files(d, exclude_dirs=()):
@@ -103,18 +109,52 @@ def parse_links(text):
     return out
 
 
-def wiki_pages(base_dir):
-    """wiki/ 개념 페이지 목록 (projects/ 제외). [{name, path, text, desc}]"""
+def index_descriptions(wiki_dir):
+    """wiki/index.md의 `- [[페이지]] — 설명` 줄에서 페이지별 한 줄 설명을 모은다.
+
+    실제 독자(wiki-ask)는 이 색인을 보고 읽을 페이지를 고른다. 키는 링크 대상의 basename,
+    같은 페이지가 여러 섹션에 나오면 설명을 ` / `로 잇는다.
+    """
+    path = os.path.join(wiki_dir, "index.md")
+    if not os.path.isfile(path):
+        return {}
+    with open(path) as f:
+        _, body = frontmatter.split(f.read())
+    out = {}
+    for line in body.splitlines():
+        m = _INDEX_ENTRY.match(line)
+        if not m:
+            continue
+        target = os.path.basename(m.group(1).strip().removesuffix(".md"))
+        desc = _WIKILINK.sub(lambda w: (w.group(2) or w.group(1)).strip(), m.group(2))
+        desc = _MD_NOISE.sub("", desc).strip()
+        if desc and desc not in out.get(target, []):
+            out.setdefault(target, []).append(desc)
+    return {k: " / ".join(v) for k, v in out.items()}
+
+
+def wiki_pages(base_dir, desc_limit=160):
+    """wiki/ 개념 페이지 목록 (projects/·색인·로그 제외). [{name, path, text, desc, meta}]
+
+    desc는 라우터가 보는 한 줄 설명 — 실제 독자가 보는 순서대로 index.md 설명 →
+    frontmatter title → 본문 첫 줄. (예전에는 원문 첫 줄을 그대로 써서, frontmatter가 있는
+    페이지는 전부 '---'가 되고 라우터가 파일명만 보고 골랐다.)
+    """
     base = os.path.expanduser(base_dir)
     wiki_dir = os.path.join(base, "wiki")
     if not os.path.isdir(wiki_dir):
         return []
+    described = index_descriptions(wiki_dir)
     pages = []
     for name, path in sorted(_md_files(wiki_dir, exclude_dirs=("projects",)).items()):
+        if os.path.basename(name).lower() in NAV_PAGES:
+            continue
         with open(path) as f:
             text = f.read()
-        first = next((l.strip().lstrip("# ") for l in text.splitlines() if l.strip()), "")
-        pages.append({"name": name, "path": path, "text": text, "desc": first[:80]})
+        meta, _ = frontmatter.split(text)
+        title = meta.get("title") if isinstance(meta.get("title"), str) else ""
+        desc = described.get(os.path.basename(name)) or title or frontmatter.first_line(text, desc_limit)
+        pages.append({"name": name, "path": path, "text": text, "desc": desc[:desc_limit], "meta": meta})
     return pages
 
 
