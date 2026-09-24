@@ -377,3 +377,25 @@ def test_persistently_malformed_output_still_fails(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(inc, "_json_response", lambda p: {"not": "a list"})
     with pytest.raises(ValueError, match="verification is incomplete"):
         inc._json_valid("p", lambda v: isinstance(v, list))
+
+
+def test_router_picks_are_normalized_not_invented() -> None:
+    """경로 표기가 조금 다르거나 3개를 넘겨도 작업을 버리지 않는다. 없는 경로는 받지 않는다."""
+    pages = {"wiki/index.md": "i", "wiki/a.md": "a", "wiki/sub/b.md": "b", "wiki/c.md": "c"}
+    picks = inc._router_picks(["index.md", "wiki/a.md", "wiki/a.md", "wiki/ghost.md", "sub/b", "wiki/c.md"], pages)
+    assert picks == ["wiki/index.md", "wiki/a.md", "wiki/sub/b.md"]
+    assert inc._router_picks([], pages) == []
+    assert inc._router_picks({"paths": ["wiki/a.md"]}, pages) is None       # 배열이 아니면 다시 부른다
+    assert inc._router_picks(["a.md"], {"wiki/a.md": "", "wiki/x/a.md": ""}) == []   # 끝부분이 둘에 맞으면 버린다
+
+
+def test_answer_shapes() -> None:
+    assert inc._answer_text({"answer": " 답 "}) == "답"
+    assert inc._answer_text({"answer": ["하나", "둘"]}) == "하나; 둘"
+    assert inc._answer_text({"answer": ""}) is None and inc._answer_text(["답"]) is None
+
+
+def test_persistent_router_failure_names_the_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inc, "_json_response", lambda p: {"paths": ["wiki/a.md"]})
+    with pytest.raises(ValueError, match=r"Invalid router response; verification is incomplete \(last response: "):
+        inc._evaluate({"wiki/a.md": "a"}, [{"q": "q", "a": "a"}])
