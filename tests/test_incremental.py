@@ -355,3 +355,25 @@ def test_too_few_grounded_questions_still_fail(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(inc, "_json_response", lambda p: [])
     with pytest.raises(ValueError, match="requested question set"):
         inc._questions({"raw/a.md": "real"}, 4, "")
+
+
+def test_transient_malformed_verification_output_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """검증 단계의 형식 오류 한 번이 작업 전체를 버리지 않는다 — 같은 호출을 다시 시도한다."""
+    responses = iter([ValueError("LLM returned invalid JSON; no changes were applied"),
+                      ["wiki/unknown.md"],                     # 없는 경로 — 재시도
+                      ["wiki/a.md"]])
+
+    def fake(prompt: str) -> Any:
+        value = next(responses)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    monkeypatch.setattr(inc, "_json_response", fake)
+    assert inc._json_valid("p", lambda v: isinstance(v, list) and all(p in {"wiki/a.md"} for p in v)) == ["wiki/a.md"]
+
+
+def test_persistently_malformed_output_still_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inc, "_json_response", lambda p: {"not": "a list"})
+    with pytest.raises(ValueError, match="verification is incomplete"):
+        inc._json_valid("p", lambda v: isinstance(v, list))
