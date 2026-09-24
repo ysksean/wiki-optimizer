@@ -19,6 +19,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
+import frontmatter
 import llm
 import scoring
 
@@ -92,8 +93,11 @@ def organize(docs, strategy, previous=None):
 
 
 def _one_line(content, limit=80):
-    first = content.strip().split("\n")[0]
-    return first[:limit]
+    """라우터용 한 줄 설명. frontmatter가 있으면 title, 없으면 본문 첫 줄."""
+    meta, _ = frontmatter.split(content)
+    if isinstance(meta.get("title"), str) and meta["title"]:
+        return meta["title"][:limit]
+    return frontmatter.first_line(content, limit)
 
 
 def _parse_struct(text, docs=None):
