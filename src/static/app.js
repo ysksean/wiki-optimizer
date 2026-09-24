@@ -260,7 +260,7 @@ const I18N = {
     structure_head: (d, f) => `구조 재편 제안 · 문서 ${d}개 → 파일 ${f}개`,
     structure_intro: (n, b) => `AI가 "문서를 어떻게 나눌지" 규칙을 ${n}번 고쳐 쓰며 시도했고, 각 시도를 같은 질문 세트로 채점했습니다. 점수가 가장 높은 ${b}차 시도가 제안입니다.`,
     structure_intro_running: (d, n) => `AI가 "문서를 어떻게 나눌지" 규칙을 고쳐 쓰며 시도하는 중입니다 · ${d}/${n}차`,
-    structure_hero: n => `${n}차 시도 종합`, attempt_n: n => `${n}차 시도`, attempt_meta: (f, a) => `파일 ${f}개 · 정확도 ${a}`,
+    selection_hero: (k, n) => `최종 후보 ${k}개를 ${n}회씩 다시 잰 값`, selection_title: "최종 후보 다시 재기", selection_note: n => `세대별 점수는 한 번 채점한 값이라 운이 섞여 있어요. 점수가 높은 후보만 인용형 답변으로 ${n}회씩 다시 채점해 골랐어요. 단일 채점 → 다시 잰 값:`, structure_hero: n => `${n}차 시도 종합`, attempt_n: n => `${n}차 시도`, attempt_meta: (f, a) => `파일 ${f}개 · 정확도 ${a}`,
     rule_diff: (n, p) => `${n}차 시도의 분할 규칙 — ${p}차에서 바뀐 부분`, rule_seed: n => `${n}차 시도의 분할 규칙 — 기본값`, rule_rewritten: (n, p) => `${n}차 시도의 분할 규칙 — ${p}차 결과를 보고 거의 새로 씀`, rule_prev: p => `${p}차 규칙 보기`,
     map_now: "지금 문서", map_from: "출처", map_proposed: "제안 구조", map_tip: "파일에 마우스를 올리거나 클릭하면 어느 원본 문서에서 왔는지 선으로 표시됩니다.",
     map_no_sources: "이 실행은 출처 기록 이전 버전이라 문서→파일 연결선이 없습니다. 새로 실행하면 표시됩니다.",
@@ -369,7 +369,7 @@ const I18N = {
     structure_head: (d, f) => `Proposed restructure · ${d} documents → ${f} files`,
     structure_intro: (n, b) => `The AI rewrote its "how to split the documents" rule ${n} times, scoring each attempt on the same question set. Attempt ${b} scored highest and is the proposal.`,
     structure_intro_running: (d, n) => `The AI is rewriting its "how to split" rule and trying again · attempt ${d}/${n}`,
-    structure_hero: n => `attempt ${n} total`, attempt_n: n => `Attempt ${n}`, attempt_meta: (f, a) => `${f} files · accuracy ${a}`,
+    selection_hero: (k, n) => `re-scored: top ${k} candidates × ${n} rounds`, selection_title: "Final candidates, re-scored", selection_note: n => `Per-attempt scores come from a single noisy scoring. The top candidates were re-scored ${n} times with quoted answers before choosing. Single score → re-scored:`, structure_hero: n => `attempt ${n} total`, attempt_n: n => `Attempt ${n}`, attempt_meta: (f, a) => `${f} files · accuracy ${a}`,
     rule_diff: (n, p) => `Attempt ${n} split rule — changes since attempt ${p}`, rule_seed: n => `Attempt ${n} split rule — default`, rule_rewritten: (n, p) => `Attempt ${n} split rule — largely rewritten after attempt ${p}`, rule_prev: p => `Show attempt ${p} rule`,
     map_now: "Current documents", map_from: "From", map_proposed: "Proposed structure", map_tip: "Hover or click a file to see which source documents it came from.",
     map_no_sources: "This run predates source tracking, so no document→file lines are available. Run again to see them.",
@@ -478,7 +478,7 @@ const I18N = {
     structure_head: (d, f) => `结构重组提案 · ${d} 篇文档 → ${f} 个文件`,
     structure_intro: (n, b) => `AI 将"如何拆分文档"的规则改写并尝试了 ${n} 次，每次都用同一问题集评分。得分最高的第 ${b} 次尝试即为提案。`,
     structure_intro_running: (d, n) => `AI 正在改写"如何拆分"的规则并再次尝试 · 第 ${d}/${n} 次`,
-    structure_hero: n => `第 ${n} 次尝试综合`, attempt_n: n => `第 ${n} 次尝试`, attempt_meta: (f, a) => `${f} 个文件 · 准确率 ${a}`,
+    selection_hero: (k, n) => `前 ${k} 个候选各重新评分 ${n} 次`, selection_title: "最终候选重新评分", selection_note: n => `各代分数只评了一次，含有运气成分。仅对高分候选用引用式回答各重新评分 ${n} 次后选出。单次评分 → 重新评分:`, structure_hero: n => `第 ${n} 次尝试综合`, attempt_n: n => `第 ${n} 次尝试`, attempt_meta: (f, a) => `${f} 个文件 · 准确率 ${a}`,
     rule_diff: (n, p) => `第 ${n} 次尝试的拆分规则 — 相对第 ${p} 次的变化`, rule_seed: n => `第 ${n} 次尝试的拆分规则 — 默认`, rule_rewritten: (n, p) => `第 ${n} 次尝试的拆分规则 — 参考第 ${p} 次结果后基本重写`, rule_prev: p => `查看第 ${p} 次规则`,
     map_now: "当前文档", map_from: "来源", map_proposed: "提案结构", map_tip: "悬停或点击文件，可查看它来自哪些原始文档。",
     map_no_sources: "此次运行早于来源记录功能，因此没有文档→文件的连线。重新运行即可显示。",
@@ -1285,15 +1285,24 @@ function structureRun(run, jobId) {
   const files = (cur && cur.generation === bestGen && bestStruct) ? bestStruct : (cur?.files || (cur?.file_titles || []).map(x => ({ title: x, sources: [] })));
   const running = p.done_generations < p.generations;
   const bestH = hist.find(h => h.generation === bestGen);
+  // 최종 후보 재채점 — 있으면 hero의 점수·설명은 다시 잰 값이다
+  const selection = rep?.selection || p.selection;
+  const winner = selection?.winner != null ? (selection.entries || []).find(e => e.generation === selection.winner) : null;
   const bestCount = bestStruct ? bestStruct.length : (bestH?.n_files ?? files.length);
   let html = `<div class="runbox structure-run">
     <div class="sr-head"><div><h3>${t("structure_head", p.docs.length, bestCount)}</h3>
       <p>${running ? t("structure_intro_running", p.done_generations, p.generations) : t("structure_intro", hist.length, bestGen + 1)}</p></div>
-      ${p.best_total != null && bestGen >= 0 ? `<div class="sr-hero"><b>${p.best_total}</b><small>${t("structure_hero", bestGen + 1)}${bestH?.score ? ` · ${t("acc_short")} ${bestH.score.accuracy} × ${t("eff_short")} ${bestH.score.efficiency}` : ""}</small></div>` : ""}
+      ${p.best_total != null && bestGen >= 0 ? (winner
+        ? `<div class="sr-hero"><b>${winner.total}</b><small>${t("structure_hero", bestGen + 1)} · ${t("acc_short")} ${winner.accuracy} × ${t("eff_short")} ${winner.efficiency}</small><small>${t("selection_hero", selection.finalists, selection.repeats)}</small></div>`
+        : `<div class="sr-hero"><b>${p.best_total}</b><small>${t("structure_hero", bestGen + 1)}${bestH?.score ? ` · ${t("acc_short")} ${bestH.score.accuracy} × ${t("eff_short")} ${bestH.score.efficiency}` : ""}</small></div>`) : ""}
     </div>
     ${resultMeta(p, rep)}${parseFailedNote(failed)}
     <div class="attempts" role="tablist">${hist.map(h => `<button type="button" role="tab" aria-selected="${h.generation === sel}" class="attempt${h.generation === sel ? " on" : ""}${failed.has(h.generation) ? " failed" : ""}" onclick="selectAttempt('${esc(key)}', ${h.generation})">
         <span>${t("attempt_n", h.generation + 1)}${h.generation === bestGen ? " ★" : ""}</span><b>${failed.has(h.generation) ? "—" : h.score.total}</b><small>${t("attempt_meta", h.n_files, h.score.accuracy)}</small></button>`).join("")}</div>`;
+  if (selection?.entries?.length) {
+    html += `<div class="finalists"><b>${t("selection_title")}</b><span>${t("selection_note", selection.repeats)}</span><ul>${selection.entries.map(e =>
+      `<li class="${e.generation === selection.winner ? "win" : ""}">${t("attempt_n", e.generation + 1)} <code>${e.single_total}</code> → <code>${e.parse_failed ? "—" : e.total}</code>${e.generation === selection.winner ? " ★" : ""}</li>`).join("")}</ul></div>`;
+  }
   if (cur) {
     html += ruleBlock(prev, cur);
     html += structureMap(p.docs, files);

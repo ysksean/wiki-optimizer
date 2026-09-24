@@ -94,12 +94,21 @@ def reflect(strategy, result, enriched=None, warnings=None):
     return new_strategy.strip() or strategy
 
 
+# 최종 후보 재채점 기본값 — 대시보드 구조 작업이 쓴다. 0이면 끈다.
+FINALISTS_DEFAULT = int(os.environ.get("STRUCTURE_FINALISTS", "2"))
+FINALIST_REPEATS_DEFAULT = int(os.environ.get("STRUCTURE_FINALIST_REPEATS", "3"))
+
+
 def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None,
                      no_evolve=False, question_set=None, informed=False, incremental=False,
-                     progress_cb=None, cancel_event=None):
+                     progress_cb=None, cancel_event=None, finalists=0, finalist_repeats=3,
+                     finalist_answer_mode="extractive"):
     """question_set을 넘기면 그걸 쓴다 (배치에서 arm/run 간 동일 세트 보장).
 
     progress_cb(stage, message, detail) / cancel_event: 대시보드 글래스박스 스트리밍과 단계 경계 중단.
+    finalists=k: 세대 루프가 끝나면 단일 held-out 점수 상위 k개 구조를 인용형 답변 + finalist_repeats회
+    채점으로 다시 재서 최종 구조를 고른다. 단일 점수 최고값은 노이즈 최대값이라 +0.1~0.15 부풀어
+    있었다(2026-09-11 반복성 측정). 같은 held-out 질문을 다시 쓰므로 질문 세트 과적합은 남는다.
 
     informed=True(evolve-informed arm): Reflector에 근거 문단·실패 유형·구조 결함을
     추가로 준다. 근거 탐색 자체는 결정론이라 모든 arm에서 계산해 history에 남긴다 —
@@ -152,6 +161,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             "result": None, "train_result": None}
     history = []
     parse_failed_gens = []
+    structs = {}          # 판정이 정상인 세대의 구조 — 최종 후보 재채점용
 
     for g in range(generations):
         if cancelled():
@@ -188,6 +198,8 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
                             or (r_train is not None and r_train.get("parse_failed")))
         if parse_failed:
             parse_failed_gens.append(g)
+        else:
+            structs[g] = struct
         improved = (not parse_failed) and result["total"] > best["total"]
         marker = "  <- best" if improved else ("  (judge 파싱 실패 — 제외)" if parse_failed else "")
         train_part = f"train={r_train['total']} (acc={r_train['accuracy']}) " if r_train is not None else ""
@@ -249,6 +261,24 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
             else:
                 strategy = reflect(best["strategy"], train_result)
 
+    selection = None
+    if finalists and structs and not cancelled():
+        selection = _rescore_finalists(structs, history, best, test_qs, total_raw, finalists,
+                                       finalist_repeats, finalist_answer_mode, notify, cancelled)
+        if selection and selection["winner"] is not None:
+            best = selection.pop("best")
+        elif selection:
+            selection.pop("best", None)
+        with open(os.path.join(run_dir, "progress.json"), "w") as pf:
+            json.dump({
+                "mode": "structure", "arm": arm, "docs": list(docs.keys()),
+                "total_raw_chars": total_raw, "question_set": question_set,
+                "question_split": question_split,
+                "generations": generations, "done_generations": len(history),
+                "best_gen": best["generation"], "best_total": best["total"],
+                "history": history, "selection": selection,
+            }, pf, ensure_ascii=False)
+
     print(f"\n[done] best gen={best['generation']} total={best['total']}")
     best_files = best["struct"]["files"] if best["struct"] else []
     print(f"[done] best 구조 파일: {[f['title'] for f in best_files]}")
@@ -261,7 +291,9 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "provenance": provenance.collect(
             question_set=question_set,
             params={"generations": generations, "n_qa": n_qa, "n_docs": n_docs,
-                    "no_evolve": no_evolve, "informed": informed, "incremental": incremental},
+                    "no_evolve": no_evolve, "informed": informed, "incremental": incremental,
+                    "finalists": finalists, "finalist_repeats": finalist_repeats,
+                    "finalist_answer_mode": finalist_answer_mode},
         ),
         "total_raw_chars": total_raw,
         "generations": generations,
@@ -271,6 +303,7 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
         "parse_failed_generations": parse_failed_gens,
         "best": best,
         "history": history,
+        "selection": selection,
         "cancelled": cancelled(),
     }
     with open(os.path.join(run_dir, "report.json"), "w") as f:
@@ -280,6 +313,46 @@ def evolve_structure(n_docs=3, generations=2, n_qa=4, out_dir="runs", files=None
     print(f"[done] 점수 추이: {trail}")
     print(f"[done] 결과 저장: {run_dir}/")
     return report
+
+
+def _rescore_finalists(structs, history, best, test_qs, total_raw, k, repeats, answer_mode, notify, cancelled):
+    """단일 점수 상위 k개 구조를 반복 채점으로 다시 재서 최종 구조를 고른다.
+
+    반환: {"method", "finalists", "repeats", "answer_mode", "entries", "winner",
+           "single_best_generation", "single_best_total", "changed", "best"(새 best dict, 호출부가 꺼냄)}
+    재채점이 전부 판정 실패면 winner=None — 원래 best를 유지한다.
+    """
+    ranked = sorted(structs, key=lambda g: (-history[g]["score"]["total"], g))[:k]
+    entries = []
+    for i, g in enumerate(ranked):
+        if cancelled():
+            break
+        notify("finalizing", f"최종 후보 {i + 1}/{len(ranked)} — {g + 1}번째 구조를 다시 채점하고 있어요",
+               f"인용형 답변 · {repeats}회 반복")
+        r = structure.score_structure(structs[g], test_qs, total_raw, repeats=repeats, answer_mode=answer_mode)
+        entries.append({"generation": g, "single_total": history[g]["score"]["total"],
+                        "total": r["total"], "accuracy": r["accuracy"], "efficiency": r["efficiency"],
+                        "avg_read": r["avg_read"], "parse_failed": bool(r.get("parse_failed")), "result": r})
+        print(f"[final] gen {g}: single={history[g]['score']['total']} → rescored={r['total']}"
+              + ("  (판정 파싱 실패 — 제외)" if r.get("parse_failed") else ""))
+    valid = [e for e in entries if not e["parse_failed"]]
+    selection = {"method": "finalist_rescore", "finalists": len(entries), "repeats": repeats,
+                 "answer_mode": answer_mode, "single_best_generation": best["generation"],
+                 "single_best_total": best["total"], "winner": None, "changed": False}
+    if valid:
+        win = max(valid, key=lambda e: (e["total"], e["single_total"], -e["generation"]))
+        g = win["generation"]
+        same = g == best["generation"]
+        selection.update(winner=g, changed=not same)
+        selection["best"] = {
+            "total": win["total"], "generation": g, "strategy": history[g]["strategy"],
+            "struct": structs[g], "result": win["result"],
+            "train_result": best.get("train_result") if same else None,
+            "evidence": history[g].get("evidence"), "warnings": history[g].get("warnings"),
+            "single_total": win["single_total"], "rescored": True,
+        }
+    selection["entries"] = [{k2: v for k2, v in e.items() if k2 != "result"} for e in entries]
+    return selection
 
 
 if __name__ == "__main__":
@@ -292,6 +365,10 @@ if __name__ == "__main__":
                     help="Reflector에 근거 문단·실패 유형·구조 결함을 추가로 준다 (evolve-informed arm)")
     ap.add_argument("--incremental", action="store_true",
                     help="세대마다 백지 대신 best 구조를 고친다 (evolve-incremental arm)")
+    ap.add_argument("--finalists", type=int, default=FINALISTS_DEFAULT,
+                    help="끝난 뒤 단일 점수 상위 k개를 반복 채점으로 다시 재서 고른다 (0=끔)")
+    ap.add_argument("--finalist-repeats", type=int, default=FINALIST_REPEATS_DEFAULT)
     args = ap.parse_args()
     evolve_structure(n_docs=args.docs, generations=args.generations, n_qa=args.n_qa,
-                     no_evolve=args.control, informed=args.informed, incremental=args.incremental)
+                     no_evolve=args.control, informed=args.informed, incremental=args.incremental,
+                     finalists=args.finalists, finalist_repeats=args.finalist_repeats)

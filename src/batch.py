@@ -107,7 +107,8 @@ def split_bundles(files, bundle_size):
 
 
 def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False,
-              out_dir="runs", parallel=1, stage="summary", arms=None, bundle_size=None):
+              out_dir="runs", parallel=1, stage="summary", arms=None, bundle_size=None,
+              finalists=0, finalist_repeats=3):
     """parallel > 1이면 문서 단위로 동시에 돈다 (문서 안의 run x arm 순서는 유지).
 
     문서끼리는 질문 세트·run 디렉터리·구조화 위키(evolve-wiki arm,
@@ -139,14 +140,16 @@ def run_batch(files, runs, generations, n_qa, with_control=False, ablation=False
             if parallel > 1 and len(bundles) > 1:
                 with ThreadPoolExecutor(max_workers=parallel) as ex:
                     futures = [ex.submit(_run_structure, b, runs, arms, generations, n_qa,
-                                         batch_dir, state_path, records, total, progress)
+                                         batch_dir, state_path, records, total, progress,
+                                         finalists, finalist_repeats)
                                for b in bundles]
                     for fut in futures:
                         fut.result()
             else:
                 for b in bundles:
                     _run_structure(b, runs, arms, generations, n_qa, batch_dir,
-                                   state_path, records, total, progress)
+                                   state_path, records, total, progress,
+                                   finalists, finalist_repeats)
         elif parallel > 1:
             with ThreadPoolExecutor(max_workers=parallel) as ex:
                 futures = [
@@ -188,7 +191,7 @@ def _prepare_cross_question_set(files, n_qa):
 
 
 def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
-                   records, total, progress=None):
+                   records, total, progress=None, finalists=0, finalist_repeats=3):
     """문서 묶음 하나에 대해 run x arm으로 구조 진화를 돌린다. records 갱신은 progress 락으로 보호."""
     lock = progress["lock"] if progress else threading.Lock()
     doc = "+".join(os.path.splitext(os.path.basename(f))[0] for f in files)
@@ -216,6 +219,7 @@ def _run_structure(files, runs, arms, generations, n_qa, batch_dir, state_path,
                     informed=(arm == "evolve-informed"),
                     incremental=(arm == "evolve-incremental"),
                     question_set=question_set,
+                    finalists=finalists, finalist_repeats=finalist_repeats,
                 )
             except Exception as e:  # 한 run 실패해도 배치는 계속
                 print(f"[batch] run 실패: {e}")
@@ -292,6 +296,9 @@ def _record(report, doc, size, r, arm, dt):
         parse_failed = True
         best_gen = 0
     best = hist[best_gen]["score"]["total"]
+    # 최종 후보 재채점이 있었으면 그 값 — 단일 채점 최고값의 선택 편향을 뺀 비교용 점수
+    sel = report.get("selection") or {}
+    best_rescored = report["best"]["total"] if sel.get("winner") is not None and not parse_failed else None
     return {
         "doc": doc,
         "size": size,
@@ -299,6 +306,7 @@ def _record(report, doc, size, r, arm, dt):
         "arm": arm,
         "gen0_total": gen0,
         "best_total": best,
+        "best_rescored": best_rescored,
         "best_gen": best_gen,
         "improvement": round(best - gen0, 3),
         "improved": best > gen0,
@@ -408,7 +416,10 @@ def _absolute_score_lines(valid, by_arm):
     튀어 '향상폭' 기준 net이 방향까지 뒤집혔다(control이 최고). 그래서 절대 best를 함께 낸다.
     """
     noise = _gen0_noise(valid)
-    lines = ["\n## 절대 점수 비교 (best held-out — gen0와 무관)"]
+    # 모든 run에 최종 후보 재채점 값이 있으면 그것으로 비교한다(단일 채점 최고값은 노이즈 최대값)
+    key = "best_rescored" if valid and all(r.get("best_rescored") is not None for r in valid) else "best_total"
+    lines = ["\n## 절대 점수 비교 (best held-out — gen0와 무관)"
+             + (" · 최종 후보 재채점 값" if key == "best_rescored" else "")]
     if noise is not None:
         lines.append(f"- gen0 노이즈(같은 문서 안 gen0 표준편차 평균): {noise:.3f}"
                      + (" — **0.1 이상이면 위 '향상폭'은 gen0 운에 좌우된다. 아래 절대 점수로 판단할 것.**"
@@ -417,7 +428,7 @@ def _absolute_score_lines(valid, by_arm):
     lines.append("|---|---|---|---|---|")
     for arm in sorted(by_arm):
         rs = by_arm[arm]
-        bests = [r["best_total"] for r in rs]
+        bests = [r[key] for r in rs]
         lines.append(f"| {arm} | {len(rs)} | {statistics.mean(bests):.3f} | "
                      f"{statistics.pstdev(bests) if len(bests) > 1 else 0.0:.3f} | "
                      f"{statistics.mean(r['gen0_total'] for r in rs):.3f} |")
@@ -426,7 +437,7 @@ def _absolute_score_lines(valid, by_arm):
         for arm in sorted(by_arm):
             if arm == base:
                 continue
-            b = paired_bootstrap_net(valid, arm, base, key="best_total")
+            b = paired_bootstrap_net(valid, arm, base, key=key)
             if b is None:
                 lines.append(f"- {arm} vs {base}: 판정 불가(짝지을 문서 2개 미만)")
                 continue
@@ -622,6 +633,9 @@ if __name__ == "__main__":
                     help="영속 이력 ablation: evolve vs evolve-nohist 두 arm (A단계 전용)")
     ap.add_argument("--parallel", type=int, default=1,
                     help="동시에 돌릴 문서(A단계) 또는 묶음(B단계, --bundle-size와 함께) 수. 기본 1=순차. CLI 세션 rate limit에 주의")
+    ap.add_argument("--finalists", type=int, default=0,
+                    help="B단계: 끝난 뒤 단일 점수 상위 k개를 반복 채점으로 다시 재서 고른다 (모든 arm 동일, 0=끔)")
+    ap.add_argument("--finalist-repeats", type=int, default=3)
     ap.add_argument("--bundle-size", type=int, default=None,
                     help="B단계: 문서를 이 크기의 묶음 여러 개로 나눠 돌린다 (크기순 round-robin, 묶음이 표본 단위)")
     ap.add_argument("--stage", choices=["summary", "structure"], default="summary",
@@ -647,4 +661,5 @@ if __name__ == "__main__":
     run_batch(files, args.runs, args.generations, args.n_qa,
               with_control=args.with_control, ablation=args.ablation,
               parallel=args.parallel, stage=args.stage, arms=arm_list,
-              bundle_size=args.bundle_size)
+              bundle_size=args.bundle_size, finalists=args.finalists,
+              finalist_repeats=args.finalist_repeats)
