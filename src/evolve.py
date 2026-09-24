@@ -138,6 +138,9 @@ def split_questions(question_set, doc, holdout_ratio=HOLDOUT_RATIO):
     qs = list(question_set)
     rng = random.Random(doc)  # 같은 문서 = 같은 분할
     rng.shuffle(qs)
+    # held-out(보고 점수)은 문서가 있어야 풀리는 질문부터 채운다. 문서 없이 풀리는 질문
+    # (question_filter가 closed_book=True로 표시)은 뒤로 — 안정 정렬이라 표시가 없는 세트는 예전과 같은 분할
+    qs.sort(key=lambda qa: bool(qa.get("closed_book")))
     n_test = max(2, round(len(qs) * holdout_ratio))
     if n_test >= len(qs):  # 질문이 너무 적으면 분리 포기(전부 train 겸용)
         return qs, qs

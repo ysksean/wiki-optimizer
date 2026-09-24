@@ -206,3 +206,20 @@ def test_batch_summary_places_best_accuracy_between_baselines():
 def test_answer_prompt_is_shared_with_a_mode_scoring():
     qs = _pool(2)
     assert scoring.answer_all_prompt("ctx", qs).startswith("아래 '컨텍스트'에 근거해서만 각 질문에")
+
+
+def test_heldout_prefers_questions_that_need_the_documents():
+    """문서 없이 풀리는 질문(closed_book)은 held-out에서 뒤로 — 보고 점수가 문서 의존 질문을 잰다.
+    표시가 없는 세트는 예전과 똑같이 나뉜다."""
+    import evolve
+    plain = _pool(6)
+    train, test = evolve.split_questions(plain, "bundle")
+    import random
+    expected = list(plain)
+    random.Random("bundle").shuffle(expected)
+    assert test == expected[:2] and train == expected[2:]
+
+    flagged = [dict(qa, closed_book=qa["q"] not in ("q4", "q5")) for qa in _pool(6)]
+    train, test = evolve.split_questions(flagged, "bundle")
+    assert sorted(qa["q"] for qa in test) == ["q4", "q5"]
+    assert all(qa["closed_book"] for qa in train)
