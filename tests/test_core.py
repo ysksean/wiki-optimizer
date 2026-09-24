@@ -388,7 +388,7 @@ def test_router_audit_skips_sources_cited_only_by_project_pages(tmp_path, monkey
         p.write_text(text)
     assert audit.project_only_sources(str(tmp_path)) == {"project", "Confluence 페이지"}
     asked = []
-    monkeypatch.setattr(audit, "get_questions", lambda doc, raw, n=6: asked.append(doc) or [{"q": doc, "a": "a"}])
+    monkeypatch.setattr(audit, "question_record", lambda doc, raw, n=6: (asked.append(doc) or [{"q": doc, "a": "a"}], None))
     monkeypatch.setattr(audit, "route_batch", lambda qs, index: [[0] for _ in qs])
     monkeypatch.setattr(audit.structure, "_answer", lambda context, q: "a")
     monkeypatch.setattr(audit.scoring, "judge_all", lambda qs, preds, **kw: ([1.0] * len(qs), False))

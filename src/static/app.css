@@ -845,3 +845,24 @@
   .finalists ul { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 0; padding: 0; list-style: none; }
   .finalists code { font-family: var(--font-mono); color: var(--tx-secondary); }
   .finalists li.win code:last-of-type { color: var(--acc); font-weight: 650; }
+  /* 정답률 비교 기준 — 0~1 트랙 위에 문서 없이 / 이 결과 / 원본 전체 */
+  .baseline { margin: 4px 0 16px; padding: 10px 14px; border: 1px solid var(--line-subtle); border-radius: 10px;
+    background: var(--control); font-size: var(--fs-caption); color: var(--dim); line-height: 1.6; }
+  .baseline .bl-head { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; }
+  .baseline .bl-head b { color: var(--tx-secondary); font-weight: 650; }
+  .baseline p { margin: 6px 0 0; }
+  .baseline p.warn { color: var(--warn); }
+  .baseline details { margin-top: 6px; }
+  .baseline details ul { margin: 4px 0 0; padding-left: 18px; }
+  .bl-track { position: relative; height: 6px; margin: 12px 6px 8px; border-radius: 999px;
+    background: linear-gradient(90deg, var(--bad-soft), var(--ok-soft)); }
+  .bl-mark { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+    border: 2px solid var(--card); background: var(--dim); }
+  .bl-mark.floor, .bl-legend .floor i { background: var(--bad); }
+  .bl-mark.ceiling, .bl-legend .ceiling i { background: var(--ok); }
+  .bl-mark.ours, .bl-legend .ours i { background: var(--acc); }
+  .bl-mark.ours { width: 14px; height: 14px; margin: -7px 0 0 -7px; z-index: 1; }
+  .bl-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; }
+  .bl-legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .bl-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .bl-legend b { font-family: var(--font-mono); color: var(--tx-secondary); font-weight: 650; }

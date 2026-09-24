@@ -24,6 +24,7 @@ import re
 
 import frontmatter
 import llm
+import question_filter
 import scoring
 import structure
 
@@ -63,31 +64,40 @@ def find_pairs(base_dir):
     ]
 
 
-def get_questions(name, raw_text, n=6):
-    """문서별 질문 세트 (자동 생성 + 캐시)."""
+def question_record(name, raw_text, n=6):
+    """문서별 질문 세트 + 거른 기록 (자동 생성 + 캐시). 반환 (questions, filter_info).
+
+    캐시 v3: 문서 없이 풀리는 질문을 거른 세트({"questions", "filter"})를 저장한다.
+    거르기를 끄면(QUESTION_FILTER=0) 다른 캐시 키를 쓴다."""
     os.makedirs(QCACHE_DIR, exist_ok=True)
-    identity = json.dumps({"version": 2, "name": name, "raw": raw_text,
+    identity = json.dumps({"version": 3, "name": name, "raw": raw_text,
                            "n": n, "language": llm.LANGUAGE,
                            "backend": llm.BACKEND,
-                           "model": llm.CODEX_MODEL if llm.BACKEND == "codex" else llm.CLAUDE_MODEL},
+                           "model": llm.CODEX_MODEL if llm.BACKEND == "codex" else llm.CLAUDE_MODEL,
+                           "filter": question_filter.FILTER},
                           ensure_ascii=False, sort_keys=True)
     key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     path = os.path.join(QCACHE_DIR, f"{key}.json")
     if os.path.exists(path):
         try:
             with open(path) as f:
-                qs = json.load(f)
-            if qs:
-                return qs
+                cached = json.load(f)
+            if isinstance(cached, dict) and cached.get("questions"):
+                return cached["questions"], cached.get("filter")
         except (OSError, json.JSONDecodeError):
             pass
-    qs = scoring.build_question_set(raw_text, n=n)
+    qs, info = question_filter.filter_questions(lambda k: scoring.build_question_set(raw_text, n=k), n)
     if qs:
         with tempfile.NamedTemporaryFile(mode="w", dir=QCACHE_DIR, delete=False) as f:
-            json.dump(qs, f, ensure_ascii=False)
+            json.dump({"questions": qs, "filter": info}, f, ensure_ascii=False)
             tmp = f.name
         os.replace(tmp, path)
-    return qs
+    return qs, info
+
+
+def get_questions(name, raw_text, n=6):
+    """문서별 질문 세트 (자동 생성 + 캐시)."""
+    return question_record(name, raw_text, n=n)[0]
 
 
 def _slim(score):
@@ -244,13 +254,15 @@ def router_audit(base_dir, n_qa=6, progress_cb=None, max_docs=None):
     page_stats = {p["name"]: {"uses": 0, "correct": 0.0} for p in pages}
     questions, reads, all_scores = [], [], []
     parse_failed_docs = []
+    dropped = 0
 
     for i, (doc, path) in enumerate(raws):
         with open(path) as f:
             raw_text = f.read()
-        qs = get_questions(doc, raw_text, n=n_qa)
+        qs, qinfo = question_record(doc, raw_text, n=n_qa)
         if not qs:
             continue
+        dropped += (qinfo or {}).get("dropped", 0)
         picks_per_q = route_batch([qa["q"] for qa in qs], index)
         preds, doc_details = [], []
         for qa, picks in zip(qs, picks_per_q):
@@ -269,13 +281,15 @@ def router_audit(base_dir, n_qa=6, progress_cb=None, max_docs=None):
             for t in d["picked"]:
                 page_stats[t]["uses"] += 1
                 page_stats[t]["correct"] += s
+        if question_filter.BASELINES:
+            _doc_baselines(doc_details, qs, raw_text)
         questions.extend(doc_details)
         all_scores.extend(doc_scores)
         if progress_cb:
             progress_cb(i + 1, len(raws), {
                 "variant": "router", "questions": questions,
                 "pages": _page_rows(pages, page_stats, graph),
-                "graph": graph,
+                "graph": graph, "baselines": _audit_baselines(questions, dropped),
             })
 
     acc = round(sum(all_scores) / len(all_scores), 3) if all_scores else None
@@ -298,6 +312,44 @@ def router_audit(base_dir, n_qa=6, progress_cb=None, max_docs=None):
         "questions": questions,
         "parse_failed_docs": parse_failed_docs,
         "excluded_project_sources": excluded,
+        "baselines": _audit_baselines(questions, dropped),
+    }
+
+
+def _doc_baselines(doc_details, qs, raw_text):
+    """문서 하나의 질문을 원본 그 자체로 답해 본다(ceiling) + 문서 없이 맞히는지(floor).
+
+    floor는 질문을 거를 때 붙은 closed_book 표시를 쓴다. 표시가 없으면(거르기를 껐을 때) 한 번 잰다.
+    원본으로 답하기는 A 모드 채점과 같은 일괄 프롬프트 — 문서당 호출 2회(답·판정)."""
+    try:
+        ceiling = question_filter.with_context(raw_text, qs)
+    except Exception as e:  # 기준선 실패가 진단을 막지 않는다
+        print(f"[audit] 원본으로 답하기 실패: {e}")
+        ceiling = None
+    flags = question_filter.floor_from_flags(qs)
+    if flags is None:
+        try:
+            flags = question_filter.closed_book(qs)
+        except Exception as e:
+            print(f"[audit] 문서 없이 답하기 실패: {e}")
+            flags = None
+    for j, d in enumerate(doc_details):
+        d["ceiling"] = ceiling[j] if ceiling is not None else None
+        d["closed_book"] = bool(flags[j]) if flags is not None else None
+
+
+def _audit_baselines(questions, dropped):
+    """질문별 기준선 → 진단 전체 요약. 잰 질문이 없으면 해당 값은 None."""
+    ceil = [d for d in questions if d.get("ceiling") is not None]
+    floor = [d for d in questions if d.get("closed_book") is not None]
+    if not ceil and not floor and not dropped:
+        return None
+    return {
+        "ceiling": {"accuracy": round(sum(d["ceiling"] for d in ceil) / len(ceil), 3), "n": len(ceil),
+                    "misses": [{"doc": d["doc"], "q": d["q"]} for d in ceil if d["ceiling"] < 1]} if ceil else None,
+        "floor": {"accuracy": round(sum(1 for d in floor if d["closed_book"]) / len(floor), 3), "n": len(floor),
+                  "hits": [{"doc": d["doc"], "q": d["q"]} for d in floor if d["closed_book"]]} if floor else None,
+        "dropped": dropped,
     }
 
 

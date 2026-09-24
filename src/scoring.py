@@ -60,16 +60,20 @@ def _parse_qa(text):
 
 # ---------- 채점 ----------
 
-def _answer_all(summary, question_set):
-    """모든 질문을 한 번의 호출로 답한다 (배치 = 속도 최적화)."""
+def answer_all_prompt(summary, question_set):
+    """컨텍스트 하나로 질문 전부에 답하게 하는 프롬프트 (A 모드 채점·원본 전체 기준선 공용)."""
     q_lines = "\n".join(f"{i+1}. {qa['q']}" for i, qa in enumerate(question_set))
-    prompt = (
+    return (
         "아래 '컨텍스트'에 근거해서만 각 질문에 답하라. "
         "컨텍스트에 없으면 해당 답은 '모름'으로. 답은 각각 한 문장 이내.\n"
         '출력은 JSON 배열만: ["답1","답2",...] (질문 순서대로, 다른 텍스트 금지)\n\n'
         f"컨텍스트:\n{summary}\n\n질문들:\n{q_lines}\n\n답변 배열:"
     )
-    out = llm.generate(prompt, num_predict=400, temperature=0.0, effort="low")
+
+
+def _answer_all(summary, question_set):
+    """모든 질문을 한 번의 호출로 답한다 (배치 = 속도 최적화)."""
+    out = llm.generate(answer_all_prompt(summary, question_set), num_predict=400, temperature=0.0, effort="low")
     return _parse_str_list(out, len(question_set))
 
 
