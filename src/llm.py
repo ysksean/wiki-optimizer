@@ -8,6 +8,14 @@ API 키가 아니라 **각자 로그인해둔 CLI 세션**으로 동작한다.
 
 temperature/num_predict 등은 CLI가 지원하지 않아 무시된다
 (호출부 호환을 위해 인자만 받는다).
+
+격리(기본값): claude 호출은 Claude Code의 기본 시스템 프롬프트·도구·MCP·스킬·사용자 전역
+설정(CLAUDE.md·규칙·훅)을 싣지 않고, 세션 기록도 남기지 않는다. 2026-09-24 측정에서 60토큰짜리
+프롬프트 하나에 입력 40,299토큰이 실렸다(격리 시 696, 비용 약 1/10). 채점 모델이 사용자의 전역
+규칙을 읽은 채 답하고 판정하던 오염도 함께 사라진다. LLM_ISOLATE=0이면 예전 방식으로 돌아간다.
+
+effort: 호출부가 effort="low" 등을 넘기면 --effort로 전달한다(채점 쪽 호출이 사용).
+LLM_EFFORT를 설정하면 호출부가 지정하지 않은 모든 호출의 기본값이 된다. codex 백엔드는 무시한다.
 """
 
 import os
@@ -17,6 +25,14 @@ import tempfile
 import time
 
 BACKEND = os.environ.get("LLM_BACKEND", "claude")
+ISOLATE = os.environ.get("LLM_ISOLATE", "1") != "0"
+EFFORT = os.environ.get("LLM_EFFORT", "")
+_SYSTEM_PROMPT = ("You are a text-processing function inside an evaluation pipeline. "
+                  "Follow the user's instructions exactly and output only what is asked.")
+# 프로젝트 CLAUDE.md·설정이 발견되지 않는 빈 작업 폴더 — --setting-sources project와 짝
+_NEUTRAL_CWD = os.path.join(tempfile.gettempdir(), "wiki-optimizer-llm")
+_ISOLATION_FLAGS = ["--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+                    "--disable-slash-commands"]
 
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 CODEX_MODEL = os.environ.get("CODEX_MODEL", "")  # 비우면 codex 기본 모델
@@ -44,10 +60,12 @@ def generate(
     timeout=300,
     retries=2,
     text_only=False,
+    effort=None,
 ):
     """프롬프트를 보내고 응답 텍스트를 반환한다.
 
     실패 시 retries만큼 재시도한다. 최종 실패하면 LLMError.
+    text_only는 격리가 기본이 되면서 LLM_ISOLATE=0일 때만 의미가 있다(그때도 도구·MCP·스킬을 끈다).
     """
     if BACKEND not in ("claude", "codex"):
         raise LLMError(f"지원하지 않는 백엔드: {BACKEND} (claude|codex)")
@@ -63,10 +81,8 @@ def generate(
         try:
             if BACKEND == "codex":
                 out = _generate_codex(prompt, timeout=timeout)
-            elif text_only:
-                out = _generate_claude(prompt, timeout=timeout, text_only=True)
             else:
-                out = _generate_claude(prompt, timeout=timeout)
+                out = _generate_claude(prompt, timeout=timeout, text_only=text_only, effort=effort)
             _record_stat(prompt, out, time.time() - t0, attempt, ok=True)
             return out
         except (subprocess.SubprocessError, OSError) as e:
@@ -108,17 +124,32 @@ def _prompt_kind(prompt):
     return "other"
 
 
-def _generate_claude(prompt, timeout=300, text_only=False):
+def _claude_cmd(text_only=False, effort=None):
+    """claude -p 명령 조립. 격리가 기본이고, effort는 호출부 지정 > LLM_EFFORT 순."""
     cmd = ["claude", "-p", "--model", CLAUDE_MODEL]
-    if text_only:
-        cmd += ["--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-                "--disable-slash-commands"]
+    if ISOLATE:
+        cmd += _ISOLATION_FLAGS + ["--setting-sources", "project",
+                                   "--system-prompt", _SYSTEM_PROMPT, "--no-session-persistence"]
+    elif text_only:
+        cmd += _ISOLATION_FLAGS
+    level = effort or EFFORT
+    if level:
+        cmd += ["--effort", level]
+    return cmd
+
+
+def _generate_claude(prompt, timeout=300, text_only=False, effort=None):
+    cwd = None
+    if ISOLATE:
+        os.makedirs(_NEUTRAL_CWD, exist_ok=True)
+        cwd = _NEUTRAL_CWD
     proc = subprocess.run(
-        cmd,
+        _claude_cmd(text_only=text_only, effort=effort),
         input=prompt,
         capture_output=True,
         text=True,
         timeout=timeout,
+        cwd=cwd,
     )
     if proc.returncode != 0:
         raise subprocess.SubprocessError(

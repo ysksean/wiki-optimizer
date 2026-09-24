@@ -144,7 +144,7 @@ def route(question, index):
         '예: [2]  또는  [1,3]  (다른 텍스트 금지)\n\n'
         f"[파일 목록]\n{idx_str}\n\n질문: {question}\n선택:"
     )
-    out = llm.generate(prompt, num_predict=20, temperature=0.0)
+    out = llm.generate(prompt, num_predict=20, temperature=0.0, effort="low")
     m = re.search(r"\[.*\]", out, re.DOTALL)
     picks = []
     if m:
@@ -177,7 +177,7 @@ def _answer(context, question, mode=None):
             "아래 '컨텍스트'에 근거해서만 질문에 답하라. 없으면 '모름'. 한 문장 이내.\n\n"
             f"컨텍스트:\n{context}\n\n질문: {question}\n답:"
         )
-    return llm.generate(prompt, num_predict=80, temperature=0.0)
+    return llm.generate(prompt, num_predict=80, temperature=0.0, effort="low")
 
 
 def score_structure(struct, question_set, total_raw_chars, repeats=None):
