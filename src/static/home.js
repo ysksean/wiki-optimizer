@@ -47,6 +47,7 @@ function homeIdle(status) {
 }
 function homeSyncButtons() {
   for (const id of ['homeStart', 'homePick', 'homeImprove', 'homeAudit', 'homeBackend']) $(id).disabled = homeState.busy;
+  document.querySelectorAll('.health-apply').forEach(button => { button.disabled = homeState.busy; });
   $('homePath').disabled = homeState.busy;
 }
 function resetHome() {
@@ -61,6 +62,7 @@ function resetHome() {
     $('view-home').classList.remove('is-working');
     $('homeGlass').hidden = true;
     $('homeRecommendation').hidden = true;
+    $('homeHealth').hidden = true; $('homeHealth').replaceChildren();
     $('homeEvents').replaceChildren(); $('homeFileList').replaceChildren(); $('homeResults').replaceChildren();
     homeMessage(''); homeSyncButtons(); $('homePath').focus();
   });
@@ -100,7 +102,61 @@ function homeScanComplete(data) {
   homeIdle('폴더 확인 완료 · 다음 작업을 선택해주세요');
   $('dir').value = data.root; $('updateRoot').value = data.root;
   savePrefs();
+  if (data.has_wiki) loadHomeHealth(data.root);
 }
+/* 위키 점검 — raw/·wiki/를 LLM 없이 대조한다. 부가 정보라 실패해도 흐름은 그대로 둔다. */
+async function loadHomeHealth(root) {
+  const box = $('homeHealth');
+  box.hidden = true; box.textContent = '';
+  const revision = homeState.revision;
+  try {
+    const response = await fetch(`/api/health?dir=${encodeURIComponent(root)}`);
+    const report = await response.json();
+    if (revision !== homeState.revision || !response.ok || !report.layout) return;
+    renderHomeHealth(report);
+  } catch (_) { /* 점검 실패는 진단·구조 개선을 막지 않는다 */ }
+}
+function renderHomeHealth(report) {
+  const c = report.counts;
+  const issues = c.uncovered + c.stale + c.broken_links + c.ambiguous_links;
+  homeEvent('health', issues ? `위키 점검 · 손볼 곳 ${issues}건` : '위키 점검 · 커버리지와 링크 이상 없음',
+    `반영 안 된 원본 ${c.uncovered} · 오래된 페이지 ${c.stale} · 깨진 링크 ${c.broken_links} · 모호한 링크 ${c.ambiguous_links}`);
+  const tiles = [['uncovered', '위키에 반영 안 된 원본'], ['stale', '원본보다 오래된 페이지'],
+    ['broken_links', '깨진 링크'], ['ambiguous_links', '여러 페이지로 풀리는 링크'], ['not_in_index', '색인에 없는 페이지']];
+  const list = (key, title, rows) => report[key].length
+    ? `<details${key === 'uncovered' ? ' open' : ''}><summary>${title} ${report[key].length}개</summary><ol>${rows}</ol></details>` : '';
+  const uncovered = report.uncovered.map(r => `<li><code>${esc(r.rel)}</code><small>${esc(r.modified)}</small>`
+    + `<button type="button" class="health-apply" data-source="${esc(r.path)}">변경안 만들기</button></li>`).join('');
+  const stale = report.stale.map(r => `<li><code>${esc(r.page)}</code><small>${esc(r.updated)} 이후 바뀐 원본: `
+    + `${r.newer_sources.map(s => esc(s.rel)).join(', ')}</small></li>`).join('');
+  const links = [...report.broken_links.map(r => `<li><code>${esc(r.page)}</code><small>[[${esc(r.target)}]] 대상 없음</small></li>`),
+    ...report.ambiguous_links.map(r => `<li><code>${esc(r.page)}</code><small>[[${esc(r.target)}]] → ${r.candidates.map(esc).join(' | ')}</small></li>`)].join('');
+  const box = $('homeHealth');
+  box.innerHTML = `<div class="health-head"><h3 id="healthTitle">위키 점검</h3>`
+    + `<p>원본과 위키 페이지, 링크를 LLM 없이 대조했어요. 반영 안 된 원본은 구조를 아무리 바꿔도 답할 수 없어서 먼저 채우는 게 좋아요. `
+    + `변경안은 기존·새 질문으로 검증한 뒤 통과할 때만 반영 버튼이 나와요.</p></div>`
+    + `<ul class="health-counts">${tiles.map(([k, label]) => `<li class="${c[k] ? 'warn' : ''}"><b>${c[k]}</b><span>${label}</span></li>`).join('')}</ul>`
+    + list('uncovered', '반영 안 된 원본', uncovered) + list('stale', '원본보다 오래된 페이지', stale)
+    + (links ? `<details><summary>링크 문제 ${report.broken_links.length + report.ambiguous_links.length}개</summary><ol>${links}</ol></details>` : '')
+    + (report.versioned ? '' : '<p class="health-note">이 위키 폴더는 git으로 관리되지 않아요. 반영한 변경은 증분 갱신의 되돌리기로만 복구할 수 있어요.</p>');
+  box.querySelectorAll('.health-apply').forEach(button => button.addEventListener('click', () => startHomeUpdate(button.dataset.source)));
+  box.hidden = false;
+  homeSyncButtons();
+}
+/* 반영 안 된 원본 하나로 증분 갱신을 이 화면에서 시작한다. 위키는 변경안 검증 후 '반영'을 눌러야 바뀐다. */
+function startHomeUpdate(source) {
+  startHomeJob('incremental', {source_file: source, task: ''});
+  $('homeGlass').scrollIntoView({block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+}
+/* 반영·되돌리기 뒤: 결과 카드와 위키 점검을 다시 불러온다 */
+document.addEventListener('wikiopt:update-committed', async event => {
+  if (homeState.job !== event.detail?.id) return;
+  try {
+    const response = await fetch(`/api/runs/${encodeURIComponent(event.detail.id)}`);
+    if (response.ok) { homeState.lastResult = ''; renderHomeJob(await response.json()); }
+  } catch (_) { /* 결과 새로고침 실패는 실행 기록에서 다시 볼 수 있다 */ }
+  if (homeState.scan) loadHomeHealth(homeState.scan.root);
+});
 function inspectHomeFolder(directory = $('homePath').value.trim()) {
   if (homeState.busy) return;
   if (!directory) { homeMessage('문서 폴더 경로를 입력해주세요.'); $('homePath').focus(); return; }
@@ -189,21 +245,26 @@ async function homeDrop(event) {
   try { for (const entry of entries) await read(entry); await uploadHomeFolder(files,paths); }
   catch (error) { homeMessage(error.message); }
 }
-async function startHomeJob(mode) {
+const HOME_JOBS = {
+  audit: {title: '현재 위키를 진단하고 있어요', requested: '위키 진단을 요청했어요', name: '위키 진단'},
+  structure: {title: '답이 되는 구조를 찾고 있어요', requested: '구조 개선을 요청했어요', name: '구조 개선'},
+  incremental: {title: '원본을 위키에 반영할 변경안을 만들고 있어요', requested: '변경안 만들기를 요청했어요', name: '위키 반영'},
+};
+async function startHomeJob(mode, extra = {}) {
   if (homeState.busy || !homeState.scan) return;
   const scan = homeState.scan;
   homeState.busy = true; homeSyncButtons();
   $('glassStatus').textContent = '작업을 요청하고 있어요';
   try {
-    const response = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode, dir:scan.root, files:scan.files.map(file => file.path), generations:3, n_qa:6, backend:$('homeBackend').value, language:LANG})});
+    const response = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode, dir:scan.root, files:scan.files.map(file => file.path), generations:3, n_qa:6, backend:$('homeBackend').value, language:LANG, ...extra})});
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || '작업을 시작하지 못했어요.');
     homeState.job = data.id; homeState.lastResult = ''; $('homeResults').replaceChildren();
     try { sessionStorage.setItem('wikiopt_home_job', JSON.stringify({id:data.id, scan})); } catch (_) {}
     open_.add(data.id);
     beginHomeActivity(); $('homeStop').hidden = true;
-    $('glassTitle').textContent = mode === 'audit' ? '현재 위키를 진단하고 있어요' : '답이 되는 구조를 찾고 있어요';
-    homeEvent(`job-${data.id}`, mode === 'audit' ? '위키 진단을 요청했어요' : '구조 개선을 요청했어요', $('homeBackend').value);
+    $('glassTitle').textContent = HOME_JOBS[mode].title;
+    homeEvent(`job-${data.id}`, HOME_JOBS[mode].requested, extra.source_file ? extra.source_file.split('/').pop() : $('homeBackend').value);
     connectHomeJob(data.id); poll();
   } catch (error) { homeEvent(`request-${Date.now()}`, error.message); homeIdle('작업 요청 실패 · 다시 시도할 수 있어요'); }
 }
@@ -236,7 +297,7 @@ function renderHomeJob(job) {
     : job.status === 'queued' ? '앞선 작업이 끝나기를 기다리고 있어요' : t('status_' + job.status);
   $('homeRecommendation').hidden = active;
   for (const activity of job.activity || []) homeEvent(`${job.id}-activity-${activity.index}`, activity.message, activity.detail);
-  homeEvent(`${job.id}-${job.status}`, `${job.mode === 'structure' ? '구조 개선' : '위키 진단'} · ${t('status_' + job.status)}`);
+  homeEvent(`${job.id}-${job.status}`, `${(HOME_JOBS[job.mode] || HOME_JOBS.audit).name} · ${t('status_' + job.status)}`);
   if (active && job.activity?.length) $('glassStatus').textContent = job.cancel_requested ? '현재 단계가 끝나면 중단합니다' : job.activity.at(-1).message;
   for (const run of job.activity?.length ? [] : job.runs || []) {
     const progress = run.progress || run.report;
@@ -245,7 +306,8 @@ function renderHomeJob(job) {
   }
   if (job.result?.done != null) homeEvent(`${job.id}-result-${job.result.done}`, `${job.result.done} / ${job.result.total}개 문서 진단 완료`);
   let content = '';
-  if (job.mode === 'audit' && job.result) content = auditView(job.result, job.status);
+  if (job.mode === 'incremental') content = job.result ? incrementalView(job.result, job.id) : (active ? `<div class="runbox">${esc(t('update_questions'))}</div>` : '');
+  else if (job.mode === 'audit' && job.result) content = auditView(job.result, job.status);
   else content = (job.runs || []).filter(run => run.progress || run.report).map(run => job.mode === 'structure' ? structureRun(run,job.id) : summaryRun(run,job.id)).join('');
   if (job.error) content += `<p class="err">${esc(job.error)}</p>`;
   if (content !== homeState.lastResult) {
@@ -258,7 +320,9 @@ function renderHomeJob(job) {
   }
   if (!active) {
     homeState.stream?.close(); homeState.stream = null;
-    homeIdle(job.status === 'done' ? '작업 완료 · 아래에서 근거와 결과를 확인해주세요' : t('status_' + job.status));
+    homeIdle(job.status !== 'done' ? t('status_' + job.status)
+      : job.mode === 'incremental' && job.result?.status ? `${t('update_' + job.result.status)} · 아래에서 변경 내용과 검증 결과를 확인해주세요`
+      : '작업 완료 · 아래에서 근거와 결과를 확인해주세요');
     const seconds = Math.max(0, Math.floor((job.finished_at || Date.now()/1000) - job.created_at));
     $('glassClock').textContent = `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
     $('glassTitle').textContent = job.status === 'done' ? '결과를 확인할 준비가 됐어요' : '작업이 종료됐어요';

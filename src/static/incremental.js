@@ -91,6 +91,7 @@ async function commitIncremental(button, id, undo = false) {
     showToast(t("update_" + result.status), "success");
     lastHtml = "";
     await poll();
+    document.dispatchEvent(new CustomEvent("wikiopt:update-committed", {detail: {id, status: result.status}}));
   } catch (error) { message.textContent = error.message; button.disabled = false; }
   finally { button.removeAttribute("aria-busy"); }
 }
