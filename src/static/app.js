@@ -237,7 +237,7 @@ const I18N = {
     r_pages: "페이지별 진단", th_page: "페이지", th_inlinks: "인링크",
     th_uses: "읽힘", th_rate: "정답률", r_unused: "미사용",
     r_questions: "질문별 라우팅 상세", th_src_doc: "출처 문서",
-    r_parse_warn: d => `judge 파싱 실패 문서: ${d} — 해당 점수는 신뢰 불가`,
+    r_parse_warn: d => `judge 파싱 실패 문서: ${d} — 해당 점수는 신뢰 불가`, r_project_skip: (n, d) => `위키의 projects/ 페이지만 근거로 삼는 원본 ${n}개는 진단에서 뺐어요 (프로젝트 페이지는 진단 대상이 아니에요): ${d}`,
     avg_score: n => `평균 점수 (${n}개 채점)`,
     th_doc: "문서", th_raw: "raw", th_summary: "요약", th_score: "점수 (종합 · 정확도 · 효율)", none: "없음",
     apply_title: "최적화 Before → After", generating: (d,t) => ` — ${d}/${t} 생성 중…`,
@@ -346,7 +346,7 @@ const I18N = {
     r_pages: "Per-page results", th_page: "page", th_inlinks: "inlinks",
     th_uses: "reads", th_rate: "correct", r_unused: "unused",
     r_questions: "Per-question routing", th_src_doc: "source doc",
-    r_parse_warn: d => `judge parse failed for: ${d} — those scores are unreliable`,
+    r_parse_warn: d => `judge parse failed for: ${d} — those scores are unreliable`, r_project_skip: (n, d) => `${n} source(s) cited only by wiki/projects/ pages were left out (project pages are outside this diagnosis): ${d}`,
     avg_score: n => `average score (${n} scored)`,
     th_doc: "document", th_raw: "raw", th_summary: "summary", th_score: "score (total · accuracy · efficiency)", none: "none",
     apply_title: "Optimization Before → After", generating: (d,t) => ` — generating ${d}/${t}…`,
@@ -455,7 +455,7 @@ const I18N = {
     r_pages: "按页面诊断", th_page: "页面", th_inlinks: "入链",
     th_uses: "被读", th_rate: "正确率", r_unused: "未使用",
     r_questions: "逐题路由详情", th_src_doc: "来源文档",
-    r_parse_warn: d => `judge 解析失败的文档：${d} — 相关分数不可信`,
+    r_parse_warn: d => `judge 解析失败的文档：${d} — 相关分数不可信`, r_project_skip: (n, d) => `仅被 wiki/projects/ 页面引用的 ${n} 个原文未参与诊断（项目页面不在诊断范围内）：${d}`,
     avg_score: n => `平均分（已评 ${n} 篇）`,
     th_doc: "文档", th_raw: "raw", th_summary: "摘要", th_score: "分数（总分 · 准确率 · 效率）", none: "无",
     apply_title: "优化 Before → After", generating: (d,t) => ` — 正在生成 ${d}/${t}…`,
@@ -985,6 +985,8 @@ function routerAuditView(res, status) {
     html += graphSVG(res.graph, res.pages);
   if (res.parse_failed_docs?.length)
     html += `<div class="err" style="margin-top:8px">${t("r_parse_warn", res.parse_failed_docs.join(", "))}</div>`;
+  if (res.excluded_project_sources?.length)
+    html += `<p class="note">${t("r_project_skip", res.excluded_project_sources.length, res.excluded_project_sources.map(esc).join(", "))}</p>`;
   if (res.pages?.length) {
     html += `<details open><summary>${t("r_pages")}</summary>${wrapTable(
       `<tr><th>${t("th_page")}</th><th>chars</th><th>${t("th_inlinks")}</th><th>${t("th_uses")}</th><th>${t("th_rate")}</th></tr>` +

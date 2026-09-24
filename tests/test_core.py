@@ -371,3 +371,27 @@ def test_audit_auto_selects_router_for_concept_wiki(tmp_path, monkeypatch):
     monkeypatch.setattr(audit, "router_audit", fake_router)
     res = audit.audit(str(tmp_path))
     assert calls.get("router") and res["variant"] == "router"
+
+
+def test_router_audit_skips_sources_cited_only_by_project_pages(tmp_path, monkeypatch):
+    """projects/ 페이지만 인용하는 원본은 진단 질문을 만들지 않는다(개념 위키가 답할 몫이 아님).
+    어느 페이지도 인용하지 않는 원본은 남긴다 — 위키의 빈틈이다."""
+    files = {
+        "raw/concept.md": "개념 원본", "raw/project.md": "프로젝트 원본", "raw/uncited.md": "빈틈 원본",
+        "wiki/concept-page.md": "---\ntitle: 개념\nsources: [raw/concept.md]\n---\n본문",
+        "wiki/projects/p/design.md": "---\ntitle: 설계\nsources:\n  - raw/project.md\n  - Confluence 페이지\n---\n본문",
+        "wiki/projects/p/overview.md": "본문에서 raw/concept.md 도 언급",
+    }
+    for rel, text in files.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+    assert audit.project_only_sources(str(tmp_path)) == {"project", "Confluence 페이지"}
+    asked = []
+    monkeypatch.setattr(audit, "get_questions", lambda doc, raw, n=6: asked.append(doc) or [{"q": doc, "a": "a"}])
+    monkeypatch.setattr(audit, "route_batch", lambda qs, index: [[0] for _ in qs])
+    monkeypatch.setattr(audit.structure, "_answer", lambda context, q: "a")
+    monkeypatch.setattr(audit.scoring, "judge_all", lambda qs, preds, **kw: ([1.0] * len(qs), False))
+    res = audit.router_audit(str(tmp_path), n_qa=1)
+    assert sorted(asked) == ["concept", "uncited"]
+    assert res["excluded_project_sources"] == ["project"] and res["n_docs"] == 2
