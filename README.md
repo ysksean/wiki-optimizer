@@ -162,6 +162,27 @@ further apply/undo operations stop until the recorded transaction is recovered
 using its `report.json` mutation list and `backup/` originals. Multi-file writes
 are not atomic across a process crash.
 
+## Let agents read the wiki (MCP server)
+
+`src/wiki_mcp.py` is a stdio MCP server (standard library only) that lets Claude Code
+or any MCP client search and read a wiki the way a person would:
+
+- `wiki_index` lists every page with the description a reader sees
+  (`index.md` entry → frontmatter `title` → first line)
+- `wiki_search` ranks pages for a natural-language query (Korean-friendly;
+  common words weigh less) and returns short excerpts
+- `wiki_read` returns one page; `page`, `page.md`, `projects/x/overview` and `[[links]]` all resolve
+
+Every search and read is appended to `<wiki root>/.wiki-optimizer/queries.jsonl`
+(query, the user's original question when the agent passes it, result paths — never
+page text). These are the questions people actually ask; list them with `--queries`.
+Set `WIKI_MCP_LOG=0` or pass `--no-log` to turn logging off.
+
+```bash
+claude mcp add wiki -- python3 /absolute/path/to/src/wiki_mcp.py --wiki ~/dev/llm_wiki
+python3 src/wiki_mcp.py --wiki ~/dev/llm_wiki --queries
+```
+
 ## Requirements
 
 - Python 3 — standard library only, nothing to install
