@@ -13,7 +13,7 @@ def wiki(tmp_path):
     files = {
         "raw/h.md": "원본",
         "wiki/index.md": "---\ntitle: 색인\n---\n# 색인\n- [[harness-engineering]] — 에이전트를 둘러싼 실행 환경 설계\n"
-                         "- [[overview]] — 겹치는 이름\n",
+                         "- [[overview]] — 겹치는 이름\n- [[b/overview|B 개요]] — 프로젝트 B 컨텍스트 팩\n",
         "wiki/harness-engineering.md": "---\ntitle: 하네스 엔지니어링\nsources: [raw/h.md]\n---\n"
                                       "# 하네스 엔지니어링\n하네스는 모델 바깥의 도구·검증·기억 장치를 묶은 실행 환경이다.\n",
         "wiki/vibe-coding.md": "---\ntitle: 바이브 코딩\n---\n자연어로 지시하고 결과만 확인하는 개발 방식.\n",
@@ -49,8 +49,11 @@ def test_handshake_and_tool_list(wiki):
 def test_index_uses_reader_descriptions_and_skips_hidden(wiki):
     text = _call(wiki, "wiki_index")["content"][0]["text"]
     assert "harness-engineering.md — 하네스 엔지니어링: 에이전트를 둘러싼 실행 환경 설계" in text
-    assert "vibe-coding.md — 바이브 코딩: 바이브 코딩" in text      # 색인에 없으면 title
+    assert "- vibe-coding.md — 바이브 코딩\n" in text + "\n"      # 색인에 없으면 title만
     assert "projects/a/overview.md" in text and "secret" not in text
+    # [[overview]]는 두 페이지에 맞으므로 설명을 붙이지 않고, [[b/overview]]는 B에만 붙는다
+    assert "projects/a/overview.md — overview: # A 개요" not in text and "겹치는 이름" not in text
+    assert "projects/b/overview.md — overview: 프로젝트 B 컨텍스트 팩" in text
 
 
 def test_search_matches_korean_with_particles(wiki):

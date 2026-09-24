@@ -111,7 +111,9 @@ class Wiki:
                     out[os.path.relpath(path, self.wiki_dir)[:-3].replace(os.sep, "/")] = path
         return out
 
-    def _index_descriptions(self):
+    def _index_descriptions(self, names):
+        """index.md의 `- [[링크]] — 설명` → {페이지 이름: 설명}. 링크는 resolve와 같은 규칙으로 풀고,
+        여러 페이지에 맞는 링크([[overview]]가 두 프로젝트에 있을 때)는 설명을 붙이지 않는다."""
         path = os.path.join(self.wiki_dir, "index.md")
         if not os.path.isfile(path):
             return {}
@@ -120,23 +122,26 @@ class Wiki:
         out = {}
         for line in body.splitlines():
             m = _INDEX_ENTRY.match(line)
-            if m:
-                key = os.path.basename(m.group(1).strip().removesuffix(".md"))
-                desc = _NOISE.sub(lambda w: (w.group(2) or w.group(1) or ""), m.group(2)).strip()
-                if desc:
-                    out.setdefault(key, desc)
+            if not m:
+                continue
+            target = m.group(1).strip().removesuffix(".md")
+            hits = [target] if target in names else [n for n in names if n.endswith("/" + target)]
+            desc = _NOISE.sub(lambda w: (w.group(2) or w.group(1) or ""), m.group(2)).strip()
+            if len(hits) == 1 and desc:
+                out.setdefault(hits[0], desc)
         return out
 
     def pages(self):
         """[{name, path, title, description, text}] — 매 호출마다 디스크에서 새로 읽는다(위키가 바뀌어도 맞게)."""
-        described = self._index_descriptions()
+        files = self._files()
+        described = self._index_descriptions(files)
         out = []
-        for name, path in self._files().items():
+        for name, path in files.items():
             with open(path, encoding="utf-8", errors="replace") as f:
                 text = f.read()
             meta, _ = frontmatter.split(text)
             title = meta.get("title") if isinstance(meta.get("title"), str) else ""
-            desc = described.get(os.path.basename(name)) or title or frontmatter.first_line(text, 160)
+            desc = described.get(name) or title or frontmatter.first_line(text, 160)
             out.append({"name": name, "path": path, "title": title or os.path.basename(name),
                         "description": desc[:200], "text": text})
         return out
@@ -171,7 +176,8 @@ class Wiki:
     def index(self):
         pages = self.pages()
         lines = [f"{len(pages)} pages in {self.wiki_dir}"]
-        lines += [f"- {p['name']}.md — {p['title']}: {p['description']}" for p in pages]
+        lines += [f"- {p['name']}.md — {p['title']}" + (f": {p['description']}" if p["description"] != p["title"] else "")
+                  for p in pages]
         return "\n".join(lines)
 
     def search(self, query, limit=5, question=None):
