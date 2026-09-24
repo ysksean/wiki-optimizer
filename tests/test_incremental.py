@@ -323,3 +323,35 @@ def test_mutation_endpoint_requires_same_origin_json(monkeypatch: pytest.MonkeyP
         server.shutdown()
         server.server_close()
         worker.join(timeout=2)
+
+
+def test_retyped_evidence_is_reanchored_to_verbatim_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """모델이 공백·강조를 바꿔 옮긴 근거는 원문 줄로 되찾는다 — 결과는 항상 원문의 부분 문자열."""
+    source = "# Title\n\n- **Redis Stream**은  ACK와 consumer group을 지원한다.\n- List는 단순 큐.\n"
+    monkeypatch.setattr(inc, "_json_response", lambda p: [
+        {"q": "ACK?", "a": "Stream", "source": "raw/a.md", "evidence": "Redis Stream은 ACK와 consumer group을 지원한다."}])
+    [q] = inc._questions({"raw/a.md": source}, 1, "")
+    assert q["evidence"] in source and "ACK와 consumer group" in q["evidence"]
+
+
+def test_short_or_ungrounded_rows_get_one_top_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def fake(prompt: str) -> Any:
+        calls.append(re.search(r"exactly (\d+) questions", prompt).group(1))
+        if len(calls) == 1:   # 첫 응답: 개수 부족 + 원문에 없는 근거 하나
+            return [{"q": "q1", "a": "a", "source": "raw/a.md", "evidence": "real text one"},
+                    {"q": "q2", "a": "a", "source": "raw/a.md", "evidence": "invented passage here"}]
+        assert "Do not repeat these questions" in prompt and '"q1"' in prompt
+        return [{"q": "q3", "a": "a", "source": "raw/a.md", "evidence": "real text two"},
+                {"q": "q4", "a": "a", "source": "raw/a.md", "evidence": "real text two"}]
+
+    monkeypatch.setattr(inc, "_json_response", fake)
+    qs = inc._questions({"raw/a.md": "real text one\nreal text two\n"}, 3, "")
+    assert calls == ["3", "2"] and [q["q"] for q in qs] == ["q1", "q3", "q4"]
+
+
+def test_too_few_grounded_questions_still_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inc, "_json_response", lambda p: [])
+    with pytest.raises(ValueError, match="requested question set"):
+        inc._questions({"raw/a.md": "real"}, 4, "")

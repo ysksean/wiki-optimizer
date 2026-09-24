@@ -93,6 +93,11 @@ def test_home_renders_health_and_hands_off_to_incremental_update():
     static = Path(__file__).parents[1] / "src" / "static"
     js, html, css = ((static / n).read_text() for n in ("home.js", "index.html", "home.css"))
     assert 'id="homeHealth"' in html and "if (data.has_wiki) loadHomeHealth(data.root);" in js
-    assert "function prepareHomeUpdate(source)" in js and "$('updateSource').value = source;" in js
+    # 예전 대시보드로 넘기지 않고 시작 화면 안에서 증분 갱신을 시작·표시한다
+    assert "function startHomeUpdate(source)" in js and "startHomeJob('incremental', {source_file: source" in js
+    assert "incrementalView(job.result, job.id)" in js and "wikiopt:update-committed" in js
+    assert "showView('opt')" not in js.split("function startHomeUpdate")[1].split("document.addEventListener")[0]
+    inc = (static / "incremental.js").read_text()
+    assert 'new CustomEvent("wikiopt:update-committed"' in inc
     assert "esc(r.rel)" in js and "esc(r.path)" in js                              # 파일명은 이스케이프
     assert ".home-health {" in css and "#" not in css.split("/* 위키 점검")[1].split("@media")[0].replace("#view-home", "")
