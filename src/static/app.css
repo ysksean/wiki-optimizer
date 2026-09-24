@@ -836,3 +836,12 @@
   .sb-warnings { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: var(--fs-caption); }
   .sb-warnings b { display: block; margin-bottom: 4px; }
   .sb-warnings ul { margin: 0; padding-left: 18px; line-height: 1.6; }
+
+  /* ---------- 최종 후보 재채점 (structure selection) ---------- */
+  .sr-hero small + small { display: block; margin-top: 2px; }
+  .finalists { margin: 4px 0 16px; padding: 10px 14px; border: 1px solid var(--line-subtle); border-radius: 10px;
+    background: var(--control); font-size: var(--fs-caption); color: var(--dim); line-height: 1.6; }
+  .finalists b { display: block; color: var(--tx-secondary); font-weight: 650; }
+  .finalists ul { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 0; padding: 0; list-style: none; }
+  .finalists code { font-family: var(--font-mono); color: var(--tx-secondary); }
+  .finalists li.win code:last-of-type { color: var(--acc); font-weight: 650; }

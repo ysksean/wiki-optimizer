@@ -224,6 +224,8 @@ def _run_job_locked(job, cancel):
                     generations=job["generations"], n_qa=job["n_qa"],
                     out_dir=job["dir"], files=job["files"],
                     progress_cb=flush_activity, cancel_event=cancel,
+                    finalists=evolve_structure.FINALISTS_DEFAULT,
+                    finalist_repeats=evolve_structure.FINALIST_REPEATS_DEFAULT,
                 )
             elif job["mode"] == "propose":
                 strategy = None

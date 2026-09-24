@@ -203,7 +203,7 @@ def route_batch(questions, index):
         '예: [[2],[1,3],[4]]  (다른 텍스트 금지)\n\n'
         f"[파일 목록]\n{idx_str}\n\n[질문들]\n{q_str}\n\n선택:"
     )
-    out = llm.generate(prompt, num_predict=200, temperature=0.0)
+    out = llm.generate(prompt, num_predict=200, temperature=0.0, effort="low")
     m = re.search(r"\[\s*\[.*\]\s*\]", out, re.DOTALL)
     if m:
         try:

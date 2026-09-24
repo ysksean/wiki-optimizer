@@ -148,7 +148,7 @@ def route(question, index):
         '예: [2]  또는  [1,3]  (다른 텍스트 금지)\n\n'
         f"[파일 목록]\n{idx_str}\n\n질문: {question}\n선택:"
     )
-    out = llm.generate(prompt, num_predict=20, temperature=0.0)
+    out = llm.generate(prompt, num_predict=20, temperature=0.0, effort="low")
     m = re.search(r"\[.*\]", out, re.DOTALL)
     picks = []
     if m:
@@ -181,10 +181,15 @@ def _answer(context, question, mode=None):
             "아래 '컨텍스트'에 근거해서만 질문에 답하라. 없으면 '모름'. 한 문장 이내.\n\n"
             f"컨텍스트:\n{context}\n\n질문: {question}\n답:"
         )
-    return llm.generate(prompt, num_predict=80, temperature=0.0)
+    return llm.generate(prompt, num_predict=80, temperature=0.0, effort="low")
 
 
-def score_structure(struct, question_set, total_raw_chars, repeats=None):
+def _answer_as(context, question, answer_mode):
+    """answer_mode를 지정했을 때만 mode 인자를 넘긴다 — 지정하지 않으면 예전 호출 모양 그대로."""
+    return _answer(context, question) if answer_mode is None else _answer(context, question, mode=answer_mode)
+
+
+def score_structure(struct, question_set, total_raw_chars, repeats=None, answer_mode=None):
     """구조 전체를 Query 성능으로 채점한다.
 
     각 질문마다: Router가 파일 선택 -> 그 파일만 읽어 답 -> 읽은 글자수 기록.
@@ -209,7 +214,7 @@ def score_structure(struct, question_set, total_raw_chars, repeats=None):
         chosen_titles = [index[p]["title"] for p in picks]
         context = "\n\n".join(by_title.get(t, "") for t in chosen_titles)
         return {"q": qa["q"], "picked": chosen_titles,
-                "read_chars": len(context), "pred": _answer(context, qa["q"]),
+                "read_chars": len(context), "pred": _answer_as(context, qa["q"], answer_mode),
                 "_context": context}
 
     # 질문별 route→answer 체인은 상호 독립 — 병렬로 세대당 2n회 직렬 호출을
@@ -224,7 +229,7 @@ def score_structure(struct, question_set, total_raw_chars, repeats=None):
     # 추가 회차: 같은 컨텍스트로 답변·판정만 다시 (라우팅 결과는 고정)
     for _ in range(repeats - 1):
         with ThreadPoolExecutor(max_workers=min(4, len(question_set))) as ex:
-            more = list(ex.map(lambda pair: _answer(pair[0], pair[1]),
+            more = list(ex.map(lambda pair: _answer_as(pair[0], pair[1], answer_mode),
                                [(d["_context"], d["q"]) for d in details]))
         s_more, failed_more = scoring.judge_all(question_set, more)
         parse_failed = parse_failed or failed_more
