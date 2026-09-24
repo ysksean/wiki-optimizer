@@ -32,6 +32,7 @@ import evolve_structure
 import incremental
 import inspection
 import skeleton as skeleton_mod
+import wiki_health
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 JOBS_DIR = "runs/web"
@@ -623,6 +624,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlparse(self.path)
+        if url.path == "/api/health":
+            # 위키 상태(커버리지·신선도·링크) — LLM 없이 파일만 읽는다
+            directory = (parse_qs(url.query).get("dir") or [""])[0].strip()
+            if not directory:
+                self._json({"error": "dir가 필요합니다"}, 400)
+                return
+            self._json(wiki_health.health(directory))
+            return
         if url.path == "/api/inspect":
             directory = (parse_qs(url.query).get("dir") or [""])[0]
             self._events(self._inspection_events(directory))

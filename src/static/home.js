@@ -61,6 +61,7 @@ function resetHome() {
     $('view-home').classList.remove('is-working');
     $('homeGlass').hidden = true;
     $('homeRecommendation').hidden = true;
+    $('homeHealth').hidden = true; $('homeHealth').replaceChildren();
     $('homeEvents').replaceChildren(); $('homeFileList').replaceChildren(); $('homeResults').replaceChildren();
     homeMessage(''); homeSyncButtons(); $('homePath').focus();
   });
@@ -100,6 +101,55 @@ function homeScanComplete(data) {
   homeIdle('폴더 확인 완료 · 다음 작업을 선택해주세요');
   $('dir').value = data.root; $('updateRoot').value = data.root;
   savePrefs();
+  if (data.has_wiki) loadHomeHealth(data.root);
+}
+/* 위키 점검 — raw/·wiki/를 LLM 없이 대조한다. 부가 정보라 실패해도 흐름은 그대로 둔다. */
+async function loadHomeHealth(root) {
+  const box = $('homeHealth');
+  box.hidden = true; box.textContent = '';
+  const revision = homeState.revision;
+  try {
+    const response = await fetch(`/api/health?dir=${encodeURIComponent(root)}`);
+    const report = await response.json();
+    if (revision !== homeState.revision || !response.ok || !report.layout) return;
+    renderHomeHealth(report);
+  } catch (_) { /* 점검 실패는 진단·구조 개선을 막지 않는다 */ }
+}
+function renderHomeHealth(report) {
+  const c = report.counts;
+  const issues = c.uncovered + c.stale + c.broken_links + c.ambiguous_links;
+  homeEvent('health', issues ? `위키 점검 · 손볼 곳 ${issues}건` : '위키 점검 · 커버리지와 링크 이상 없음',
+    `반영 안 된 원본 ${c.uncovered} · 오래된 페이지 ${c.stale} · 깨진 링크 ${c.broken_links} · 모호한 링크 ${c.ambiguous_links}`);
+  const tiles = [['uncovered', '위키에 반영 안 된 원본'], ['stale', '원본보다 오래된 페이지'],
+    ['broken_links', '깨진 링크'], ['ambiguous_links', '여러 페이지로 풀리는 링크'], ['not_in_index', '색인에 없는 페이지']];
+  const list = (key, title, rows) => report[key].length
+    ? `<details${key === 'uncovered' ? ' open' : ''}><summary>${title} ${report[key].length}개</summary><ol>${rows}</ol></details>` : '';
+  const uncovered = report.uncovered.map(r => `<li><code>${esc(r.rel)}</code><small>${esc(r.modified)}</small>`
+    + `<button type="button" class="health-apply" data-source="${esc(r.path)}">위키에 반영</button></li>`).join('');
+  const stale = report.stale.map(r => `<li><code>${esc(r.page)}</code><small>${esc(r.updated)} 이후 바뀐 원본: `
+    + `${r.newer_sources.map(s => esc(s.rel)).join(', ')}</small></li>`).join('');
+  const links = [...report.broken_links.map(r => `<li><code>${esc(r.page)}</code><small>[[${esc(r.target)}]] 대상 없음</small></li>`),
+    ...report.ambiguous_links.map(r => `<li><code>${esc(r.page)}</code><small>[[${esc(r.target)}]] → ${r.candidates.map(esc).join(' | ')}</small></li>`)].join('');
+  const box = $('homeHealth');
+  box.innerHTML = `<div class="health-head"><h3 id="healthTitle">위키 점검</h3>`
+    + `<p>원본과 위키 페이지, 링크를 LLM 없이 대조했어요. 반영 안 된 원본은 구조를 아무리 바꿔도 답할 수 없어서 먼저 채우는 게 좋아요.</p></div>`
+    + `<ul class="health-counts">${tiles.map(([k, label]) => `<li class="${c[k] ? 'warn' : ''}"><b>${c[k]}</b><span>${label}</span></li>`).join('')}</ul>`
+    + list('uncovered', '반영 안 된 원본', uncovered) + list('stale', '원본보다 오래된 페이지', stale)
+    + (links ? `<details><summary>링크 문제 ${report.broken_links.length + report.ambiguous_links.length}개</summary><ol>${links}</ol></details>` : '')
+    + (report.versioned ? '' : '<p class="health-note">이 위키 폴더는 git으로 관리되지 않아요. 반영한 변경은 증분 갱신의 되돌리기로만 복구할 수 있어요.</p>');
+  box.querySelectorAll('.health-apply').forEach(button => button.addEventListener('click', () => prepareHomeUpdate(button.dataset.source)));
+  box.hidden = false;
+}
+/* 반영 안 된 원본 하나를 증분 갱신 폼에 채워 연다 — 변경안을 확인한 뒤에만 위키에 반영된다. */
+function prepareHomeUpdate(source) {
+  if (!homeState.scan) return;
+  $('updateRoot').value = homeState.scan.root;
+  $('updateSource').value = source;
+  showView('opt');
+  const panel = document.querySelector('.incremental-panel');
+  panel.open = true;
+  panel.scrollIntoView({ block: 'start' });
+  $('updateGo').focus({ preventScroll: true });
 }
 function inspectHomeFolder(directory = $('homePath').value.trim()) {
   if (homeState.busy) return;
