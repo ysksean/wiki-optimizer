@@ -69,7 +69,7 @@ def _answer_all(summary, question_set):
         '출력은 JSON 배열만: ["답1","답2",...] (질문 순서대로, 다른 텍스트 금지)\n\n'
         f"컨텍스트:\n{summary}\n\n질문들:\n{q_lines}\n\n답변 배열:"
     )
-    out = llm.generate(prompt, num_predict=400, temperature=0.0)
+    out = llm.generate(prompt, num_predict=400, temperature=0.0, effort="low")
     return _parse_str_list(out, len(question_set))
 
 
@@ -137,7 +137,7 @@ def judge_all(question_set, predictions, retries=JUDGE_RETRIES, text_only=False)
     prompt = _judge_prompt(question_set, predictions)
     for attempt in range(retries + 1):
         options = {"text_only": True} if text_only else {}
-        out = llm.generate(prompt, num_predict=60, temperature=0.0, **options)
+        out = llm.generate(prompt, num_predict=60, temperature=0.0, effort="low", **options)
         scores = parse_judgement(out, n)
         if scores is not None:
             return scores, False

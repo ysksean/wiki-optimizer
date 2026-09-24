@@ -95,7 +95,7 @@ def test_stats_recording(monkeypatch, tmp_path):
     import json
     stats = tmp_path / "stats.jsonl"
     monkeypatch.setattr(llm, "STATS_PATH", str(stats))
-    monkeypatch.setattr(llm, "_generate_claude", lambda p, timeout=300: "요약 결과")
+    monkeypatch.setattr(llm, "_generate_claude", lambda p, timeout=300, **kw: "요약 결과")
     llm.generate("문서를 요약하라.\n\n요약:")
     rec = json.loads(stats.read_text().splitlines()[0])
     assert rec["kind"] == "summarize" and rec["ok"] is True
@@ -103,3 +103,61 @@ def test_stats_recording(monkeypatch, tmp_path):
 
     monkeypatch.setattr(llm, "STATS_PATH", "")
     llm.generate("아무 프롬프트")  # 경로 미설정 — 예외 없이 그냥 지나가야 한다
+
+
+def _capture(monkeypatch):
+    calls = []
+    monkeypatch.setattr(llm.subprocess, "run",
+                        lambda cmd, **kw: calls.append((cmd, kw)) or _proc("응답"))
+    return calls
+
+
+def test_default_call_is_isolated_from_user_environment(monkeypatch):
+    """기본 호출은 Claude Code 환경(시스템 프롬프트·도구·MCP·스킬·전역 설정)을 싣지 않고 세션도 남기지 않는다."""
+    monkeypatch.setattr(llm, "ISOLATE", True)
+    monkeypatch.setattr(llm, "EFFORT", "")
+    calls = _capture(monkeypatch)
+    assert llm.generate("p") == "응답"
+    cmd, kw = calls[0]
+    assert cmd[cmd.index("--tools") + 1] == ""
+    assert "--strict-mcp-config" in cmd and cmd[cmd.index("--mcp-config") + 1] == '{"mcpServers":{}}'
+    assert "--disable-slash-commands" in cmd and "--no-session-persistence" in cmd
+    assert cmd[cmd.index("--setting-sources") + 1] == "project"
+    assert cmd[cmd.index("--system-prompt") + 1] == llm._SYSTEM_PROMPT
+    assert kw["cwd"] == llm._NEUTRAL_CWD            # 프로젝트 CLAUDE.md가 발견되지 않는 폴더
+    assert "--effort" not in cmd
+
+
+def test_isolation_can_be_disabled_for_debugging(monkeypatch):
+    monkeypatch.setattr(llm, "ISOLATE", False)
+    monkeypatch.setattr(llm, "EFFORT", "")
+    calls = _capture(monkeypatch)
+    llm.generate("p")
+    cmd, kw = calls[0]
+    assert cmd == ["claude", "-p", "--model", llm.CLAUDE_MODEL] and kw["cwd"] is None
+    llm.generate("p", text_only=True)              # 격리를 꺼도 text_only는 예전처럼 도구를 끈다
+    assert "--disable-slash-commands" in calls[1][0] and "--system-prompt" not in calls[1][0]
+
+
+def test_effort_per_call_overrides_env_default(monkeypatch):
+    monkeypatch.setattr(llm, "ISOLATE", True)
+    monkeypatch.setattr(llm, "EFFORT", "medium")
+    calls = _capture(monkeypatch)
+    llm.generate("p")
+    llm.generate("p", effort="low")
+    assert calls[0][0][calls[0][0].index("--effort") + 1] == "medium"
+    assert calls[1][0][calls[1][0].index("--effort") + 1] == "low"
+
+
+def test_evaluation_calls_request_low_effort(monkeypatch):
+    """라우팅·답변·판정은 effort low — 판정 프롬프트 기준 thinking 2,576→450 토큰, 20→6초 (2026-09-24 측정)."""
+    import audit
+    import scoring
+    import structure
+    efforts = []
+    monkeypatch.setattr(llm, "generate", lambda prompt, **kw: efforts.append(kw.get("effort")) or "[1]")
+    scoring.judge_all([{"q": "q", "a": "a"}], ["a"])
+    structure.route("q", [{"title": "A", "desc": "a"}])
+    structure._answer("ctx", "q")
+    audit.route_batch(["q"], [{"title": "A", "desc": "a"}])
+    assert efforts and all(e == "low" for e in efforts)
