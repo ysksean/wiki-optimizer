@@ -99,12 +99,39 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", _EMPHASIS.sub("", text)).strip()
 
 
+_ELLIPSIS = re.compile(r"\s*(?:\.{3,}|…)\s*")
+
+
 def _locate_evidence(evidence: str, source: str) -> Optional[str]:
-    """Recover a verbatim source passage for evidence the model re-typed.
+    """Recover verbatim source text for evidence the model re-typed or abridged.
+
+    Models join separate passages with "..." / "…" when quoting. Each such fragment
+    (8+ characters) must itself be found in the source; the result joins the
+    verbatim passages with " … ". Every piece stays an exact substring of the
+    source, so the grounding guarantee is unchanged; None when any piece is missing.
+    """
+    found = _locate_passage(evidence, source)
+    if found is not None:
+        return found
+    parts = [part for part in _ELLIPSIS.split(evidence) if len(_normalize(part)) >= 8]
+    if len(parts) < 2 and not (parts and _ELLIPSIS.search(evidence)):
+        return None
+    located: list[str] = []
+    for part in parts:
+        hit = _locate_passage(part, source)
+        if hit is None:
+            return None
+        if hit not in located:
+            located.append(hit)
+    return " … ".join(located) if located else None
+
+
+def _locate_passage(evidence: str, source: str) -> Optional[str]:
+    """One verbatim source passage for evidence with whitespace/emphasis differences.
 
     Models often normalize whitespace or drop Markdown emphasis when quoting. The
     returned passage is always an exact substring of the source (a line or a
-    paragraph), so the grounding guarantee is unchanged; None when not found.
+    paragraph); None when not found.
     """
     if evidence in source:
         return evidence

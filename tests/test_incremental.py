@@ -399,3 +399,13 @@ def test_persistent_router_failure_names_the_step(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(inc, "_json_response", lambda p: {"paths": ["wiki/a.md"]})
     with pytest.raises(ValueError, match=r"Invalid router response; verification is incomplete \(last response: "):
         inc._evaluate({"wiki/a.md": "a"}, [{"q": "q", "a": "a"}])
+
+
+def test_abridged_evidence_is_grounded_piece_by_piece() -> None:
+    """근거를 '...'로 이어 붙여도 조각마다 원문에 있으면 받는다. 한 조각이라도 없으면 받지 않는다."""
+    source = "# 제목\n디렉터가 책임질 것은 무엇인가?\n\n- **Aesthetics** (미학)\n- **Judgment** (판단)\n"
+    got = inc._locate_evidence("디렉터가 책임질 것은 무엇인가? ... Aesthetics (미학)", source)
+    assert got == "디렉터가 책임질 것은 무엇인가? … - **Aesthetics** (미학)"
+    assert all(piece in source for piece in got.split(" … "))
+    assert inc._locate_evidence("디렉터가 책임질 것은 무엇인가? … 원문에 없는 지어낸 문장입니다", source) is None
+    assert inc._locate_evidence("원문에 없는 문장 하나뿐입니다", source) is None
