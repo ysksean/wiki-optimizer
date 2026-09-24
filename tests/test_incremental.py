@@ -323,3 +323,89 @@ def test_mutation_endpoint_requires_same_origin_json(monkeypatch: pytest.MonkeyP
         server.shutdown()
         server.server_close()
         worker.join(timeout=2)
+
+
+def test_retyped_evidence_is_reanchored_to_verbatim_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """모델이 공백·강조를 바꿔 옮긴 근거는 원문 줄로 되찾는다 — 결과는 항상 원문의 부분 문자열."""
+    source = "# Title\n\n- **Redis Stream**은  ACK와 consumer group을 지원한다.\n- List는 단순 큐.\n"
+    monkeypatch.setattr(inc, "_json_response", lambda p: [
+        {"q": "ACK?", "a": "Stream", "source": "raw/a.md", "evidence": "Redis Stream은 ACK와 consumer group을 지원한다."}])
+    [q] = inc._questions({"raw/a.md": source}, 1, "")
+    assert q["evidence"] in source and "ACK와 consumer group" in q["evidence"]
+
+
+def test_short_or_ungrounded_rows_get_one_top_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def fake(prompt: str) -> Any:
+        calls.append(re.search(r"exactly (\d+) questions", prompt).group(1))
+        if len(calls) == 1:   # 첫 응답: 개수 부족 + 원문에 없는 근거 하나
+            return [{"q": "q1", "a": "a", "source": "raw/a.md", "evidence": "real text one"},
+                    {"q": "q2", "a": "a", "source": "raw/a.md", "evidence": "invented passage here"}]
+        assert "Do not repeat these questions" in prompt and '"q1"' in prompt
+        return [{"q": "q3", "a": "a", "source": "raw/a.md", "evidence": "real text two"},
+                {"q": "q4", "a": "a", "source": "raw/a.md", "evidence": "real text two"}]
+
+    monkeypatch.setattr(inc, "_json_response", fake)
+    qs = inc._questions({"raw/a.md": "real text one\nreal text two\n"}, 3, "")
+    assert calls == ["3", "2"] and [q["q"] for q in qs] == ["q1", "q3", "q4"]
+
+
+def test_too_few_grounded_questions_still_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inc, "_json_response", lambda p: [])
+    with pytest.raises(ValueError, match="requested question set"):
+        inc._questions({"raw/a.md": "real"}, 4, "")
+
+
+def test_transient_malformed_verification_output_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """검증 단계의 형식 오류 한 번이 작업 전체를 버리지 않는다 — 같은 호출을 다시 시도한다."""
+    responses = iter([ValueError("LLM returned invalid JSON; no changes were applied"),
+                      ["wiki/unknown.md"],                     # 없는 경로 — 재시도
+                      ["wiki/a.md"]])
+
+    def fake(prompt: str) -> Any:
+        value = next(responses)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    monkeypatch.setattr(inc, "_json_response", fake)
+    assert inc._json_valid("p", lambda v: isinstance(v, list) and all(p in {"wiki/a.md"} for p in v)) == ["wiki/a.md"]
+
+
+def test_persistently_malformed_output_still_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inc, "_json_response", lambda p: {"not": "a list"})
+    with pytest.raises(ValueError, match="verification is incomplete"):
+        inc._json_valid("p", lambda v: isinstance(v, list))
+
+
+def test_router_picks_are_normalized_not_invented() -> None:
+    """경로 표기가 조금 다르거나 3개를 넘겨도 작업을 버리지 않는다. 없는 경로는 받지 않는다."""
+    pages = {"wiki/index.md": "i", "wiki/a.md": "a", "wiki/sub/b.md": "b", "wiki/c.md": "c"}
+    picks = inc._router_picks(["index.md", "wiki/a.md", "wiki/a.md", "wiki/ghost.md", "sub/b", "wiki/c.md"], pages)
+    assert picks == ["wiki/index.md", "wiki/a.md", "wiki/sub/b.md"]
+    assert inc._router_picks([], pages) == []
+    assert inc._router_picks({"paths": ["wiki/a.md"]}, pages) is None       # 배열이 아니면 다시 부른다
+    assert inc._router_picks(["a.md"], {"wiki/a.md": "", "wiki/x/a.md": ""}) == []   # 끝부분이 둘에 맞으면 버린다
+
+
+def test_answer_shapes() -> None:
+    assert inc._answer_text({"answer": " 답 "}) == "답"
+    assert inc._answer_text({"answer": ["하나", "둘"]}) == "하나; 둘"
+    assert inc._answer_text({"answer": ""}) is None and inc._answer_text(["답"]) is None
+
+
+def test_persistent_router_failure_names_the_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inc, "_json_response", lambda p: {"paths": ["wiki/a.md"]})
+    with pytest.raises(ValueError, match=r"Invalid router response; verification is incomplete \(last response: "):
+        inc._evaluate({"wiki/a.md": "a"}, [{"q": "q", "a": "a"}])
+
+
+def test_abridged_evidence_is_grounded_piece_by_piece() -> None:
+    """근거를 '...'로 이어 붙여도 조각마다 원문에 있으면 받는다. 한 조각이라도 없으면 받지 않는다."""
+    source = "# 제목\n디렉터가 책임질 것은 무엇인가?\n\n- **Aesthetics** (미학)\n- **Judgment** (판단)\n"
+    got = inc._locate_evidence("디렉터가 책임질 것은 무엇인가? ... Aesthetics (미학)", source)
+    assert got == "디렉터가 책임질 것은 무엇인가? … - **Aesthetics** (미학)"
+    assert all(piece in source for piece in got.split(" … "))
+    assert inc._locate_evidence("디렉터가 책임질 것은 무엇인가? … 원문에 없는 지어낸 문장입니다", source) is None
+    assert inc._locate_evidence("원문에 없는 문장 하나뿐입니다", source) is None

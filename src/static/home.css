@@ -157,3 +157,27 @@
 .home-atmosphere.paused * { animation-play-state: paused; }
 #homeEvents small { white-space: pre-line; overflow-wrap: anywhere; font-family: var(--font-sans); font-size: 14px; line-height: 1.7; max-height: 140px; overflow: auto; }
 ::view-transition { pointer-events: none; }
+
+/* 위키 점검 (wiki_health) — 홈 토큰만 사용 */
+.home-health { padding: 24px 28px; border-top: 1px solid var(--home-border); }
+.health-head h3 { font-size: 17px; font-weight: 550; margin: 0 0 6px; }
+.health-head p { color: var(--home-muted); font-size: 13px; line-height: 1.7; margin: 0; }
+.health-counts { list-style: none; margin: 16px 0 6px; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.health-counts li { border: 1px solid var(--home-border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; }
+.health-counts b { font: 600 20px/1 var(--font-mono); color: var(--home-text); }
+.health-counts span { font-size: 12px; color: var(--home-muted); line-height: 1.4; }
+.health-counts li.warn { border-color: color-mix(in srgb, var(--home-accent) 55%, var(--home-border)); }
+.health-counts li.warn b { color: var(--home-accent); }
+.home-health details { margin-top: 10px; }
+.home-health summary { cursor: pointer; font-size: 13px; color: var(--home-text); }
+.home-health ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.home-health ol li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.home-health code { font: 12px var(--font-mono); color: var(--home-text); overflow-wrap: anywhere; }
+.home-health small { color: var(--home-muted); font-size: 12px; overflow-wrap: anywhere; }
+#view-home .home-health .health-apply { margin-left: auto; min-height: 32px; padding: 4px 12px; border-radius: 8px; font-size: 12px; }
+.health-note { margin: 12px 0 0; color: var(--home-muted); font-size: 12px; }
+@media (max-width: 760px) {
+  .home-health { padding: 20px; }
+  .health-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #view-home .home-health .health-apply { margin-left: 0; }
+}
