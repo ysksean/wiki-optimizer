@@ -15,8 +15,39 @@ def test_nested_documents_remain_distinct(tmp_path):
     pairs = audit.find_pairs(str(tmp_path))
     assert len(pairs) == len(web.list_docs(str(tmp_path))) == 2
     assert {p['name'] for p in pairs} == {'a/intro', 'b/intro'}
+    assert {p['name'] for p in web.list_docs(str(tmp_path))} == {'a/intro', 'b/intro'}
     assert next(p for p in pairs if p['name'] == 'a/intro')['wiki']
     assert next(p for p in pairs if p['name'] == 'b/intro')['wiki'] is None
+
+
+def test_advanced_picker_skips_symlinked_and_generated_documents(tmp_path):
+    raw = tmp_path / 'raw'
+    (raw / 'nested').mkdir(parents=True)
+    (raw / '.cache').mkdir()
+    (raw / 'node_modules').mkdir()
+    (raw / 'nested' / 'real.md').write_text('real')
+    (raw / '.cache' / 'hidden.md').write_text('hidden')
+    (raw / 'node_modules' / 'generated.md').write_text('generated')
+    external = tmp_path / 'external.md'
+    external.write_text('external')
+    (raw / 'linked.md').symlink_to(external)
+    linked_dir = raw / 'linked-dir'
+    linked_dir.symlink_to(tmp_path)
+
+    docs = web.list_docs(str(tmp_path))
+
+    assert docs == [{'path': str(raw / 'nested' / 'real.md'), 'name': 'nested/real', 'size': 4}]
+
+
+def test_advanced_picker_never_treats_wiki_as_source_when_raw_is_a_symlink(tmp_path):
+    external_raw = tmp_path / 'external-raw'
+    external_raw.mkdir()
+    (external_raw / 'source.md').write_text('source')
+    (tmp_path / 'raw').symlink_to(external_raw, target_is_directory=True)
+    (tmp_path / 'wiki').mkdir()
+    (tmp_path / 'wiki' / 'summary.md').write_text('summary')
+
+    assert web.list_docs(str(tmp_path)) == []
 
 
 def test_question_cache_tracks_content_count_and_language(tmp_path, monkeypatch):

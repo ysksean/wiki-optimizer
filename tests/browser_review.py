@@ -66,7 +66,11 @@ def main():
                 form.locator('input').fill(str(root / 'structure-out'))
                 form.locator('button').click()
                 page.wait_for_function("document.querySelector('#jobs form[data-job=structure] [role=status]').textContent.includes('생성')")
-                assert next((root / 'structure-out').glob('*.md')).read_text() == 'Verified structure content'
+                exported = next((root / 'structure-out').glob('*.md')).read_text()
+                assert 'title: ' in exported
+                assert 'sources:\n  - intro' in exported
+                assert 'generated_by: wiki-optimizer structure structure' in exported
+                assert exported.endswith('\n\nVerified structure content\n')
                 page.locator('#jobs [data-job-id=summary]').click()
                 page.get_by_role('button', name='이 요약 전략 사용').click()
                 assert page.locator('#strategy').input_value() == 'Selected summary strategy'
